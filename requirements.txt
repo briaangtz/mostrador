@@ -1,0 +1,4 @@
+# Dependencias del programa (Python 3.10+)
+# Instalar con:  python -m pip install -r requirements.txt
+openpyxl>=3.1    # exportación de transferencias a Excel (.xlsx)
+pillow>=10.0     # foto de perfil e ícono del programa

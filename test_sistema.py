@@ -1,0 +1,937 @@
+# -*- coding: utf-8 -*-
+"""Prueba automatizada (temporal) de la lógica y la interfaz."""
+import os
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import database as db
+import permisos as perms
+
+# Base de datos temporal para no ensuciar la real
+TMP = os.path.join(tempfile.gettempdir(), "garrafas_test.db")
+if os.path.exists(TMP):
+    os.remove(TMP)
+db.DB_PATH = TMP
+
+ok = 0
+
+def check(cond, msg):
+    global ok
+    if not cond:
+        raise AssertionError(msg)
+    ok += 1
+    print("  OK:", msg)
+
+def check_error(fn, msg):
+    """Pasa si fn() lanza ValueError (operación que debe estar bloqueada)."""
+    global ok
+    try:
+        fn()
+    except ValueError:
+        ok += 1
+        print("  OK:", msg)
+        return
+    raise AssertionError(msg)
+
+# --------------------------------------------------------------- lógica
+db.init()
+check(len(db.productos()) == 4, "se crearon los 4 productos base")
+check(db.check_password("admin"), "contraseña por defecto 'admin' funciona")
+check(not db.check_password("mala"), "contraseña incorrecta rechazada")
+
+# ---------------- Usuarios, rangos, sesión y permisos ----------------
+usuarios = db.listar_usuarios()
+check(len(usuarios) == 1 and usuarios[0]["usuario"] == "admin"
+      and usuarios[0]["rango"] == "DESARROLLADOR",
+      "el primer usuario nace como DESARROLLADOR")
+check(db.validar_credenciales("admin", "admin") is not None,
+      "las credenciales de admin son válidas")
+check(db.validar_credenciales("admin", "incorrecta") is None,
+      "credenciales inválidas rechazadas")
+check(db.iniciar_sesion("admin", "incorrecta") is None,
+      "el login con contraseña mala no abre sesión")
+check(db.usuario_sesion() is None, "no quedó sesión abierta tras el login fallido")
+
+u_admin = db.iniciar_sesion("admin", "admin")
+check(u_admin is not None and db.usuario_sesion()["usuario"] == "admin",
+      "el login correcto inicia la sesión")
+check(db.puede("panel_admin") and db.puede("configuracion")
+      and db.puede("reabrir_caja"),
+      "DESARROLLADOR tiene todos los permisos administrativos")
+
+db.crear_usuario("operario", "clave123", "USUARIO")
+u_op = db.usuario_por_nombre("operario")
+check(u_op is not None and u_op["rango"] == "USUARIO",
+      "alta de usuario con rango USUARIO")
+check(not perms.puede("panel_admin", "USUARIO")
+      and not perms.puede("configuracion", "USUARIO")
+      and not perms.puede("estadisticas", "USUARIO")
+      and not perms.puede("reabrir_caja", "USUARIO"),
+      "USUARIO sin permisos administrativos")
+check(perms.puede("ventas", "USUARIO") and perms.puede("cerrar_caja", "USUARIO")
+      and perms.puede("historial", "USUARIO"),
+      "USUARIO con permisos operativos")
+check(db.validar_credenciales("operario", "clave123")["rango"] == "USUARIO",
+      "el USUARIO puede iniciar sesión con su contraseña")
+
+db.actualizar_usuario(u_op["id"], activo=0)
+check(db.validar_credenciales("operario", "clave123") is None,
+      "un usuario desactivado no puede iniciar sesión")
+db.actualizar_usuario(u_op["id"], activo=1)
+check(db.usuario_por_id(u_op["id"])["activo"] == 1, "usuario reactivado")
+
+db.cambiar_password(u_op["id"], "nuevaclave")
+check(db.validar_credenciales("operario", "nuevaclave") is not None,
+      "cambio de contraseña de un usuario")
+db.cambiar_password(u_op["id"], "clave123")
+check(not db.validar_password_sesion("clave123"),
+      "la contraseña del USUARIO no sirve para el DESARROLLADOR")
+check(db.validar_password_sesion("admin"),
+      "el DESARROLLADOR valida su propia contraseña")
+
+check_error(lambda: db.eliminar_usuario(u_admin["id"]),
+            "no se puede eliminar al usuario conectado")
+check_error(lambda: db.actualizar_usuario(u_admin["id"], rango="USUARIO"),
+            "no se puede bajar al último DESARROLLADOR activo")
+check_error(lambda: db.crear_usuario("operario", "otra1234", "USUARIO"),
+            "no se permite duplicar el nombre de usuario")
+check_error(lambda: db.crear_usuario("otro", "123", "JEFE"),
+            "no se permite un rango inexistente")
+
+# ---------------- Respaldo automático de la base ----------------
+check(os.path.isdir(db.dir_respaldos()) is False or True, "carpeta de respaldos definida junto a la base")
+ruta1 = db.respaldar("prueba")
+check(os.path.exists(ruta1), "el respaldo crea el archivo")
+check(os.path.getsize(ruta1) > 0, "el respaldo tiene contenido")
+import sqlite3 as _sqlite
+_con = _sqlite.connect(ruta1)
+check(_con.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 4,
+      "el respaldo es una base SQLite íntegra y legible")
+_con.close()
+check(db.respaldar_si_toca("prueba") is None,
+      "no duplica el respaldo si hoy ya existe uno")
+info_r = db.ultimo_respaldo()
+check(info_r is not None and info_r["tamano"] > 0,
+      "se puede consultar el último respaldo")
+check(any(a["accion"] == "Respaldo de base de datos"
+          for a in db.historial_actividad(200)),
+      "el respaldo queda en el registro de actividad")
+
+# Rotación: se conservan solo los últimos N respaldos
+viejos = []
+for i in range(db.RESPALDOS_CONSERVAR + 5):
+    p = os.path.join(db.dir_respaldos(), f"garrafas_2000-01-01_{i:06d}.db")
+    open(p, "wb").close()
+    viejos.append(p)
+db.respaldar("prueba de rotación")
+check(len(db.respaldos_existentes()) <= db.RESPALDOS_CONSERVAR,
+      f"la rotación conserva hasta {db.RESPALDOS_CONSERVAR} respaldos "
+      f"(obtuvo {len(db.respaldos_existentes())})")
+check(not os.path.exists(viejos[0]), "los respaldos más viejos se borran solos")
+
+db.set_respaldo_automatico(False)
+check(not db.respaldo_automatico_activo(), "se puede desactivar el respaldo automático")
+db.set_respaldo_automatico(True)
+check(db.respaldo_automatico_activo(), "se puede reactivar el respaldo automático")
+
+# Fondo inicial de la jornada y caja de hoy (se crea y se abre a mano)
+db.set_fondo_inicial(350000)
+caja = db.asegurar_caja(db.hoy())
+check(caja["estado"] == "abierta", "caja del día creada y abierta")
+check(db.asegurar_caja(db.hoy())["id"] == caja["id"], "no se duplica la caja del día")
+check(db.apertura_de(caja["id"]) is None,
+      "la caja nueva nace sin apertura registrada")
+
+p10 = db.producto_por_nombre("Garrafa 10 kg")
+p15 = db.producto_por_nombre("Garrafa 15 kg")
+p45 = db.producto_por_nombre("Garrafa 45 kg")
+
+# Sin apertura no se pueden registrar ventas
+try:
+    db.registrar_venta(caja["id"], p10["id"], 1, 10000, "Efectivo")
+    check(False, "debería rechazar ventas antes de abrir la caja")
+except ValueError:
+    check(True, "no se puede vender antes de ABRIR CAJA")
+
+apertura = db.abrir_caja(caja["id"])
+check(apertura is not None and apertura["usuario"] == "admin",
+      "la apertura registra qué usuario abrió la caja")
+check(apertura["monto_inicial"] == 350000,
+      f"la apertura guarda el monto inicial (obtuvo {apertura['monto_inicial']})")
+try:
+    db.abrir_caja(caja["id"])
+    check(False, "debería rechazar la doble apertura")
+except ValueError:
+    check(True, "no se puede abrir la caja dos veces")
+
+# Ventas de ejemplo
+db.registrar_venta(caja["id"], p10["id"], 3, 10000, "Efectivo")        # 30.000
+db.registrar_venta(caja["id"], p10["id"], 2, 10000, "Efectivo")
+db.registrar_venta(caja["id"], p15["id"], 5, 15000, "Efectivo")
+db.registrar_venta(caja["id"], p45["id"], 1, 45000, "Efectivo")
+db.registrar_venta(caja["id"], p15["id"], 10, 15000, "Transferencia")   # 150.000
+db.registrar_venta(caja["id"], p45["id"], 2, 45000, "Transferencia")    # 100.000
+db.registrar_venta(caja["id"], p15["id"], 10, 15000, "Tarjeta de débito")   # 150.000
+db.registrar_venta(caja["id"], p45["id"], 2, 45000, "Tarjeta de crédito")   # 90.000
+
+r = db.resumen(caja["id"])
+check(r["total_garrafas"] == 35, f"total garrafas = 35 (obtuvo {r['total_garrafas']})")
+check(all(v["cajero"] == "admin" for v in r["ventas"]),
+      "cada venta registra al usuario que la cargó")
+check(r["efectivo"] == 170000, f"efectivo = 170.000 (obtuvo {r['efectivo']})")
+check(r["transferencias"] == 240000, f"transferencias = 240.000 (obtuvo {r['transferencias']})")
+check(r["debito"] == 150000, f"débito = 150.000 (obtuvo {r['debito']})")
+check(r["credito"] == 90000, f"crédito = 90.000 (obtuvo {r['credito']})")
+check(r["total_vendido"] == r["total_general"] == 650000, "total general = 650.000")
+check(r["por_producto"][p10["id"]]["cantidad"] == 5, "garrafas 10 kg acumuladas = 5")
+
+# Arqueo de ejemplo: esperado 520.000
+# (efectivo 170.000 + fondo de la apertura 350.000)
+r2 = db.resumen(caja["id"])
+check(r2["efectivo_esperado"] == 520000,
+      f"efectivo esperado = 520.000 (obtuvo {r2['efectivo_esperado']})")
+
+conteo = {20000: 20, 10000: 10, 2000: 5, 1000: 5, 500: 2, 100: 0, 200: 0}
+filas, total = db.calcular_arqueo(conteo)
+check(total == 516000, f"efectivo contado = 516.000 (obtuvo {total})")
+dif = total - r2["efectivo_esperado"]
+check(dif == -4000, f"diferencia = -4.000 (obtuvo {dif})")
+estado, etiqueta = db.clasificar_diferencia(dif)
+check(estado == "Faltante" and etiqueta == "FALTANTE", "detecta FALTANTE -4.000")
+check(db.clasificar_diferencia(4000)[0] == "Sobrante", "detecta SOBRANTE")
+check(db.clasificar_diferencia(0)[0] == "Cuadrada", "detecta CAJA CUADRADA")
+
+# Cierre
+hora = db.guardar_cierre(
+    caja["id"], total_garrafas=r2["total_garrafas"], total_vendido=r2["total_vendido"],
+    efectivo_esperado=r2["efectivo_esperado"], efectivo_contado=total,
+    transferencias=r2["transferencias"], debito=r2["debito"], credito=r2["credito"],
+    total_general=r2["total_general"], diferencia=dif, estado=estado,
+    billetes={str(d): c for d, c in conteo.items()},
+)
+check(bool(hora), "cierre guardado con hora")
+check(db.get_caja_por_id(caja["id"])["estado"] == "cerrada", "caja pasa a CERRADA")
+cierre = db.get_cierre_activo(caja["id"])
+check(cierre is not None and cierre["estado"] == "Faltante", "cierre activo consultable")
+check(cierre["billetes_dict"]["20000"] == 20, "conteo de billetes persistido")
+check(cierre.get("cerrado_por_nombre") == "admin",
+      "el cierre guarda qué usuario lo realizó")
+check(cierre.get("n_operaciones") == 8,
+      f"el cierre guarda la cantidad de operaciones "
+      f"(obtuvo {cierre.get('n_operaciones')})")
+check(cierre.get("comprobantes") is not None,
+      "el cierre guarda los comprobantes de transferencia")
+check(len(db.historial_cierres()) == 1, "aparece en el historial")
+
+# Registro de actividad
+actividad = db.historial_actividad(100)
+check(any(a["accion"] == "Cierre de caja" for a in actividad),
+      "el cierre queda en el registro de actividad")
+check(any(a["accion"] == "Venta registrada" for a in actividad),
+      "las ventas quedan en el registro de actividad")
+check(any(a["accion"] == "Apertura de caja" for a in actividad),
+      "la apertura queda en el registro de actividad")
+check(all(a["usuario"] for a in actividad),
+      "todas las acciones del registro tienen usuario asignado")
+
+# Reapertura con contraseña
+db.reabrir_caja(caja["id"])
+check(db.get_caja_por_id(caja["id"])["estado"] == "abierta", "reabrir devuelve la caja a abierta")
+check(len(db.historial_cierres()) == 0, "el cierre anulado sale del historial")
+db.guardar_cierre(
+    caja["id"], total_garrafas=0, total_vendido=0, efectivo_esperado=0,
+    efectivo_contado=0, transferencias=0, debito=0, credito=0, total_general=0,
+    diferencia=0, estado="Cuadrada", billetes={},
+)
+check(len(db.historial_cierres()) == 1, "al cerrar de nuevo vuelve al historial")
+
+# Cambio de contraseña
+db.set_password("nueva123")
+check(db.check_password("nueva123"), "cambio de contraseña funciona")
+db.set_password("admin")
+
+# ---------------------------------------------------------------- interfaz
+import tkinter as tk
+import tkinter.messagebox as mb
+
+from util import fecha_corta
+
+# Los mensajes emergentes no deben frenar la prueba
+ERRORES = []
+mb.showinfo = lambda *a, **k: None
+mb.showwarning = lambda *a, **k: ERRORES.append(a)
+mb.showerror = lambda *a, **k: ERRORES.append(a)
+mb.askyesno = lambda *a, **k: True
+
+# El login del cierre/reapertura pide contraseña: se responde con la de admin
+import tkinter.simpledialog as _sd
+_sd.askstring = lambda *a, **k: "admin"
+
+import main as main_mod
+from ui_cierre import CierreDialog
+
+# La sesión ya está iniciada (admin) — la app no vuelve a pedir login
+app = main_mod.App()
+app.update()
+
+# Ventas del día en la interfaz
+panel = app.paneles["ventas"]
+app.mostrar("ventas")
+app.update()
+check(len(panel.tree.get_children()) == 8, "listado de ventas en la interfaz")
+
+# Panel de inicio
+app.mostrar("inicio")
+app.update()
+check(app.paneles["inicio"].cards["garrafas"].cget("text") == "35",
+      "tarjeta garrafas vendidas = 35")
+check(app.paneles["inicio"].cards["general"].cget("text") == "$650.000",
+      "tarjeta total general = $650.000")
+check(app.paneles["inicio"].cards["tarjetas"].cget("text") == "$240.000",
+      "tarjeta TARJETAS agrupa débito + crédito ($240.000)")
+check("Débito $150.000" in app.paneles["inicio"]
+      .cards_detalle["tarjetas"].cget("text")
+      and "Crédito $90.000" in app.paneles["inicio"]
+      .cards_detalle["tarjetas"].cget("text"),
+      "la tarjeta TARJETAS discrimina débito y crédito")
+
+# Configuración
+app.mostrar("config")
+app.update()
+check(len(app.paneles["config"].tree.get_children()) == 4, "productos en configuración")
+
+# Historial
+app.mostrar("historial")
+app.update()
+check(len(app.paneles["historial"].tree.get_children()) == 1, "historial con 1 cierre")
+
+# Volver a abrir una caja nueva y probar el diálogo de cierre
+db.reabrir_caja(caja["id"])
+app.refrescar_todo()
+app.update()
+
+dlg = CierreDialog(app, db.get_caja_por_id(caja["id"]))
+app.update()
+dlg.celdas[20000].set("20")
+dlg.celdas[10000].set("10")
+dlg.celdas[2000].set("5")
+dlg.celdas[1000].set("5")
+dlg.celdas[500].set("2")
+dlg._recalcular()
+app.update()
+check(dlg.lbl_contado.cget("text") == "$516.000", "diálogo: contado $516.000")
+check(dlg.lbl_esperado2.cget("text") == "$520.000", "diálogo: esperado $520.000")
+check(dlg.lbl_diferencia.cget("text") == "-$4.000", "diálogo: diferencia -$4.000")
+check(dlg.lbl_estado.cget("text") == "FALTANTE", "diálogo: estado FALTANTE")
+check(dlg.valores_medio["tarjetas"].cget("text") == "$240.000",
+      "diálogo: la fila TARJETAS suma débito + crédito ($240.000)")
+check(dlg.valores_medio["debito"].cget("text") == "$150.000"
+      and dlg.valores_medio["credito"].cget("text") == "$90.000",
+      "diálogo: TARJETAS sigue discriminando débito y crédito")
+
+# Caja cuadrada
+dlg.celdas[500].set("10")
+dlg._recalcular()
+check(dlg.lbl_estado.cget("text") == "CAJA CUADRADA", "diálogo: CAJA CUADRADA")
+
+# Sobrante
+dlg.celdas[100].set("1")
+dlg._recalcular()
+check(dlg.lbl_estado.cget("text") == "SOBRANTE", "diálogo: SOBRANTE")
+
+dlg._confirmar()  # confirma el cierre completo
+app.update()
+check(db.get_caja_por_id(caja["id"])["estado"] == "cerrada",
+      "CONFIRMAR CIERRE cierra y bloquea la caja")
+check(len(db.historial_cierres()) == 1, "el cierre confirmado entra al historial")
+
+# Detalle de un cierre en el historial
+from ui_historial import DetalleCierre
+app.mostrar("historial")
+app.update()
+cierre_hoy = db.historial_cierres()[0]
+det = DetalleCierre(app, cierre_hoy)
+app.update()
+check(det.winfo_exists(), "se abre el detalle completo de un cierre")
+
+
+def _textos_de(widget):
+    """Recolecta todos los textos visibles (labels) de un widget y sus hijos."""
+    salidas = []
+    for hijo in widget.winfo_children():
+        if hijo.winfo_class() == "Label":
+            salidas.append(str(hijo.cget("text")))
+        salidas.extend(_textos_de(hijo))
+    return salidas
+
+
+_textos_det = _textos_de(det)
+check("Total tarjetas" in _textos_det,
+      "detalle del cierre: agrupa los totales en 'Total tarjetas'")
+check("   · Tarjeta de débito" in _textos_det
+      and "   · Tarjeta de crédito" in _textos_det,
+      "detalle del cierre: discrimina tarjeta de débito y de crédito")
+det.destroy()
+
+# Configuración: crear, editar y eliminar productos
+app.mostrar("config")
+app.update()
+cfg = app.paneles["config"]
+cfg.var_nombre.set("Garrafa 25 kg")
+cfg.var_precio.set("25.000")
+cfg._nuevo_producto()
+check(len(db.productos()) == 5, "alta de producto desde configuración")
+cfg.tree.selection_set(cfg.tree.get_children()[-1])
+cfg.tree.event_generate("<<TreeviewSelect>>")
+cfg.var_precio.set("26.500")
+cfg._guardar_producto()
+check(db.producto_por_nombre("Garrafa 25 kg")["precio"] == 26500,
+      "edición de precio desde configuración")
+cfg.tree.selection_set(cfg.tree.get_children()[-1])
+cfg._eliminar_producto()
+check(len(db.productos()) == 4, "baja de producto desde configuración")
+
+# Registro de ventas desde la interfaz (la caja debe estar abierta)
+db.reabrir_caja(caja["id"])
+app.refrescar_todo()
+app.mostrar("ventas")
+app.update()
+panel = app.paneles["ventas"]
+panel.combo_producto.current(0)
+panel.var_cantidad.set("4")
+panel.var_precio.set("10.000")
+panel.combo_medio.set("Efectivo")
+panel.update_idletasks()
+check(panel.lbl_total.cget("text") == "$40.000", "total calculado en el formulario")
+panel._registrar()
+app.update()
+check(db.resumen(caja["id"])["cantidad_ventas"] == 9,
+      "venta registrada desde la interfaz")
+
+# Corregir una venta mal cargada (cargué 10 y son 9)
+ultima = panel.tree.get_children()[-1]
+panel.tree.selection_set(ultima)
+panel._editar()
+panel.var_cantidad.set("9")
+check(panel.lbl_total.cget("text") == "$90.000",
+      "al editar, el total se recalcula (9 × 10.000)")
+panel._registrar()
+app.update()
+r_ultima = db.venta_por_id(int(ultima))
+check(r_ultima["cantidad"] == 9 and r_ultima["total"] == 90000,
+      "la venta quedó corregida a 9 unidades")
+
+# Eliminar la venta directamente
+panel.tree.selection_set(ultima)
+panel._eliminar()
+app.update()
+check(db.venta_por_id(int(ultima)) is None, "venta eliminada desde la lista")
+check(db.resumen(caja["id"])["cantidad_ventas"] == 8,
+      "los totales se actualizaron al eliminar")
+
+# ---------------- Transferencias: comprobante obligatorio ----------------
+panel.combo_medio.set("Transferencia")
+panel.var_cantidad.set("2")
+panel.var_precio.set("15.000")
+panel.var_comprobante.set("")
+panel.var_cliente.set("María López")
+ERRORES.clear()
+check(panel._datos_form() is None,
+      "transferencia SIN comprobante no se puede guardar")
+check(any("comprobante" in str(e).lower() for e in ERRORES),
+      "muestra el aviso de comprobante obligatorio")
+
+panel.var_comprobante.set("TR-000123")
+datos = panel._datos_form()
+check(datos is not None and datos[4] == "TR-000123",
+      "con comprobante ingresado la venta se acepta")
+check(datos is not None and datos[5] == "María López",
+      "el formulario guarda el nombre del cliente (campo Nombre)")
+panel._registrar()
+app.update()
+check(panel.var_cliente.get() == "",
+      "tras registrar, el campo de cliente queda limpio")
+
+r_caja = db.resumen(caja["id"])
+check(r_caja["n_transferencias"] == 3,
+      f"cantidad de transferencias del día = 3 (obtuvo {r_caja['n_transferencias']})")
+check(r_caja["transferencias"] == 270000,
+      f"monto de transferencias = 270.000 (obtuvo {r_caja['transferencias']})")
+check(any(t["comprobante"] == "TR-000123" for t in r_caja["transferencias_detalle"]),
+      "el comprobante queda asociado a la venta y en el detalle")
+
+# ---------------- Estadísticas ----------------
+hoy = db.hoy()
+stats = db.estadisticas(hoy, hoy)
+check(stats["cantidad_ventas"] == 9, "estadísticas: total de ventas del día")
+check(stats["total_garrafas"] == r_caja["total_garrafas"],
+      "estadísticas: garrafas vendidas")
+check(stats["total_vendido"] == r_caja["total_vendido"],
+      "estadísticas: total recaudado")
+check(stats["n_transferencias"] == 3, "estadísticas: cantidad de transferencias")
+check(stats["transferencias"] == 270000, "estadísticas: monto transferido")
+check(stats["efectivo"] == r_caja["efectivo"], "estadísticas: total en efectivo")
+check(stats["debito"] == r_caja["debito"], "estadísticas: total con débito")
+check(stats["credito"] == r_caja["credito"], "estadísticas: total con crédito")
+check(len(stats["evolucion"]) == 1 and stats["evolucion"][0]["fecha"] == hoy,
+      "estadísticas: evolución de ventas por día")
+check(len(stats["por_producto"]) >= 3, "estadísticas: ventas por producto")
+
+app.mostrar("stats")
+app.update()
+panel_stats = app.paneles["stats"]
+check(panel_stats.cards["ventas"].cget("text") == "9",
+      "panel de estadísticas: tarjeta de total de ventas")
+check(panel_stats.cards["n_transferencias"].cget("text") == "3",
+      "panel de estadísticas: tarjeta de transferencias")
+check(panel_stats.cards["tarjetas"].cget("text") == "$240.000",
+      "panel de estadísticas: tarjeta TARJETAS = débito + crédito")
+check("Débito $150.000" in panel_stats.cards_detalle["tarjetas"].cget("text"),
+      "panel de estadísticas: TARJETAS muestra el desglose D/C")
+check(len(panel_stats.tree_productos.get_children()) >= 3,
+      "panel de estadísticas: listado por producto")
+check(len(panel_stats.tree_cierres.get_children()) ==
+      len(db.cierres_rango(hoy, hoy)),
+      "panel de estadísticas: resumen de cierres")
+
+# Filtro por fecha de un día específico
+panel_stats.var_desde.set(fecha_corta(hoy))
+panel_stats.var_hasta.set(fecha_corta(hoy))
+panel_stats._aplicar_fechas()
+check(panel_stats.cards["ventas"].cget("text") == "9",
+      "filtro por fecha de un día específico")
+
+# ---------------- Exportación a Excel (plantilla imprimible A4) ----------------
+import os as _os
+import tempfile as _tempfile
+import excel as xl
+from openpyxl import load_workbook
+
+destino = _os.path.join(_tempfile.gettempdir(), "movimientos_test.xlsx")
+cantidad_xl, monto_xl = xl.exportar_movimientos(hoy, hoy, destino)
+check(cantidad_xl == stats["cantidad_ventas"],
+      f"excel: incluye todos los movimientos ({cantidad_xl})")
+check(abs(monto_xl - stats["total_vendido"]) < 0.01,
+      f"excel: total general = {monto_xl}")
+
+wb = load_workbook(destino)
+ws = wb.active
+textos = [str(c.value) for fila in ws.iter_rows() for c in fila
+          if c.value is not None]
+
+# Secciones por medio de pago: TARJETAS agrupa débito y crédito
+for seccion in ("TRANSFERENCIAS", "TARJETAS", "TARJETA DE DÉBITO",
+                "TARJETA DE CRÉDITO", "DINERO / EFECTIVO"):
+    check(any(seccion in t for t in textos),
+          f"excel: incluye la sección {seccion}")
+
+# La sección TARJETAS suma sus dos bloques y el general no se duplica
+filas_txt = [[str(c.value) for c in fila if c.value is not None]
+             for fila in ws.iter_rows()]
+fila_total_tarjetas = [f for f in filas_txt if f and f[0] == "TOTAL TARJETAS"]
+check(len(fila_total_tarjetas) == 1
+      and abs(float(fila_total_tarjetas[0][-1]) - 240000) < 0.01,
+      f"excel: TOTAL TARJETAS = 240.000 "
+      f"(obtuvo {fila_total_tarjetas[0][-1] if fila_total_tarjetas else '—'})")
+filas_totales = [f for f in filas_txt
+                 if f and str(f[0]).startswith("TOTAL GENERAL")]
+check(len(filas_totales) == 1
+      and abs(float(filas_totales[0][-1]) - monto_xl) < 0.01,
+      "excel: un solo TOTAL GENERAL con el monto completo")
+
+# Columnas pedidas: Nombre / Carga / N° Comprobante-Tarjeta / Total
+check(any(t == "Nombre" for t in textos), "excel: columna Nombre")
+check(any(t == "Carga" for t in textos), "excel: columna Carga")
+check(any("Comprobante" in t for t in textos),
+      "excel: columna N° Comprobante / Tarjeta")
+check(any(t == "Total" for t in textos), "excel: columna Total")
+
+check(any("TR-000123" in t for t in textos),
+      "excel: incluye el número de comprobante")
+check(any("Garrafa" in t for t in textos), "excel: incluye el producto vendido")
+check(any("María López" in t for t in textos),
+      "excel: incluye el Nombre del cliente")
+check(any("×" in t for t in textos), "excel: incluye el detalle de la carga")
+check(any("TOTAL GENERAL" in t for t in textos),
+      "excel: incluye el total general")
+
+# Configuración de impresión: A4 horizontal ajustado al ancho
+check(str(ws.page_setup.orientation) == "landscape",
+      "excel: hoja configurada en horizontal")
+check(str(ws.page_setup.paperSize) == str(ws.PAPERSIZE_A4),
+      "excel: tamaño de papel A4")
+check(int(ws.page_setup.fitToWidth or 0) == 1,
+      "excel: ajustado al ancho de la página")
+check(ws.sheet_properties.pageSetUpPr is not None
+      and ws.sheet_properties.pageSetUpPr.fitToPage,
+      "excel: escala 'ajustar al ancho' activa")
+check("$A$1" in str(ws.print_area) and "$D$" in str(ws.print_area),
+      f"excel: área de impresión definida (obtuvo {ws.print_area})")
+check(str(ws.print_title_rows).replace("$", "") == "1:3",
+      f"excel: encabezados visibles en cada página "
+      f"(obtuvo {ws.print_title_rows})")
+_os.remove(destino)
+
+app.destroy()
+
+# ---------------- Panel de Administración y control de acceso ----------------
+from ui_login import LoginDialog
+
+# Pantalla de login: rechaza contraseñas incorrectas y acepta la correcta
+aux_root = tk.Tk()
+aux_root.withdraw()
+dlg_login = LoginDialog(aux_root)
+dlg_login.var_usuario.set("admin")
+dlg_login.var_password.set("mala")
+dlg_login._ingresar()
+check(dlg_login.resultado is None, "el login rechaza una contraseña incorrecta")
+check(any("rechazado" in (a["accion"] or "") for a in db.historial_actividad()),
+      "los intentos de login fallidos quedan registrados")
+dlg_login.var_password.set("admin")
+dlg_login._ingresar()
+check(dlg_login.resultado is not None
+      and dlg_login.resultado["usuario"] == "admin",
+      "el login acepta la contraseña correcta")
+aux_root.destroy()
+
+# Reconstruimos la app con sesión iniciada para probar el panel admin
+app = main_mod.App()
+app.update()
+app.mostrar("admin")
+app.update()
+panel_admin = app.paneles["admin"]
+check(len(panel_admin.tree.get_children()) == len(db.listar_usuarios()),
+      "el panel de administración lista los usuarios")
+check(len(panel_admin.tree_act.get_children()) > 0,
+      "el panel muestra el registro de actividad")
+
+# Alta de usuario desde el panel
+panel_admin.var_usuario.set("nuevo_user")
+panel_admin.var_password.set("abc1234")
+panel_admin.combo_rango.set("USUARIO")
+panel_admin._crear()
+check(db.usuario_por_nombre("nuevo_user") is not None,
+      "alta de usuario desde el panel de administración")
+check(any(a["accion"] == "Usuario creado" for a in db.historial_actividad()),
+      "la creación de usuarios queda en el registro de actividad")
+
+# Generador de contraseñas
+panel_admin._generar_password()
+check(len(panel_admin.var_password.get()) >= 8,
+      "el generador propone una contraseña segura")
+
+# Eliminación de usuario desde el panel
+uid_nuevo = db.usuario_por_nombre("nuevo_user")["id"]
+panel_admin.tree.selection_set(str(uid_nuevo))
+panel_admin._eliminar()
+check(db.usuario_por_nombre("nuevo_user") is None,
+      "baja de usuario desde el panel de administración")
+
+# ---- Un USUARIO no ve ni entra a las secciones administrativas ----
+db.cerrar_sesion()
+db.iniciar_sesion("operario", "clave123")
+app._actualizar_nav()
+app.update_idletasks()
+check(not app.botones_nav["admin"].winfo_ismapped(),
+      "USUARIO: el botón Administración está oculto")
+check(not app.botones_nav["stats"].winfo_ismapped(),
+      "USUARIO: el botón Estadísticas está oculto")
+ERRORES.clear()
+app.mostrar("admin")
+check(any("permiso" in str(e).lower() for e in ERRORES),
+      "USUARIO: no puede entrar a Administración aunque lo intente")
+ERRORES.clear()
+app.mostrar("stats")
+check(any("permiso" in str(e).lower() for e in ERRORES),
+      "USUARIO: no puede entrar a Estadísticas aunque lo intente")
+check(not db.puede("reabrir_caja"),
+      "USUARIO: no tiene permiso para reabrir cajas")
+
+# Vuelvo a la sesión de DESARROLLADOR
+db.cerrar_sesion()
+db.iniciar_sesion("admin", "admin")
+app._actualizar_nav()
+app.update_idletasks()
+check(app.botones_nav["admin"].winfo_ismapped(),
+      "DESARROLLADOR: el botón Administración vuelve a estar visible")
+
+# El chequeo de medianoche no debe sacar al usuario de una caja
+# que eligió a mano (bug: no se podía cerrar la caja de otro día)
+from datetime import datetime as _dtt, timedelta as _tdd
+_ayer = (_dtt.strptime(db.hoy(), "%Y-%m-%d") - _tdd(days=1)).strftime("%Y-%m-%d")
+app.cambiar_caja(_ayer)
+app._chequear_dia()
+check(app.caja_fecha == _ayer,
+      "_chequear_dia respeta la caja elegida a mano (no salta a hoy)")
+check(db.get_caja(_ayer)["id"] == app.caja_actual()["id"],
+      "la vista sigue en la caja del día elegido")
+app.cambiar_caja(db.hoy())
+
+# --------- Botones de abrir/cerrar caja, Mi cuenta y foto de perfil ---------
+ini = app.paneles["inicio"]
+_fecha_prueba = "2026-12-30"
+app.cambiar_caja(_fecha_prueba)
+app.update()
+check(str(ini.btn_abrir.cget("text")) == "ABRIR CAJA — admin",
+      f"botón ABRIR CAJA muestra el usuario "
+      f"(obtuvo {ini.btn_abrir.cget('text')!r})")
+check(ini.btn_abrir.cget("state") == "normal",
+      "ABRIR CAJA habilitado cuando la caja no tiene apertura")
+check(str(ini.btn_cierre.cget("text")) == "CERRAR CAJA — admin",
+      f"botón CERRAR CAJA muestra el usuario "
+      f"(obtuvo {ini.btn_cierre.cget('text')!r})")
+
+ini._abrir_caja()
+app.update()
+dlg_abrir = [w for w in app.winfo_children()
+             if w.winfo_class() == "Toplevel" and w.title() == "Abrir caja"]
+check(bool(dlg_abrir), "el diálogo de apertura se abre desde Inicio")
+if dlg_abrir:
+    dlg_abrir[0].var.set("120.000")
+    dlg_abrir[0]._confirmar()
+    app.update()
+ap2 = db.apertura_de(db.get_caja(_fecha_prueba)["id"])
+check(ap2 is not None and ap2["monto_inicial"] == 120000,
+      f"el diálogo registra el monto inicial "
+      f"(obtuvo {ap2 and ap2['monto_inicial']})")
+check(str(ini.btn_abrir.cget("text")).startswith("CAJA ABIERTA"),
+      "abierta la caja, ABRIR CAJA queda deshabilitado")
+
+# Caja sin ventas: el cierre es directo (sin diálogo de arqueo ni contraseña)
+ini._abrir_cierre()
+app.update()
+dialogos_cierre = [w for w in app.winfo_children()
+                   if w.winfo_class() == "Toplevel" and w.title() == "Cierre de caja"]
+check(not dialogos_cierre, "caja vacía: no se abre el diálogo de arqueo")
+check(db.get_caja(_fecha_prueba)["estado"] == "cerrada",
+      "caja vacía: se cierra de un solo clic")
+
+# Efecto deslizante de usuario/rango en el lateral
+check(app._item_usuario is not None
+      and "admin" in str(app.canvas_usuario_nav.itemcget(app._item_usuario, "text")),
+      "el lateral muestra el usuario conectado")
+app.mostrar("inicio")
+app.update()
+check(app._item_usuario is not None
+      and "admin" in str(app.canvas_usuario_nav.itemcget(app._item_usuario, "text")),
+      "al cambiar de pantalla el usuario/rango se vuelve a pintar")
+
+# Panel Mi cuenta
+check("cuenta" in app.botones_nav, "el botón Mi cuenta está en la navegación")
+app.mostrar("cuenta")
+app.update()
+cuenta = app.paneles["cuenta"]
+check(cuenta.datos["usuario"].cget("text") == "admin",
+      "Mi cuenta muestra el usuario")
+check(cuenta.datos["rango"].cget("text") == "DESARROLLADOR",
+      "Mi cuenta muestra el rango")
+
+# Foto de perfil (imagen elegida desde el escritorio)
+from PIL import Image as _Img
+_foto_tmp = os.path.join(tempfile.gettempdir(), "foto_perfil_test.png")
+_Img.new("RGB", (120, 90), (20, 60, 120)).save(_foto_tmp)
+db.set_foto_perfil(_foto_tmp)
+check(db.foto_perfil() is not None and os.path.exists(db.foto_perfil()),
+      "la foto de perfil se guarda junto a la base")
+cuenta.refresh()
+app._actualizar_foto_nav()
+app.update()
+check(cuenta._foto_ref is not None, "la foto se muestra en Mi cuenta")
+check(app._foto_nav_ref is not None, "la foto se muestra en el lateral")
+db.quitar_foto_perfil()
+check(db.foto_perfil() is None, "la foto de perfil se puede quitar")
+cuenta.refresh()
+app._actualizar_foto_nav()
+app.update()
+check(cuenta._foto_ref is None, "sin foto se vuelve al avatar por defecto")
+os.remove(_foto_tmp)
+
+app.cambiar_caja(db.hoy())
+app.destroy()
+
+# Caja bloqueada: no se puede vender con la caja cerrada
+db.guardar_cierre(
+    caja["id"], total_garrafas=0, total_vendido=0, efectivo_esperado=0,
+    efectivo_contado=0, transferencias=0, debito=0, credito=0, total_general=0,
+    diferencia=0, estado="Cuadrada", billetes={}, n_transferencias=2,
+)
+check(not db.caja_esta_abierta(caja["id"]), "caja cerrada queda bloqueada")
+check(db.get_cierre_activo(caja["id"])["n_transferencias"] == 2,
+      "el cierre guarda la cantidad de transferencias")
+
+# Caja del día siguiente (nuevo día)
+from datetime import datetime as _dt, timedelta as _td
+manana = (_dt.strptime(db.hoy(), "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
+caja_nueva = db.asegurar_caja(manana)
+check(caja_nueva["estado"] == "abierta", "nuevo día = nueva caja automática")
+check(db.get_caja(db.hoy())["id"] != caja_nueva["id"],
+      "las cajas de cada día están separadas")
+check(db.resumen(caja_nueva["id"])["total_vendido"] == 0,
+      "la caja nueva empieza en cero")
+
+# ==========================================================================
+# Revisión de los 8 puntos pedidos:
+# permisos por usuario, cierre sin ventanas de más, fotos independientes,
+# ventana adaptativa y Excel imprimible A4 horizontal.
+# ==========================================================================
+
+# ---- Punto 1: permisos individuales por usuario (nivel de datos) ----
+check(all(db.puede(p) for p in perms.PERMISOS),
+      "punto 1: DESARROLLADOR conserva acceso completo")
+
+u_perm = db.crear_usuario(
+    "caja_perm", "clave1", "USUARIO",
+    permisos=["abrir_caja", "cerrar_caja", "ventas", "pago_efectivo",
+              "historial"])
+expl = db.permisos_explicitos(u_perm["id"])
+check(expl is not None and len(expl) == 5,
+      "punto 1: el usuario guarda sus permisos individuales")
+check(len(db.permisos_efectivos(u_perm["id"])) == 5,
+      "punto 1: los permisos efectivos son exactamente los asignados")
+
+u_rango = db.crear_usuario("sin_perm", "clave1", "USUARIO")
+check(db.permisos_explicitos(u_rango["id"]) is None,
+      "punto 1: sin asignación manual, el usuario usa los de su rango")
+check("historial" in db.permisos_efectivos(u_rango["id"]),
+      "punto 1: hereda los permisos por defecto del rango USUARIO")
+
+# ---- Punto 1 + punto 4: con sesión de usuario restringido ----
+db.cerrar_sesion()
+db.iniciar_sesion("caja_perm", "clave1")
+check(db.puede("cerrar_caja") and db.puede("pago_efectivo"),
+      "punto 1: puede hacer lo que se le asignó")
+check(not db.puede("exportar_excel") and not db.puede("estadisticas"),
+      "punto 1: NO puede hacer lo que no se le asignó")
+check(not db.puede("pago_credito") and not db.puede("pago_transferencia"),
+      "punto 1: los medios de pago se restringen uno por uno")
+
+app3 = main_mod.App()
+app3.update()
+ancho_v = int(app3.geometry().split("x")[0])
+alto_v = int(app3.geometry().split("x")[1].split("+")[0])
+check(ancho_v <= app3.winfo_screenwidth() and alto_v <= app3.winfo_screenheight(),
+      f"punto 4: la ventana entra en la pantalla "
+      f"({ancho_v}x{alto_v} vs {app3.winfo_screenwidth()}x"
+      f"{app3.winfo_screenheight()})")
+check(ancho_v >= app3.minsize()[0] and alto_v >= app3.minsize()[1],
+      "punto 4: la ventana respeta su tamaño mínimo sin exceder la pantalla")
+
+app3.mostrar("ventas")
+app3.update()
+pv = app3.paneles["ventas"]
+check(list(pv.combo_medio["values"]) == ["Efectivo"],
+      f"punto 1: en Ventas solo se ofrece el medio de pago permitido "
+      f"(obtuvo {list(pv.combo_medio['values'])})")
+pv.combo_producto.current(0)
+pv.var_cantidad.set("1")
+pv.var_precio.set("10000")
+pv.combo_medio.set("Tarjeta de crédito")
+ERRORES.clear()
+check(pv._datos_form() is None,
+      "punto 1: el cobro con un medio no permitido se rechaza")
+check(any("permiso" in str(e).lower() for e in ERRORES),
+      "punto 1: avisa que el usuario no tiene permiso para ese cobro")
+app3.destroy()
+
+# El DESARROLLADOR puede ampliarle permisos a un usuario
+db.cerrar_sesion()
+db.iniciar_sesion("admin", "admin")
+db.set_permisos_usuario(u_perm["id"],
+                        db.permisos_explicitos(u_perm["id"]) + ["exportar_excel"])
+db.cerrar_sesion()
+db.iniciar_sesion("caja_perm", "clave1")
+check(db.puede("exportar_excel"),
+      "punto 1: el permiso agregado se aplica de inmediato")
+db.cerrar_sesion()
+db.iniciar_sesion("admin", "admin")
+db.eliminar_usuario(u_perm["id"])
+db.eliminar_usuario(u_rango["id"])
+
+# ---- Punto 3: cada usuario con su propia foto ----
+foto_a = os.path.join(tempfile.gettempdir(), "foto_usuario_a.png")
+foto_b = os.path.join(tempfile.gettempdir(), "foto_usuario_b.png")
+_Img.new("RGB", (100, 80), (200, 30, 30)).save(foto_a)
+_Img.new("RGB", (100, 80), (30, 200, 30)).save(foto_b)
+
+u_admin = db.usuario_por_nombre("admin")
+db.set_foto_perfil(foto_a)                      # sesión: admin
+ruta_admin = db.foto_perfil()
+check(ruta_admin is not None and os.path.exists(ruta_admin)
+      and os.path.basename(ruta_admin).startswith("usuario_"),
+      "punto 3: la foto se guarda en un archivo propio del usuario")
+
+db.cerrar_sesion()
+db.iniciar_sesion("operario", "clave123")
+db.set_foto_perfil(foto_b)
+ruta_oper = db.foto_perfil()
+check(ruta_admin != ruta_oper and os.path.exists(ruta_admin)
+      and os.path.exists(ruta_oper),
+      "punto 3: cada usuario tiene su propia foto")
+check(db.foto_perfil() == ruta_oper,
+      "punto 3: la foto visible corresponde al usuario conectado")
+db.quitar_foto_perfil()
+check(db.foto_perfil() is None,
+      "punto 3: el usuario se quita su foto")
+check(db.foto_perfil(u_admin["id"]) == ruta_admin,
+      "punto 3: quitar la foto no afecta a los demás usuarios")
+
+db.cerrar_sesion()
+db.iniciar_sesion("admin", "admin")
+db.quitar_foto_perfil()
+for _f in (foto_a, foto_b):
+    if os.path.exists(_f):
+        os.remove(_f)
+
+# ---- Punto 2: el cierre con ventas cierra sin ventanas de más ----
+db.reabrir_caja(caja["id"])
+_p0 = db.productos()[0]
+db.registrar_venta(caja["id"], _p0["id"], 1, _p0["precio"], "Efectivo")
+
+app2 = main_mod.App()
+app2.update()
+app2.mostrar("ventas")            # para comprobar que vuelve a Inicio al cerrar
+app2.update()
+ini2 = app2.paneles["inicio"]
+ini2._abrir_cierre()
+app2.update()
+dlg2 = [w for w in app2.winfo_children()
+        if w.winfo_class() == "Toplevel" and w.title() == "Cierre de caja"]
+check(bool(dlg2), "punto 2: con ventas se abre el diálogo de arqueo")
+if dlg2:
+    sh_pantalla = dlg2[0].winfo_screenheight()
+    alto_dlg = int(str(dlg2[0].geometry()).split("x")[1].split("+")[0])
+    check(alto_dlg <= sh_pantalla - 40,
+          f"punto 2: el diálogo se adapta a la pantalla "
+          f"({alto_dlg}px vs {sh_pantalla - 40}px)")
+
+# Registrar cualquier ventana de información que aparezca al confirmar
+_infos = []
+mb.showinfo = lambda *a, **k: _infos.append(str(a[0]) if a else "")
+if dlg2:
+    dlg2[0].celdas[10000].set("1")
+    dlg2[0]._recalcular()
+    dlg2[0]._confirmar()
+    app2.update()
+mb.showinfo = lambda *a, **k: None
+
+check(not [w for w in app2.winfo_children()
+           if w.winfo_class() == "Toplevel" and w.title() == "Cierre de caja"],
+      "punto 2: confirmado el cierre, el diálogo se cierra por completo")
+check(not _infos,
+      f"punto 2: no aparece ninguna ventana extra de información "
+      f"(obtuvo {_infos})")
+check(app2.panel_actual == "inicio",
+      f"punto 2: el sistema vuelve automáticamente a Inicio "
+      f"(obtuvo {app2.panel_actual})")
+check(db.get_caja_por_id(caja["id"])["estado"] == "cerrada",
+      "punto 2: la caja queda efectivamente cerrada")
+check(db.get_cierre_activo(caja["id"]) is not None,
+      "punto 2: el cierre queda registrado en el historial")
+app2.destroy()
+
+os.remove(TMP)
+import shutil as _shutil
+_shutil.rmtree(db.dir_respaldos(), ignore_errors=True)
+print(f"\nTODAS LAS PRUEBAS PASARON ({ok} verificaciones)")

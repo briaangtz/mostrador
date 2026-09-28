@@ -1,0 +1,36 @@
+# ---------------- Datos del negocio (NUNCA se suben) ----------------
+garrafas.db
+garrafas.db-journal
+garrafas.db-wal
+garrafas.db-shm
+perfiles/
+respaldos/
+
+# ---------------- Compilación / PyInstaller ----------------
+build/
+dist/
+*.spec.bak
+
+# ---------------- Python ----------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# ---------------- Sistema / editores ----------------
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# ---------------- Archivos de trabajo ----------------
+_previa_icono.png
+*.xlsx
