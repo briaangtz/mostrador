@@ -17,9 +17,15 @@ class InicioPanel(tk.Frame):
         self._construir()
 
     def _construir(self):
+        # Con scroll vertical: el listado de productos crece con la cantidad
+        # de productos y en pantallas chicas nada queda cortado.
+        # (App._rueda_global detecta este canvas_scroll automáticamente.)
+        contenido = st.contenido_scrollable(self)
+
         # ---------------- Cabecera ----------------
-        cab = tk.Frame(self, bg=st.FONDO)
+        cab = tk.Frame(contenido, bg=st.FONDO)
         cab.pack(fill="x", padx=24, pady=(20, 4))
+        self.cab = cab
 
         izq = tk.Frame(cab, bg=st.FONDO)
         izq.pack(side="left")
@@ -40,7 +46,7 @@ class InicioPanel(tk.Frame):
         self._cajas_mapa = []
 
         # ---------------- Aviso de cajas sin cerrar ----------------
-        self.banner = tk.Frame(self, bg=st.AMBAR_CLARO,
+        self.banner = tk.Frame(contenido, bg=st.AMBAR_CLARO,
                                highlightbackground=st.AMBAR, highlightthickness=1)
         self.lbl_banner = tk.Label(self.banner, text="", bg=st.AMBAR_CLARO,
                                    fg=st.TEXTO, font=(st.FUENTE, 10), anchor="w",
@@ -53,17 +59,22 @@ class InicioPanel(tk.Frame):
                                     cursor="hand2")
 
         # ---------------- Estado de la caja ----------------
-        self.lbl_estado_caja = tk.Label(self, text="", bg=st.FONDO,
+        # Se empaquetan acá (y no al refrescar) para que aparezcan siempre
+        # debajo de la cabecera y nunca queden ocultos.
+        self.lbl_estado_caja = tk.Label(contenido, text="", bg=st.FONDO,
                                         font=(st.FUENTE, 11, "bold"), anchor="w")
+        self.lbl_estado_caja.pack(fill="x", padx=24, pady=(10, 0))
 
         # Quién abrió la caja (trazabilidad)
-        self.lbl_apertura = tk.Label(self, text="", bg=st.FONDO,
+        self.lbl_apertura = tk.Label(contenido, text="", bg=st.FONDO,
                                      fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
                                      anchor="w")
+        self.lbl_apertura.pack(fill="x", padx=24, pady=(2, 0))
 
         # ---------------- Tarjetas ----------------
-        marco_cards = tk.Frame(self, bg=st.FONDO)
+        marco_cards = tk.Frame(contenido, bg=st.FONDO)
         marco_cards.pack(fill="x", padx=24, pady=(8, 0))
+        self.marco_cards = marco_cards
 
         self.cards = {}
         self.cards_detalle = {}
@@ -95,7 +106,7 @@ class InicioPanel(tk.Frame):
         self.cards["general"].config(fg=st.VERDE_OSCURO)
 
         # ---------------- Botones de apertura y cierre ----------------
-        marco_accion = tk.Frame(self, bg=st.FONDO)
+        marco_accion = tk.Frame(contenido, bg=st.FONDO)
         marco_accion.pack(fill="x", padx=24, pady=(18, 0))
 
         self.btn_abrir = tk.Button(
@@ -132,13 +143,14 @@ class InicioPanel(tk.Frame):
         self.btn_cierre.bind("<Leave>",
                              lambda e: self.btn_cierre.config(bg=st.ACENTO))
 
-        self.lbl_detalle_cierre = tk.Label(self, text="", bg=st.FONDO,
+        self.lbl_detalle_cierre = tk.Label(contenido, text="", bg=st.FONDO,
                                            fg=st.TEXTO_SUAVE,
                                            font=(st.FUENTE, 10), anchor="w")
         self.lbl_detalle_cierre.pack(fill="x", padx=24, pady=(8, 0))
 
         # ---------------- Resumen por producto ----------------
-        marco_prod = st.labelframe(self, " VENTAS POR PRODUCTO ", padx=14, pady=10)
+        marco_prod = st.labelframe(contenido, " VENTAS POR PRODUCTO ",
+                                   padx=14, pady=10)
         marco_prod.pack(fill="x", padx=24, pady=(18, 24))
 
         self.filas_producto = {}
@@ -287,7 +299,9 @@ class InicioPanel(tk.Frame):
             self.banner.pack_forget()
 
         if pendientes:
-            self.banner.pack(fill="x", padx=24, pady=(12, 0))
+            # Siempre justo debajo de la cabecera, sin importar cuántas veces
+            # se muestre u oculte.
+            self.banner.pack(fill="x", padx=24, pady=(12, 0), after=self.cab)
 
         # Resumen
         r = db.resumen(caja["id"])
@@ -307,7 +321,8 @@ class InicioPanel(tk.Frame):
         usuario_txt = self._usuario_txt()
         if caja["estado"] == "abierta":
             self.lbl_estado_caja.config(text="● CAJA ABIERTA", fg=st.VERDE_OSCURO)
-            self.lbl_estado_caja.pack(fill="x", padx=24, pady=(10, 0))
+            self.lbl_estado_caja.pack(fill="x", padx=24, pady=(10, 0),
+                                      before=self.marco_cards)
 
             # Quién abrió esta caja y con cuánto fondo inicial
             apertura = db.apertura_de(caja["id"])
@@ -322,7 +337,8 @@ class InicioPanel(tk.Frame):
                     text="Sin apertura registrada — presioná ABRIR CAJA "
                          "para registrar quién la abre y con cuánto fondo."
                 )
-            self.lbl_apertura.pack(fill="x", padx=24, pady=(2, 0))
+            self.lbl_apertura.pack(fill="x", padx=24, pady=(2, 0),
+                                   before=self.marco_cards)
 
             # Botón ABRIR: solo si todavía no se registró la apertura
             if apertura:
@@ -354,7 +370,8 @@ class InicioPanel(tk.Frame):
                 )
         else:
             self.lbl_estado_caja.config(text="■ CAJA CERRADA", fg=st.ROJO)
-            self.lbl_estado_caja.pack(fill="x", padx=24, pady=(10, 0))
+            self.lbl_estado_caja.pack(fill="x", padx=24, pady=(10, 0),
+                                      before=self.marco_cards)
             self.lbl_apertura.pack_forget()
             self.btn_abrir.config(state="disabled", bg="#a3d9b5",
                                   text="CAJA CERRADA")

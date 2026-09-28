@@ -2,10 +2,12 @@
 """
 Exportación de los movimientos de un período a un archivo Excel (.xlsx).
 
-La plantilla queda organizada por medio de pago: TRANSFERENCIAS, TARJETAS
-(con sus dos bloques: Tarjeta de débito y Tarjeta de crédito) y
-DINERO / EFECTIVO, y configurada para imprimir directamente en hoja A4
-horizontal, ajustada al ancho de la página.
+La plantilla arranca con un resumen de unidades vendidas por sección
+(EFEC, TARJETA, TRANS) con el TOTAL GENERAL y un control de cuadre, y
+después detalla los movimientos por medio de pago: TRANSFERENCIAS,
+TARJETAS (con sus dos bloques: Tarjeta de débito y Tarjeta de crédito)
+y DINERO / EFECTIVO, configurada para imprimir directamente en hoja
+A4 horizontal, ajustada al ancho de la página.
 """
 
 from datetime import datetime
@@ -17,7 +19,7 @@ from openpyxl.worksheet.page import PageMargins
 from openpyxl.worksheet.properties import PageSetupProperties
 
 import database as db
-from util import fecha_corta
+from util import fecha_corta, money
 
 AZUL = "01ADEF"                      # color de marca
 GRIS_CLARO = "F2F4F7"
@@ -37,11 +39,79 @@ SECCIONES = [
 ENCABEZADOS = ["Nombre", "Carga", "N° Comprobante / Tarjeta", "Total"]
 ANCHOS = [30, 38, 28, 16]
 
+# Secciones del resumen de unidades: (rótulo corto, medios que agrupa)
+RESUMEN_SECCIONES = [
+    ("EFEC", ["Efectivo"]),
+    ("TARJETA", ["Tarjeta de débito", "Tarjeta de crédito"]),
+    ("TRANS", ["Transferencia"]),
+]
+
+ROTULO_GARRAFAS = "TOTAL DE ENVASES"            # solo garrafas con gas
+ROTULO_ENVASES = "TOTAL DE ENVASES SUELTOS"     # envases vendidos aparte
+
 
 def _carga(v):
     """Detalle de la carga: '3 × Garrafa 10 kg'."""
     producto = v.get("producto") or "Producto"
     return f"{v['cantidad']} × {producto}"
+
+
+# ---------------------------------------------------------------------------
+# Resumen de unidades por sección
+# ---------------------------------------------------------------------------
+
+def _productos_resumen(movimientos):
+    """
+    Productos que aparecen en el resumen, como (id, nombre):
+    primero las garrafas con gas y después los envases sueltos.
+    Incluye productos dados de baja que igual tuvieron ventas.
+    """
+    orden, nombres = [], {}
+    for p in db.productos():
+        orden.append(p["id"])
+        nombres[p["id"]] = p["nombre"]
+    for v in movimientos:
+        pid = v.get("producto_id")
+        if pid is not None and pid not in nombres:
+            orden.append(pid)
+            nombres[pid] = v.get("producto") or f"Producto {pid}"
+
+    garrafas, envases = [], []
+    for pid in orden:
+        item = (pid, nombres[pid])
+        (envases if db.es_envase(nombres[pid]) else garrafas).append(item)
+    return garrafas, envases
+
+
+def _unidades_por_medio(movimientos):
+    """{medio: {producto_id: [cantidad, dinero]}} con todo lo del período."""
+    datos = {}
+    for v in movimientos:
+        celda = datos.setdefault(v["medio"], {})
+        cantidad, dinero = celda.get(v["producto_id"], (0, 0.0))
+        celda[v["producto_id"]] = (cantidad + int(v["cantidad"]),
+                                   dinero + float(v["total"]))
+    return datos
+
+
+def _sumar_medios(datos, medios):
+    """Une en un solo mapa por producto todos los medios de una sección."""
+    salida = {}
+    for medio in medios:
+        for pid, (cantidad, dinero) in datos.get(medio, {}).items():
+            c, d = salida.get(pid, (0, 0.0))
+            salida[pid] = (c + cantidad, d + dinero)
+    return salida
+
+
+def _totales(mapa, productos):
+    """(cantidad, dinero) de una lista de productos dentro de un mapa."""
+    cantidad, dinero = 0, 0.0
+    for pid, _ in productos:
+        c, d = mapa.get(pid, (0, 0.0))
+        cantidad += c
+        dinero += d
+    return cantidad, dinero
 
 
 def exportar_movimientos(desde, hasta, destino):
@@ -171,6 +241,138 @@ def exportar_movimientos(desde, hasta, destino):
         celda_v.fill = relleno_total
         celda_v.border = borde
         fila += 1
+
+    # ---------------- Resumen de unidades por sección ----------------
+    def _enc_resumen():
+        """Encabezado del resumen: Producto (A:B) | Unidades | Total $."""
+        nonlocal fila
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=2)
+        for col, rotulo in ((1, "Producto"), (3, "Unidades"), (4, "Total $")):
+            celda = ws.cell(row=fila, column=col, value=rotulo)
+            celda.font = Font(bold=True, color="FFFFFF")
+            celda.alignment = centro
+        for col in range(1, 5):
+            ws.cell(row=fila, column=col).fill = relleno_enc
+            ws.cell(row=fila, column=col).border = borde
+        ws.row_dimensions[fila].height = 26
+        fila += 1
+
+    def _fila_resumen(rotulo, cantidad, dinero, *, fuente=None, relleno=None,
+                      mostrar_unidades=True, mostrar_dinero=True):
+        """Fila del resumen: rótulo en A:B, unidades en C, dinero en D."""
+        nonlocal fila
+        fuente = fuente or Font(size=10)
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=2)
+        celda_r = ws.cell(row=fila, column=1, value=rotulo)
+        celda_r.font = fuente
+        celda_r.alignment = texto
+
+        celda_c = ws.cell(row=fila, column=3)
+        if mostrar_unidades:
+            celda_c.value = int(cantidad)
+            celda_c.number_format = FORMATO_ENTERO
+            celda_c.alignment = centro
+        celda_c.font = fuente
+
+        celda_d = ws.cell(row=fila, column=4)
+        if mostrar_dinero:
+            celda_d.value = float(dinero)
+            celda_d.number_format = FORMATO_MONEDA
+        celda_d.alignment = texto_der
+        celda_d.font = fuente
+
+        for col in range(1, 5):
+            celda = ws.cell(row=fila, column=col)
+            celda.border = borde
+            if relleno is not None:
+                celda.fill = relleno
+        ws.row_dimensions[fila].height = 17
+        fila += 1
+
+    def _bloque_resumen(titulo, mapa):
+        """Una sección del resumen: garrafas, envases sueltos y sus totales."""
+        _fila_titulo(titulo, Font(bold=True, size=12, color="FFFFFF"),
+                     relleno_seccion)
+        _enc_resumen()
+        for pid, nombre in garrafas:
+            c, d = mapa.get(pid, (0, 0.0))
+            _fila_resumen(nombre, c, d)
+
+        c, d = _totales(mapa, garrafas)
+        _fila_resumen(ROTULO_GARRAFAS, c, d, fuente=Font(bold=True, size=11),
+                      relleno=relleno_total)
+
+        if envases:
+            for pid, nombre in envases:
+                c, d = mapa.get(pid, (0, 0.0))
+                _fila_resumen(nombre, c, d)
+            c, d = _totales(mapa, envases)
+            _fila_resumen(ROTULO_ENVASES, c, d, fuente=Font(bold=True, size=11),
+                          relleno=relleno_total)
+
+        unidades, dinero = _totales(mapa, garrafas + envases)
+        _fila_resumen("TOTAL DE UNIDADES", unidades, None,
+                      fuente=Font(bold=True, size=11), relleno=relleno_total,
+                      mostrar_dinero=False)
+        _fila_resumen("TOTAL DE DINERO", None, dinero,
+                      fuente=Font(bold=True, size=11), relleno=relleno_total,
+                      mostrar_unidades=False)
+
+    def _fila_control(rotulo, secciones, valores, total, *, con_dinero=False):
+        """Control: 'EFEC(...) + TARJETA(...) + TRANS(...) = total'."""
+        nonlocal fila
+        if con_dinero:
+            partes = [f"{r}({money(v)})" for r, v in zip(secciones, valores)]
+            expr = " + ".join(partes) + " = " + money(total)
+            coincide = abs(sum(valores) - float(total)) < 0.01
+        else:
+            partes = [f"{r}({int(v)})" for r, v in zip(secciones, valores)]
+            expr = " + ".join(partes) + " = " + str(int(total))
+            coincide = abs(sum(valores) - int(total)) < 1e-6
+
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=3)
+        celda = ws.cell(row=fila, column=1, value=f"{rotulo}: {expr}")
+        celda.font = Font(bold=True, size=10)
+        celda.alignment = texto
+        estado = ws.cell(row=fila, column=4,
+                         value="COINCIDE" if coincide else "REVISAR")
+        estado.font = Font(bold=True, size=10,
+                           color="1B7F3B" if coincide else "C0392B")
+        estado.alignment = centro
+        for col in range(1, 5):
+            ws.cell(row=fila, column=col).fill = relleno_total
+            ws.cell(row=fila, column=col).border = borde
+        ws.row_dimensions[fila].height = 18
+        fila += 1
+
+    datos_medio = _unidades_por_medio(movimientos)
+    garrafas, envases = _productos_resumen(movimientos)
+
+    _fila_titulo("GARRAFAS Y ENVASES VENDIDOS POR SECCIÓN",
+                 Font(bold=True, size=13, color="FFFFFF"), relleno_enc, alto=24)
+
+    secciones_resumen = [(rotulo, _sumar_medios(datos_medio, medios))
+                         for rotulo, medios in RESUMEN_SECCIONES]
+    unidades_seccion, dinero_seccion = [], []
+    for rotulo, mapa in secciones_resumen:
+        _bloque_resumen(rotulo, mapa)
+        c, d = _totales(mapa, garrafas + envases)
+        unidades_seccion.append(c)
+        dinero_seccion.append(d)
+        fila += 1
+
+    # Total general: se calcula con TODOS los medios que hubo en el período,
+    # así si alguno quedara fuera de las secciones el control lo marca.
+    mapa_total = _sumar_medios(datos_medio, sorted(datos_medio))
+    _bloque_resumen("TOTAL GENERAL DE GARRAFAS Y ENVASES", mapa_total)
+    total_unidades, total_dinero = _totales(mapa_total, garrafas + envases)
+
+    nombres_seccion = [rotulo for rotulo, _ in secciones_resumen]
+    _fila_control("CONTROL DE UNIDADES", nombres_seccion, unidades_seccion,
+                  total_unidades)
+    _fila_control("CONTROL DE DINERO", nombres_seccion, dinero_seccion,
+                  total_dinero, con_dinero=True)
+    fila += 2
 
     # ---------------- Una sección por medio de pago ----------------
     for titulo, bloques in SECCIONES:

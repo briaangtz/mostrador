@@ -37,7 +37,27 @@ def check_error(fn, msg):
 
 # --------------------------------------------------------------- lógica
 db.init()
-check(len(db.productos()) == 4, "se crearon los 4 productos base")
+check(len(db.productos()) == 10, "se crearon los 10 productos base")
+nombres_base = [p["nombre"] for p in db.productos()]
+for _n in ("Garrafa 10 kg", "Garrafa 15 kg", "Garrafa ME", "Garrafa 45 kg",
+           "Garrafa ECO PROPANO", "Envase 10 kg", "Envase 15 kg",
+           "Envase 45 kg", "Envase ME", "Envase ECO PROPANO"):
+    check(_n in nombres_base, f"producto base: {_n}")
+check(db.es_envase("Envase 10 kg") and db.es_envase("ENVASE ME")
+      and not db.es_envase("Garrafa 10 kg") and not db.es_envase("Garrafa ECO PROPANO"),
+      "los envases sueltos se diferencian de las garrafas con gas")
+
+# Migración: bases viejas traen "Garrafa 15ME", que pasa a ser "Garrafa ME"
+with db.db() as _con:
+    _con.execute("UPDATE productos SET nombre = 'Garrafa 15ME' "
+                 "WHERE nombre = 'Garrafa ME'")
+db.init()
+check(db.producto_por_nombre("Garrafa ME") is not None
+      and db.producto_por_nombre("Garrafa 15ME") is None,
+      "migración: Garrafa 15ME se renombra a Garrafa ME")
+check(len(db.productos()) == 10,
+      f"la migración completa los productos sin duplicar "
+      f"(obtuvo {len(db.productos())})")
 check(db.check_password("admin"), "contraseña por defecto 'admin' funciona")
 check(not db.check_password("mala"), "contraseña incorrecta rechazada")
 
@@ -107,7 +127,8 @@ check(os.path.exists(ruta1), "el respaldo crea el archivo")
 check(os.path.getsize(ruta1) > 0, "el respaldo tiene contenido")
 import sqlite3 as _sqlite
 _con = _sqlite.connect(ruta1)
-check(_con.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 4,
+check(_con.execute("SELECT COUNT(*) FROM productos").fetchone()[0]
+      == len(db.productos()),
       "el respaldo es una base SQLite íntegra y legible")
 _con.close()
 check(db.respaldar_si_toca("prueba") is None,
@@ -297,10 +318,32 @@ check("Débito $150.000" in app.paneles["inicio"]
       .cards_detalle["tarjetas"].cget("text"),
       "la tarjeta TARJETAS discrimina débito y crédito")
 
+# Punto 4: con los 10 productos, Inicio no corta ni oculta nada
+inicio = app.paneles["inicio"]
+app.update()
+check(getattr(inicio, "canvas_scroll", None) is not None,
+      "punto 4: el panel Inicio tiene scroll vertical")
+check(inicio.lbl_estado_caja.winfo_ismapped()
+      and str(inicio.lbl_estado_caja.cget("text")).strip() != "",
+      "punto 4: se ve el estado de la caja en Inicio")
+_filas_inicio = len(inicio.contenedor_producto.winfo_children())
+check(_filas_inicio == 10,
+      f"punto 4: el listado de Inicio trae los 10 productos "
+      f"(obtuvo {_filas_inicio})")
+inicio.canvas_scroll.yview_moveto(1.0)
+inicio.update_idletasks()
+_cy = inicio.canvas_scroll.winfo_rooty()
+_ch = inicio.canvas_scroll.winfo_height()
+_ultimo = inicio.contenedor_producto.master
+_fin = _ultimo.winfo_rooty() - _cy + _ultimo.winfo_height()
+check(_fin <= _ch + 2,
+      f"punto 4: bajando, el último producto cabe en pantalla "
+      f"(fin={_fin} contra {_ch})")
+
 # Configuración
 app.mostrar("config")
 app.update()
-check(len(app.paneles["config"].tree.get_children()) == 4, "productos en configuración")
+check(len(app.paneles["config"].tree.get_children()) == 10, "productos en configuración")
 
 # Historial
 app.mostrar("historial")
@@ -382,7 +425,7 @@ cfg = app.paneles["config"]
 cfg.var_nombre.set("Garrafa 25 kg")
 cfg.var_precio.set("25.000")
 cfg._nuevo_producto()
-check(len(db.productos()) == 5, "alta de producto desde configuración")
+check(len(db.productos()) == 11, "alta de producto desde configuración")
 cfg.tree.selection_set(cfg.tree.get_children()[-1])
 cfg.tree.event_generate("<<TreeviewSelect>>")
 cfg.var_precio.set("26.500")
@@ -391,7 +434,7 @@ check(db.producto_por_nombre("Garrafa 25 kg")["precio"] == 26500,
       "edición de precio desde configuración")
 cfg.tree.selection_set(cfg.tree.get_children()[-1])
 cfg._eliminar_producto()
-check(len(db.productos()) == 4, "baja de producto desde configuración")
+check(len(db.productos()) == 10, "baja de producto desde configuración")
 
 # Registro de ventas desde la interfaz (la caja debe estar abierta)
 db.reabrir_caja(caja["id"])
@@ -536,7 +579,7 @@ check(len(fila_total_tarjetas) == 1
       f"excel: TOTAL TARJETAS = 240.000 "
       f"(obtuvo {fila_total_tarjetas[0][-1] if fila_total_tarjetas else '—'})")
 filas_totales = [f for f in filas_txt
-                 if f and str(f[0]).startswith("TOTAL GENERAL")]
+                 if f and str(f[0]) == "TOTAL GENERAL"]
 check(len(filas_totales) == 1
       and abs(float(filas_totales[0][-1]) - monto_xl) < 0.01,
       "excel: un solo TOTAL GENERAL con el monto completo")
@@ -556,6 +599,82 @@ check(any("María López" in t for t in textos),
 check(any("×" in t for t in textos), "excel: incluye el detalle de la carga")
 check(any("TOTAL GENERAL" in t for t in textos),
       "excel: incluye el total general")
+
+# ---- Resumen de unidades por sección (EFEC / TARJETA / TRANS) ----
+def _bloque(desde_txt):
+    """Todas las filas desde el rótulo pedido hasta el final de la hoja."""
+    for i, f in enumerate(filas_txt):
+        if f and str(f[0]) == desde_txt:
+            return filas_txt[i:]
+    return []
+
+
+def _fila_bloque(desde_txt, rotulo):
+    """Primera fila con ese rótulo dentro del bloque pedido."""
+    for f in _bloque(desde_txt):
+        if str(f[0]) == rotulo:
+            return f
+    return None
+
+
+movs_xl = db.ventas_rango(hoy, hoy)
+SECCIONES_XL = {
+    "EFEC": ["Efectivo"],
+    "TARJETA": ["Tarjeta de débito", "Tarjeta de crédito"],
+    "TRANS": ["Transferencia"],
+}
+
+for _seccion in SECCIONES_XL:
+    check(any(t == _seccion for t in textos),
+          f"excel: el resumen incluye la sección {_seccion}")
+
+for _seccion, _medios in SECCIONES_XL.items():
+    _uni = sum(v["cantidad"] for v in movs_xl if v["medio"] in _medios)
+    _din = sum(float(v["total"]) for v in movs_xl if v["medio"] in _medios)
+    _f_uni = _fila_bloque(_seccion, "TOTAL DE UNIDADES")
+    _f_din = _fila_bloque(_seccion, "TOTAL DE DINERO")
+    check(_f_uni is not None and int(_f_uni[1]) == _uni,
+          f"excel: {_seccion} suma {_uni} unidades")
+    check(_f_din is not None and abs(float(_f_din[1]) - _din) < 0.01,
+          f"excel: {_seccion} suma ${_din:,.0f}")
+
+# Cada producto informa sus unidades dentro de cada sección
+for _producto in ("Garrafa 10 kg", "Garrafa 15 kg", "Garrafa 45 kg",
+                  "Garrafa ME", "Garrafa ECO PROPANO"):
+    _esperado = sum(v["cantidad"] for v in movs_xl
+                    if v["medio"] == "Efectivo" and v["producto"] == _producto)
+    _f = _fila_bloque("EFEC", _producto)
+    check(_f is not None and int(_f[1]) == _esperado,
+          f"excel: EFEC informa {_esperado} unidades de {_producto}")
+
+# TOTAL DE ENVASES solo cuenta garrafas con gas (los envases van aparte)
+_gas_efec = sum(v["cantidad"] for v in movs_xl
+                if v["medio"] == "Efectivo" and not db.es_envase(v["producto"]))
+_f_gas = _fila_bloque("EFEC", "TOTAL DE ENVASES")
+check(_f_gas is not None and int(_f_gas[1]) == _gas_efec,
+      f"excel: TOTAL DE ENVASES de EFEC = {_gas_efec} (solo garrafas con gas)")
+_env_efec = sum(v["cantidad"] for v in movs_xl
+                if v["medio"] == "Efectivo" and db.es_envase(v["producto"]))
+_f_env = _fila_bloque("EFEC", "TOTAL DE ENVASES SUELTOS")
+check(_f_env is not None and int(_f_env[1]) == _env_efec,
+      f"excel: los envases sueltos de EFEC se informan aparte ({_env_efec})")
+
+# TOTAL GENERAL con todas las unidades y todo el dinero del período
+_f_uni_g = _fila_bloque("TOTAL GENERAL DE GARRAFAS Y ENVASES",
+                        "TOTAL DE UNIDADES")
+_f_din_g = _fila_bloque("TOTAL GENERAL DE GARRAFAS Y ENVASES",
+                        "TOTAL DE DINERO")
+uni_total = sum(v["cantidad"] for v in movs_xl)
+check(_f_uni_g is not None and int(_f_uni_g[1]) == uni_total,
+      f"excel: total general de unidades = {uni_total}")
+check(_f_din_g is not None and abs(float(_f_din_g[1]) - monto_xl) < 0.01,
+      "excel: total general de dinero coincide con el total del reporte")
+
+# Control de cuadre: EFEC + TARJETA + TRANS = TOTAL GENERAL
+controles = [f for f in filas_txt if f and str(f[0]).startswith("CONTROL DE ")]
+check(len(controles) == 2, f"excel: hay 2 filas de control (obtuvo {len(controles)})")
+check(all(str(f[-1]) == "COINCIDE" for f in controles),
+      "excel: los controles de unidades y de dinero cuadran")
 
 # Configuración de impresión: A4 horizontal ajustado al ancho
 check(str(ws.page_setup.orientation) == "landscape",
@@ -698,6 +817,10 @@ check(ap2 is not None and ap2["monto_inicial"] == 120000,
       f"(obtuvo {ap2 and ap2['monto_inicial']})")
 check(str(ini.btn_abrir.cget("text")).startswith("CAJA ABIERTA"),
       "abierta la caja, ABRIR CAJA queda deshabilitado")
+app.update()
+check(ini.lbl_apertura.winfo_ismapped()
+      and "Abierta por admin" in str(ini.lbl_apertura.cget("text")),
+      "punto 4: se ve quién abrió la caja y con cuánto fondo inicial")
 
 # Caja sin ventas: el cierre es directo (sin diálogo de arqueo ni contraseña)
 ini._abrir_cierre()

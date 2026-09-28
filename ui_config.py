@@ -45,13 +45,20 @@ class ConfigPanel(tk.Frame):
         marco_prod = st.labelframe(cuerpo, " PRODUCTOS Y PRECIOS ", padx=14, pady=12)
         marco_prod.pack(fill="both", expand=True)
 
-        self.tree = ttk.Treeview(marco_prod, columns=("producto", "precio"),
-                                 show="headings", height=6, selectmode="browse")
+        # Con barra propia: con muchos productos ninguno queda fuera de vista
+        marco_lista = tk.Frame(marco_prod, bg=st.FONDO)
+        marco_lista.pack(fill="both", expand=True)
+        scroll_prod = ttk.Scrollbar(marco_lista, orient="vertical")
+        scroll_prod.pack(side="right", fill="y")
+        self.tree = ttk.Treeview(marco_lista, columns=("producto", "precio"),
+                                 show="headings", height=6, selectmode="browse",
+                                 yscrollcommand=scroll_prod.set)
         self.tree.heading("producto", text="Producto")
         self.tree.heading("precio", text="Precio unitario")
         self.tree.column("producto", width=320, anchor="w")
         self.tree.column("precio", width=160, anchor="e")
-        self.tree.pack(fill="both", expand=True)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll_prod.config(command=self.tree.yview)
         self.tree.bind("<<TreeviewSelect>>", self._seleccionar)
 
         form = tk.Frame(marco_prod, bg=st.FONDO)

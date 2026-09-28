@@ -221,9 +221,11 @@ TEMAS = [
         titulo="Exportar a Excel e imprimir",
         claves="excel exportar exportacion archivo xlsx hoja imprimir "
                "impresion a4 horizontal planilla descargar movimiento "
-               "movimientos secciones general",
+               "movimientos secciones general resumen unidades envases "
+               "control efectivo tarjeta transferencia",
         frases=["exportar a excel", "bajar el excel", "imprimir el excel",
-                "excel a4", "hoja de calculo"],
+                "excel a4", "hoja de calculo", "resumen de unidades",
+                "cuántas garrafas salieron"],
         parrafos=[
             "En **Estadísticas** apretá **EXPORTAR A EXCEL**, elegí el "
             "archivo y el rango de fechas (con los filtros de arriba).",
@@ -231,7 +233,20 @@ TEMAS = [
             "tocar nada: orientación horizontal, tamaño A4, ajuste al ancho "
             "de una página, títulos repetidos en cada página, área de "
             "impresión y encabezado congelado.",
-            "Va en tres secciones — **TRANSFERENCIAS**, **TARJETAS** (bloque "
+            "Arriba de todo hay un **resumen por sección de pago** — "
+            "**EFEC**, **TARJETA** y **TRANS** — con las unidades de cada "
+            "producto en cada sección. Cada bloque suma primero las "
+            "**garrafas con gas** en **TOTAL DE ENVASES**, después los "
+            "**envases sueltos** en **TOTAL DE ENVASES SUELTOS** (los dos "
+            "números van por separado y nunca se mezclan) y cierra con "
+            "**TOTAL DE UNIDADES** y **TOTAL DE DINERO**.",
+            "Al final está el **TOTAL GENERAL DE GARRAFAS Y ENVASES** y dos "
+            "filas de **CONTROL DE UNIDADES** y **CONTROL DE DINERO**, que "
+            "comprueban que EFEC + TARJETA + TRANS dan igual al total. "
+            "Si dice **COINCIDE** el cuadre está bien; si dice **REVISAR**, "
+            "hay que revisar antes de imprimir.",
+            "Después sigue el detalle en tres secciones — "
+            "**TRANSFERENCIAS**, **TARJETAS** (bloque "
             "TARJETA DE DÉBITO y bloque TARJETA DE CRÉDITO, cada uno con su "
             "subtotal, y el **TOTAL TARJETAS**) y **DINERO EN EFECTIVO** — "
             "con las columnas Nombre | Carga | N° Comprobante / Tarjeta | "
@@ -369,19 +384,30 @@ TEMAS = [
         titulo="Productos, precios y configuración",
         claves="producto productos precio precios cambiar cambio configura "
                "configuracion editar precio garrafa garrafas kilo kg 10 15 "
-               "45 15me modificar valor fondo general",
+               "45 15me me eco propano envase envases modificar valor "
+               "fondo general",
         frases=["cambiar el precio", "editar precios", "configuracion",
-                "productos y precios", "agregar producto"],
+                "productos y precios", "agregar producto", "agrego un producto",
+                "producto nuevo", "eco propano",
+                "agregar envase"],
         parrafos=[
             "En **Configuración → Productos** cargás los productos y sus "
-            "precios. Ya vienen **Garrafa 10 kg, 15 kg, 15ME y 45 kg** con "
-            "precios de ejemplo.",
+            "precios. Ya vienen **Garrafa 10 kg, 15 kg, ME, 45 kg y "
+            "ECO PROPANO** más los **envases sueltos** (10 kg, 15 kg, "
+            "45 kg, ME y ECO PROPANO) con precios de ejemplo.",
+            "Hay que distinguir las dos familias: las **garrafas con gas** "
+            "se suman juntas en el Excel (TOTAL DE ENVASES) y los "
+            "**envases sueltos** van en su fila aparte "
+            "(TOTAL DE ENVASES SUELTOS). El programa las separa solo: "
+            "todo producto que empieza con “Envase” es envase suelto.",
             "Ahí mismo están el **fondo inicial** general y otros "
             "parámetros. Solo el rango **DESARROLLADOR** puede modificar "
             "precios y configuración.",
         ],
         seccion="sección 1 del manual",
-        ejemplos=["¿Cómo cambio el precio de una garrafa?"],
+        ejemplos=["¿Cómo cambio el precio de una garrafa?",
+                  "¿Cómo agrego un producto nuevo?",
+                  "¿Qué diferencia hay entre envase y garrafa?"],
     ),
     dict(
         id="nuevo_dia",

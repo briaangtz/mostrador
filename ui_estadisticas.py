@@ -152,16 +152,21 @@ class EstadisticasPanel(tk.Frame):
 
         izq = st.labelframe(medio, " VENTAS POR PRODUCTO ", padx=10, pady=10)
         izq.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        marco_prod = tk.Frame(izq, bg=st.FONDO)
+        marco_prod.pack(fill="both", expand=True)
+        scroll_prod = ttk.Scrollbar(marco_prod, orient="vertical")
+        scroll_prod.pack(side="right", fill="y")
         self.tree_productos = ttk.Treeview(
-            izq, columns=("producto", "garrafas", "total"), show="headings",
-            height=5)
+            marco_prod, columns=("producto", "garrafas", "total"), show="headings",
+            height=5, yscrollcommand=scroll_prod.set)
         self.tree_productos.heading("producto", text="Producto")
         self.tree_productos.heading("garrafas", text="Garrafas")
         self.tree_productos.heading("total", text="Total")
         self.tree_productos.column("producto", width=180, anchor="w")
         self.tree_productos.column("garrafas", width=90, anchor="center")
         self.tree_productos.column("total", width=130, anchor="e")
-        self.tree_productos.pack(fill="both", expand=True)
+        self.tree_productos.pack(side="left", fill="both", expand=True)
+        scroll_prod.config(command=self.tree_productos.yview)
 
         der = st.labelframe(medio, " EVOLUCIÓN DE VENTAS POR DÍA ", padx=10, pady=10)
         der.grid(row=0, column=1, sticky="nsew", padx=(6, 0))

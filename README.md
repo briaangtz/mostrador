@@ -45,15 +45,34 @@ cerrar cajas).
 
 Al abrir el programa ya están cargados:
 
-| Producto      | Precio (ejemplo) |
-| ------------- | ----------------: |
-| Garrafa 10 kg |          $10.000 |
-| Garrafa 15 kg |          $15.000 |
-| Garrafa 15ME  |          $16.000 |
-| Garrafa 45 kg |          $45.000 |
+| Producto               | Precio (ejemplo) | Tipo          |
+| ---------------------- | ----------------: | ------------- |
+| Garrafa 10 kg          |          $10.000 | gas           |
+| Garrafa 15 kg          |          $15.000 | gas           |
+| Garrafa ME             |          $16.000 | gas           |
+| Garrafa 45 kg          |          $45.000 | gas           |
+| Garrafa ECO PROPANO    |          $17.000 | gas           |
+| Envase 10 kg           |           $8.000 | envase suelto |
+| Envase 15 kg           |          $10.000 | envase suelto |
+| Envase 45 kg           |          $20.000 | envase suelto |
+| Envase ME              |          $11.000 | envase suelto |
+| Envase ECO PROPANO     |          $12.000 | envase suelto |
 
 Los precios se modifican libremente desde **Configuración → Productos y
 precios** (también se pueden agregar o quitar productos).
+
+**Dos familias que se tratan distinto en el Excel:**
+
+* **Garrafas con gas** — las cinco garrafas. Al exportar se suman todas juntas
+  en la fila **TOTAL DE ENVASES** (el total de envases que salieron).
+* **Envases sueltos** — las cinco garrafas sin gas (que se devuelven o se
+  venden aparte). Van en su propia fila **TOTAL DE ENVASES SUELTOS** y **nunca
+  se mezclan** con el total de garrafas con gas.
+
+La clasificación es por nombre: todo producto que empieza con **"Envase"**
+(envase nuevo incluido) entra en la segunda familia. *Garrafa 15ME* pasó a
+llamarse **Garrafa ME** (el renombre se hace solo al abrir la base, sin tocar
+ventas viejas).
 
 ## 2. Registro de ventas (pestaña "Ventas")
 
@@ -201,7 +220,7 @@ por fecha** (día específico o rango personalizado) y atajos rápidos: **Hoy**,
 Se visualiza:
 
 * Total de ventas realizadas y venta promedio.
-* Garrafas vendidas por tipo (10 kg, 15 kg, 15ME, 45 kg).
+* Garrafas vendidas por tipo (10 kg, 15 kg, ME, 45 kg, ECO PROPANO) y envases.
 * Total de dinero recaudado.
 * Total cobrado en efectivo, transferencia y **Tarjetas**, con el desglose
   "Débito … • Crédito …" debajo de la tarjeta.
@@ -253,6 +272,30 @@ la venta (puede quedar vacía).
 
 Para las transferencias ya no hace falta una exportación aparte: todo lo del
 período sale junto, separado por secciones.
+
+### Resumen de unidades arriba de la hoja
+
+Antes del detalle, la hoja **Movimientos** arranca con un **resumen por
+sección de pago** para responder de un vistazo cuántas garrafas salieron con
+cada medio:
+
+* Bloques **EFEC**, **TARJETA** y **TRANS** (en ese orden).
+* Dentro de cada bloque: una fila por producto con sus **unidades**, luego
+  **TOTAL DE ENVASES** (solo garrafas con gas), después las filas de
+  **envases sueltos** y **TOTAL DE ENVASES SUELTOS**, y al final
+  **TOTAL DE UNIDADES** y **TOTAL DE DINERO** de esa sección.
+* Bloque final **TOTAL GENERAL DE GARRAFAS Y ENVASES**: lo mismo sumando las
+  tres secciones.
+
+Dos filas de control cierran el resumen:
+
+| Control            | Qué verifica                   |
+| ------------------ | ------------------------------ |
+| CONTROL DE UNIDADES | EFEC + TARJETA + TRANS = TOTAL GENERAL |
+| CONTROL DE DINERO   | lo mismo, en pesos             |
+
+Cada control indica **COINCIDE** o **REVISAR**, así que un descuadre salta a la
+vista antes de imprimir. El detalle de movimientos que sigue abajo no cambia.
 
 ## 12. Transferencias en el cierre de caja
 

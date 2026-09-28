@@ -51,13 +51,26 @@ MEDIO_PERMISO = {
     "Tarjeta de crédito": "pago_credito",
 }
 
-# Productos iniciales (precios de ejemplo, se pueden cambiar en Configuración)
+# Productos iniciales (precios de ejemplo, se pueden cambiar en Configuración).
+# Los 5 primeros son garrafas con gas; los "Envase ..." son envases sueltos,
+# que se venden por separado de la carga de gas.
 PRODUCTOS_BASE = [
     ("Garrafa 10 kg", 10000),
     ("Garrafa 15 kg", 15000),
-    ("Garrafa 15ME", 16000),
+    ("Garrafa ME", 16000),
     ("Garrafa 45 kg", 45000),
+    ("Garrafa ECO PROPANO", 17000),
+    ("Envase 10 kg", 8000),
+    ("Envase 15 kg", 10000),
+    ("Envase 45 kg", 20000),
+    ("Envase ME", 11000),
+    ("Envase ECO PROPANO", 12000),
 ]
+
+# Renombres de productos en bases creadas con versiones anteriores
+RENOMBROS_PRODUCTOS = {
+    "Garrafa 15ME": "Garrafa ME",
+}
 
 PASSWORD_POR_DEFECTO = "admin"
 
@@ -690,11 +703,24 @@ def init():
         if "permisos" not in columnas_usuarios:
             con.execute("ALTER TABLE usuarios ADD COLUMN permisos TEXT")
 
-        # Semilla de productos
-        n = con.execute("SELECT COUNT(*) AS c FROM productos").fetchone()["c"]
-        if n == 0:
+        # Productos: renombra los antiguos y completa los que falten.
+        # Se busca por nombre (activo o no) para no reanimar productos
+        # que el usuario dio de baja.
+        for viejo, nuevo in RENOMBROS_PRODUCTOS.items():
+            repetido = con.execute(
+                "SELECT 1 FROM productos WHERE nombre = ?", (nuevo,)
+            ).fetchone()
+            if not repetido:
+                con.execute(
+                    "UPDATE productos SET nombre = ? WHERE nombre = ?",
+                    (nuevo, viejo),
+                )
+        existentes = {r["nombre"] for r in
+                      con.execute("SELECT nombre FROM productos").fetchall()}
+        faltantes = [(n, p) for n, p in PRODUCTOS_BASE if n not in existentes]
+        if faltantes:
             con.executemany(
-                "INSERT INTO productos (nombre, precio) VALUES (?, ?)", PRODUCTOS_BASE
+                "INSERT INTO productos (nombre, precio) VALUES (?, ?)", faltantes
             )
 
     # Semilla de configuración
@@ -865,6 +891,23 @@ def eliminar_producto(pid):
     """Marca el producto como inactivo (se conserva el histórico de ventas)."""
     with db() as con:
         con.execute("UPDATE productos SET activo = 0 WHERE id = ?", (pid,))
+
+
+def es_envase(nombre):
+    """
+    True si el producto es un envase suelto (se vende sin gas) y no una
+    garrafa con carga. Se decide por el nombre, así quien crea o renombra
+    un producto desde Configuración no tiene que tocar nada más.
+    """
+    return (nombre or "").strip().lower().startswith("envase")
+
+
+def productos_por_tipo(solo_activos=True):
+    """(garrafas, envases) — dos listas de productos para informes."""
+    garrafas, envases = [], []
+    for p in productos(solo_activos):
+        (envases if es_envase(p["nombre"]) else garrafas).append(p)
+    return garrafas, envases
 
 
 # ---------------------------------------------------------------------------
