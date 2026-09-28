@@ -931,6 +931,130 @@ check(db.get_cierre_activo(caja["id"]) is not None,
       "punto 2: el cierre queda registrado en el historial")
 app2.destroy()
 
+# ==========================================================================
+# Soporte del sistema (ayuda local, sin internet): base de conocimiento,
+# buscador y ventana flotante.
+# ==========================================================================
+import ayuda
+from ui_ayuda import SoporteVentana
+
+check(len(ayuda.TEMAS) >= 15,
+      f"soporte: hay una base de conocimiento ({len(ayuda.TEMAS)} temas)")
+check(all(t.get("titulo") and t.get("parrafos") and t.get("seccion")
+          for t in ayuda.TEMAS),
+      "soporte: todos los temas traen título, respuesta y fuente")
+
+casos_soporte = [
+    ("¿Cómo abro la caja?", "abrir_caja"),
+    ("¿Cómo cierro la caja?", "cerrar_caja"),
+    ("que significa faltante", "cerrar_caja"),
+    ("reabrir caja cerrada", "reabrir_caja"),
+    ("cargar una venta", "ventas"),
+    ("tarjeta de credito", "medios_pago"),
+    ("numero de comprobante", "transferencia"),
+    ("exportar a excel", "excel"),
+    ("historial de cierres", "historial"),
+    ("cuanto vendi este mes", "estadisticas"),
+    ("crear usuario nuevo", "usuarios"),
+    ("cambiar mi contrasena", "mi_cuenta"),
+    ("restaurar respaldo", "respaldos"),
+    ("cambiar precio", "productos"),
+    ("caja de ayer", "nuevo_dia"),
+    ("no me deja registrar ventas", "problemas"),
+    ("quien hizo esta venta", "actividad"),
+    ("instalar en otra pc", "instalar"),
+]
+for _p, _esperado in casos_soporte:
+    _r = ayuda.resolver(_p)
+    check(_r["ok"] and _r["tema"]["id"] == _esperado,
+          f"soporte: responde {_esperado} ante «{_p}»")
+
+check(ayuda.resolver("")["tema"]["id"] == "saludo",
+      "soporte: sin pregunta devuelve la bienvenida")
+check(not ayuda.resolver("xyzqr")["ok"],
+      "soporte: lo que no existe dice que no tiene respuesta")
+_check_vaga = ayuda.resolver("caja")
+check(not _check_vaga["ok"] and len(_check_vaga["ambiguas"]) >= 2,
+      "soporte: una pregunta vaga ofrece varios temas en vez de inventar")
+check(len(ayuda.SUGERENCIAS) >= 4,
+      "soporte: hay preguntas rápidas para mostrar")
+check(all(ayuda.resolver(s)["ok"] for s in ayuda.SUGERENCIAS),
+      "soporte: cada pregunta rápida responde de verdad")
+
+# -------- la ventana flotante --------
+app4 = main_mod.App()
+app4.update()
+check(hasattr(app4, "btn_soporte"), "soporte: el botón flotante existe")
+
+# El botón no debe tapar ningún widget de ningún panel (punto 4)
+_bx, _by = app4.btn_soporte.winfo_rootx(), app4.btn_soporte.winfo_rooty()
+_bw = app4.btn_soporte.winfo_width()
+_bh = app4.btn_soporte.winfo_height()
+
+def _chocan(widget, salida):
+    try:
+        if not widget.winfo_ismapped():
+            return
+        wx, wy = widget.winfo_rootx(), widget.winfo_rooty()
+        ww, wh = widget.winfo_width(), widget.winfo_height()
+        if wx < _bx + _bw and wx + ww > _bx and wy < _by + _bh and wy + wh > _by:
+            salida.append(widget)
+    except Exception:
+        return
+    for hijo in widget.winfo_children():
+        _chocan(hijo, salida)
+
+_tapados = []
+for _panel in app4.paneles.values():
+    _chocan(_panel, _tapados)
+check(not _tapados,
+      "soporte: el botón flotante no tapa ningún contenido de los paneles")
+
+app4.abrir_soporte()
+app4.update()
+_ven = app4.ventana_soporte
+check(_ven is not None and _ven.winfo_exists(),
+      "soporte: el botón abre la ventana flotante")
+
+_sw, _sh = _ven.winfo_screenwidth(), _ven.winfo_screenheight()
+check(_ven.winfo_width() <= _sw and _ven.winfo_height() <= _sh,
+      f"soporte: la ventana entra en la pantalla "
+      f"({_ven.winfo_width()}x{_ven.winfo_height()} vs {_sw}x{_sh})")
+check(_ven.winfo_rootx() >= 0 and _ven.winfo_rooty() >= 0
+      and _ven.winfo_rootx() + _ven.winfo_width() <= _sw
+      and _ven.winfo_rooty() + _ven.winfo_height() <= _sh,
+      "soporte: la ventana queda completa, sin salirse del monitor")
+
+app4.abrir_soporte()
+app4.update()
+check(app4.ventana_soporte is _ven,
+      "soporte: la segunda pulsada reutiliza la misma ventana")
+
+for _p in ["¿Cómo cierro la caja?", "¿Cómo exporto a Excel?",
+           "caja", "xyzqr", "hola"]:
+    _ven.preguntar(_p)
+    app4.update()
+_texto_soporte = _ven.chat.get("1.0", "end")
+check("FALTANTE" in _texto_soporte,
+      "soporte: la respuesta se escribe en la ventana")
+check("TARJETAS" in _texto_soporte,
+      "soporte: responde también dudas de Excel")
+check("No tengo esa respuesta" in _texto_soporte,
+      "soporte: admite que no tiene cargada una pregunta")
+check("más de un tema" in _texto_soporte,
+      "soporte: ante una pregunta vaga sugiere temas")
+check(_ven.chat.cget("state") == "disabled",
+      "soporte: el chat no se puede editar a mano")
+_ven._al_cerrar()
+app4.update()
+check(not _ven.winfo_viewable(),
+      "soporte: el botón ✕ oculta la ventana sin perder la conversación")
+app4.abrir_soporte()
+app4.update()
+check(app4.ventana_soporte is _ven and _ven.winfo_viewable(),
+      "soporte: al volver a abrirla sigue la conversación")
+app4.destroy()
+
 os.remove(TMP)
 import shutil as _shutil
 _shutil.rmtree(db.dir_respaldos(), ignore_errors=True)

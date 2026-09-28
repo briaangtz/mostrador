@@ -431,6 +431,34 @@ La ventana y todos los paneles se adaptan al tamaño del monitor:
 
 ---
 
+## 20. Soporte del sistema (ayuda 24/7)
+
+En el lateral, arriba al lado del logo, hay un botón azul **?** siempre
+visible. Abre una **ventana flotante de chat** encima de la pantalla que
+estés usando (sin bloquearla: seguís trabajando mientras preguntás).
+
+Funciona **sin internet y sin costo**: no llama a ningún servicio externo.
+Es un buscador sobre la documentación real del programa (`ayuda.py`), así
+que responde con lo que el sistema efectivamente hace y **nunca inventa**.
+
+* **Preguntas rápidas** en la parte superior: abrir/cerrar caja, registrar
+  una venta, exportar a Excel, crear usuario y respaldados.
+* O escribís tu pregunta abajo (**Enter** o el botón *Preguntar*).
+* Cada respuesta indica de dónde sale: *Fuente: sección 5 del manual*.
+* Si la pregunta es muy vaga (por ejemplo «caja») en vez de inventar
+  ofrece los temas que pueden servirte. Si no hay nada cargado, lo dice
+  y sugiere otras palabras.
+* El **✕** oculta la ventana sin perder la conversación; al volver a
+  tocar **?** sigue todo lo conversado.
+
+Cubre: apertura y cierre de caja, arqueo y diferencia, reapertura de
+cajas, ventas y comprobantes, medios de pago y tarjetas, Excel e
+impresión A4, historial y estadísticas, usuarios y permisos, Mi cuenta y
+fotos, respaldos, productos y precios, nuevo día, errores frecuentes,
+trazabilidad, instalación y qué hace el programa.
+
+---
+
 ## Ícono del programa
 
 El ícono es `icono.ico` (garrafa YPF GAS sobre tarjeta blanca con fondo azul de
@@ -487,6 +515,8 @@ se abre con `Iniciar.bat` o `python main.py`.
 | `ui_historial.py`     | Historial y detalle de cierres, reapertura      |
 | `ui_config.py`        | Precios, fondo, respaldos y contraseña propia   |
 | `ui_cuenta.py`        | Mi cuenta: foto de perfil, datos y contraseña   |
+| `ayuda.py`            | Base de conocimiento y buscador del soporte     |
+| `ui_ayuda.py`         | Ventana flotante de soporte (chat de ayuda)     |
 | `estilos.py`, `util.py` | Estilos y formatos de moneda/fechas          |
 | `icono.ico`           | Ícono del programa                             |
 | `crear_icono.py`      | Regenera `icono.ico` desde una imagen          |

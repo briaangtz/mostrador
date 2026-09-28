@@ -22,6 +22,7 @@ from ui_config import ConfigPanel
 from ui_historial import HistorialPanel
 from ui_admin import AdminPanel
 from ui_cuenta import CuentaPanel
+from ui_ayuda import SoporteVentana
 
 # (clave, etiqueta del botón, permiso requerido o None)
 NAV = [
@@ -118,10 +119,22 @@ class App(tk.Tk):
 
         marca = tk.Frame(sidebar, bg=st.BARRA)
         marca.pack(fill="x", padx=16, pady=(22, 24))
+
+        # Botón flotante de soporte: esquina del lateral, siempre visible y
+        # sin tapar nunca el contenido de los paneles ni su scroll.
+        self.btn_soporte = tk.Button(
+            marca, text="?", relief="flat", bd=0, bg=st.ACENTO, fg="#ffffff",
+            activebackground=st.ACENTO_OSCURO, activeforeground="#ffffff",
+            font=(st.FUENTE, 15, "bold"), cursor="hand2",
+            width=2, height=1,
+            command=self.abrir_soporte)
+        self.btn_soporte.pack(side="right", padx=(8, 0), ipadx=4, ipady=4)
+
         tk.Label(marca, text="GARRAFAS", bg=st.BARRA, fg="#ffffff",
                  font=(st.FUENTE, 18, "bold")).pack(anchor="w")
         tk.Label(marca, text="Control de caja diaria", bg=st.BARRA,
                  fg="#9fb0cc", font=(st.FUENTE, 9)).pack(anchor="w")
+        self.ventana_soporte = None
 
         self.botones_nav = {}
         for clave, texto, _permiso in NAV:
@@ -158,12 +171,17 @@ class App(tk.Tk):
         self._usuario_nav_texto = None
         self._item_usuario = None
         self._anim_usu_id = None
-        marco_usuario = tk.Frame(col_usuario, bg=st.BARRA, height=38)
+        # Alto suficiente para "Usuario: ...\nRango: ..." en dos líneas:
+        # si el rango es largo (DESARROLLADOR) el texto no se corta nunca.
+        marco_usuario = tk.Frame(col_usuario, bg=st.BARRA, height=56)
         marco_usuario.pack(fill="x")
         marco_usuario.pack_propagate(False)
         self.canvas_usuario_nav = tk.Canvas(marco_usuario, bg=st.BARRA,
-                                            highlightthickness=0, height=38)
+                                            highlightthickness=0, height=56)
         self.canvas_usuario_nav.pack(fill="both", expand=True)
+        # Al cambiar de tamaño se vuelve a ajustar el ancho del texto
+        self.canvas_usuario_nav.bind(
+            "<Configure>", lambda e: self._ajustar_texto_usuario())
 
         btnSalir = tk.Button(col_usuario, text="Cerrar sesión",
                              command=self.cerrar_sesion,
@@ -191,6 +209,18 @@ class App(tk.Tk):
         }
         for panel in self.paneles.values():
             panel.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+    def abrir_soporte(self):
+        """Abre (o trae al frente) la ventana flotante de ayuda."""
+        v = self.ventana_soporte
+        if v is not None:
+            try:
+                if v.winfo_exists():
+                    v.mostrar()
+                    return
+            except tk.TclError:
+                pass
+        self.ventana_soporte = SoporteVentana(self, boton=self.btn_soporte)
 
     def _actualizar_nav(self):
         """Muestra/oculta los botones según los permisos de la sesión."""
@@ -335,12 +365,27 @@ class App(tk.Tk):
         c = self.canvas_usuario_nav
         if self._item_usuario is None:
             self._item_usuario = c.create_text(
-                0, 19, anchor="w", justify="left", text=texto, fill="#ffffff",
+                0, self._y_texto_usuario(), anchor="w", justify="left",
+                text=texto, fill="#ffffff",
                 font=(st.FUENTE, 10, "bold"),
             )
         else:
             c.itemconfig(self._item_usuario, text=texto)
-        c.coords(self._item_usuario, 0, 19)
+        c.coords(self._item_usuario, 0, self._y_texto_usuario())
+        self._ajustar_texto_usuario()
+
+    def _y_texto_usuario(self):
+        """Centro vertical del texto (se adapta al alto real del lienzo)."""
+        return max(1, self.canvas_usuario_nav.winfo_height() // 2)
+
+    def _ajustar_texto_usuario(self):
+        """Fija el ancho de salto de línea: el rango largo nunca se corta."""
+        if self._item_usuario is None:
+            return
+        c = self.canvas_usuario_nav
+        ancho = c.winfo_width()
+        if ancho > 20:
+            c.itemconfig(self._item_usuario, width=max(20, ancho - 6))
 
     def _animar_entrada_usuario(self):
         """Efecto: el usuario/rango entra deslizándose desde atrás (derecha)
@@ -367,12 +412,14 @@ class App(tk.Tk):
             t = i / (pasos - 1)
             suave = 1 - (1 - t) ** 2          # ease-out: entra rápido y frena
             x = int(ancho * (1 - suave))
-            self.canvas_usuario_nav.coords(self._item_usuario, x, 19)
+            self.canvas_usuario_nav.coords(
+                self._item_usuario, x, self._y_texto_usuario())
             estado["i"] += 1
             if estado["i"] < pasos:
                 self._anim_usu_id = self.after(22, paso)
             else:
-                self.canvas_usuario_nav.coords(self._item_usuario, 0, 19)
+                self.canvas_usuario_nav.coords(
+                    self._item_usuario, 0, self._y_texto_usuario())
 
         paso()
 
