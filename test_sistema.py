@@ -1500,17 +1500,52 @@ check("Tarjeta de débito" in _nuevo["medios_txt"],
 check(pv5.var_cliente.get() == "" and pv5.var_importe.get() == "",
       "ui ticket: al registrar vuelve a quedar limpio para la próxima venta")
 
-# Suma incompleta: no se registra y avisa cuánto falta
+# Suma incompleta: quien dice que no, no registra nada y ve cuánto falta
+_askyesno_antes = mb.askyesno
 ERRORES.clear()
+mb.askyesno = lambda *a, **k: False
 pv5.combo_medio.set("Efectivo")
 pv5.var_importe.set("1000")
 pv5._registrar()
 app5.update()
+mb.askyesno = _askyesno_antes
 check(db.resumen(caja["id"])["cantidad_ventas"] == _antes_ui + 1,
       "ui ticket: un cobro que no suma el total bloquea el registro")
 check(any("faltan" in str(e).lower() for e in ERRORES),
       f"ui ticket: muestra cuánto falta para completar la venta "
       f"(obtuvo {len(ERRORES)} avisos)")
+
+# Si acepta completar, la venta se cierra con lo que faltaba
+ERRORES.clear()
+mb.askyesno = lambda *a, **k: True
+pv5._registrar()
+app5.update()
+mb.askyesno = _askyesno_antes
+check(db.resumen(caja["id"])["cantidad_ventas"] == _antes_ui + 2,
+      "ui ticket: al aceptar, se completa el importe que faltaba")
+_cerrado = db.venta_por_id(int(pv5.tree.get_children()[-1]))
+check(_cerrado is not None and len(_cerrado["pagos"]) == 1
+      and abs(sum(p["importe"] for p in _cerrado["pagos"])
+              - _cerrado["total"]) < 0.01,
+      "ui ticket: el cobro completado cierra exacto con el total")
+
+# Las etiquetas nuevas cuentan qué tiene adentro el total
+pv5.combo_producto.current(0)
+pv5.var_cantidad.set("1")
+pv5.var_precio.set("9000")
+pv5._agregar_item()
+app5.update()
+check("fila cargada" in pv5.lbl_desglose.cget("text")
+      or "ya está sumada" in pv5.lbl_desglose.cget("text"),
+      f"ui ticket: el desglose explica qué tiene el total "
+      f"(obtuvo {pv5.lbl_desglose.cget('text')})")
+check("vacío" in pv5.lbl_importe.cget("text")
+      and "$" in pv5.lbl_importe.cget("text"),
+      f"ui ticket: la etiqueta del importe dice cuánto se cobra si lo dejan "
+      f"vacío (obtuvo {pv5.lbl_importe.cget('text')})")
+check("PASO 1" in pv5.lbl_pasos.cget("text")
+      and "PASO 2" in pv5.lbl_pasos.cget("text"),
+      "ui ticket: el formulario explica los dos pasos del flujo")
 app5.destroy()
 
 os.remove(TMP)

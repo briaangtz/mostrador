@@ -50,6 +50,17 @@ class VentasPanel(tk.Frame):
         form = st.labelframe(contenido, " NUEVA VENTA ", padx=14, pady=12)
         form.pack(fill="x", padx=24, pady=(14, 0))
 
+        # Cómo se usa, en dos pasos: se ve siempre, sin scrollear
+        self.lbl_pasos = tk.Label(
+            form, bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
+            justify="left", anchor="w", wraplength=880,
+            text=("PASO 1 · Producto, cantidad y precio → botón "
+                  "+ AGREGAR AL TICKET (uno por cada producto del ticket).\n"
+                  "PASO 2 · Medio de pago → botón REGISTRAR VENTA "
+                  "(el importe se carga solo con lo que falta)."),
+        )
+        self.lbl_pasos.pack(fill="x", pady=(0, 10))
+
         # Dos filas de 4 campos: en pantallas chicas nada queda cortado
         grid = tk.Frame(form, bg=st.FONDO)
         grid.pack(fill="x")
@@ -107,7 +118,8 @@ class VentasPanel(tk.Frame):
         self.combo_medio.pack(fill="x", pady=(3, 0), ipady=3)
         self.combo_medio.bind("<<ComboboxSelected>>", self._medio_cambiado)
 
-        c_importe, _ = campo(1, "IMPORTE DE ESTE MEDIO", 1)
+        c_importe, self.lbl_importe = campo(1, "IMPORTE", 1)
+        self.lbl_importe.config(wraplength=235, justify="left")
         self.var_importe = tk.StringVar(value="")
         self.ent_importe = tk.Entry(c_importe, textvariable=self.var_importe,
                                     font=(st.FUENTE, 11), justify="left",
@@ -130,6 +142,18 @@ class VentasPanel(tk.Frame):
                                   font=(st.FUENTE, 15, "bold"), relief="solid",
                                   bd=1, anchor="e", padx=10)
         self.lbl_total.pack(fill="x", pady=(3, 0), ipady=4)
+
+        # Qué tiene adentro el total + cuadre: se ve arriba de todo, sin bajar
+        self.lbl_desglose = tk.Label(form, text="", bg=st.FONDO,
+                                     fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
+                                     justify="right", anchor="e", wraplength=880)
+        self.lbl_desglose.pack(anchor="e", pady=(8, 0))
+
+        self.lbl_pago = tk.Label(form, text="", bg=st.TARJETA, fg=st.TEXTO_SUAVE,
+                                 font=(st.FUENTE, 12, "bold"), justify="right",
+                                 anchor="e", wraplength=880, padx=10, pady=5,
+                                 relief="solid", bd=1)
+        self.lbl_pago.pack(anchor="e", pady=(4, 0))
 
         # ---------------- Acciones del ticket ----------------
         acciones = tk.Frame(form, bg=st.FONDO)
@@ -233,9 +257,7 @@ class VentasPanel(tk.Frame):
         self.btn_quitar_pago.pack(side="left")
 
         # Estado del cuadre: los pagos tienen que dar el total
-        self.lbl_pago = tk.Label(form, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                                 font=(st.FUENTE, 11, "bold"), anchor="w")
-        self.lbl_pago.pack(fill="x", pady=(10, 0))
+        # (la etiqueta vive arriba, al lado del total, para que se vea siempre)
 
         self.lbl_info = tk.Label(form, text="", bg=st.FONDO, fg=st.TEXTO,
                                  font=(st.FUENTE, 11, "bold"), anchor="w")
@@ -712,7 +734,56 @@ class VentasPanel(tk.Frame):
     def _recalcular(self, *_):
         self._total = self._total_ticket()
         self.lbl_total.config(text=money(self._total))
+        self._actualizar_desglose()
+        self._actualizar_importe()
         self._actualizar_estado_pago()
+
+    def _suma_items(self):
+        return sum(i["cantidad"] * i["precio_unitario"] for i in self._items)
+
+    def _actualizar_desglose(self):
+        """Explica de qué está hecho el total (nada de números mágicos)."""
+        if not self._items:
+            self.lbl_desglose.config(text="", fg=st.TEXTO_SUAVE)
+            return
+        suma = self._suma_items()
+        if self._linea_tocada:
+            texto = (f"En la lista {money(suma)}  +  fila cargada "
+                     f"{money(self._total_linea())} (entra al registrar)")
+            color = st.AMBAR
+        else:
+            texto = f"En la lista {money(suma)} (la fila de arriba ya está sumada)"
+            color = st.TEXTO_SUAVE
+        self.lbl_desglose.config(text=texto, fg=color)
+
+    def _actualizar_importe(self):
+        """Etiqueta del importe: qué se cobra si lo dejan vacío / cuánto falta."""
+        pagado = sum(p["importe"] for p in self._pagos)
+        if self._pagos_fijos and len(self._pagos) == 1:
+            # Único medio de la venta editada: su importe acompaña al total
+            pagado = self._total
+        base = self._total - pagado
+        txt = self.var_importe.get().strip()
+        if not txt:
+            if base > 0.01:
+                texto = f"IMPORTE — vacío = {money(base)}"
+                color = st.TEXTO_SUAVE
+            else:
+                texto = "IMPORTE"
+                color = st.TEXTO_SUAVE
+        else:
+            importe = parse_numero(txt) or 0
+            resto = base - importe
+            if resto > 0.01:
+                texto = f"IMPORTE — faltan {money(resto)}"
+                color = st.ROJO
+            elif resto < -0.01:
+                texto = f"IMPORTE — sobran {money(-resto)}"
+                color = st.ROJO
+            else:
+                texto = "IMPORTE — cierra con el total"
+                color = st.VERDE_OSCURO
+        self.lbl_importe.config(text=texto, fg=color)
 
     def _registrar(self):
         if self._sin_permiso_ventas():
@@ -756,7 +827,11 @@ class VentasPanel(tk.Frame):
                 and not self.var_importe.get().strip()):
             # Único medio de pago de la venta: su importe acompaña al total
             pagos[0]["importe"] = total
+        fila_activa = self._pago_aplica()
         pendiente = self._pago_pendiente(total, avisos=True)
+        if pendiente is None and fila_activa:
+            # Ya avisó el motivo (importe inválido, comprobante, permiso)
+            return
         if pendiente is not None:
             pagos.append(pendiente)
         if not pagos:
@@ -764,6 +839,36 @@ class VentasPanel(tk.Frame):
                                    "Indicá cómo pagó el cliente antes de "
                                    "registrar la venta.", parent=self)
             return
+
+        # El cobro tiene que cerrar con el total: si falta, ofrecemos completarlo
+        resto = round(total - sum(p["importe"] for p in pagos), 2)
+        if abs(resto) >= 0.01:
+            if resto <= 0:
+                messagebox.showerror(
+                    "No se pudo registrar",
+                    f"Los cobros superan el total en {money(-resto)}.",
+                    parent=self)
+                return
+            ultimo = pagos[-1]["medio"]
+            if not messagebox.askyesno(
+                    "La venta no cierra",
+                    f"El ticket vale {money(total)} y los cobros cargados "
+                    f"suman {money(total - resto)}.\n\n"
+                    f"FALTAN {money(resto)}.\n\n"
+                    f"¿Los agregamos a {ultimo} para cerrar la venta?",
+                    parent=self):
+                messagebox.showerror(
+                    "No se pudo registrar",
+                    f"FALTAN {money(resto)} para completar el total de "
+                    f"{money(total)}.\n\nAgregá el medio de pago que falta o "
+                    "corregí el importe y volvé a presionar "
+                    "«REGISTRAR VENTA».",
+                    parent=self)
+                return
+            for p in reversed(pagos):
+                if p["medio"] == ultimo:
+                    p["importe"] = round(p["importe"] + resto, 2)
+                    break
 
         linea = db.texto_items(items)
         detalle = f"{linea}\nFormas de pago: {db.texto_pagos(pagos)}"
