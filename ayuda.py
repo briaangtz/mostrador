@@ -321,6 +321,47 @@ TEMAS = [
                   "¿Cómo imprimo el reporte en A4?"],
     ),
     dict(
+        id="rendicion",
+        titulo="Planilla de rendición por buzón y calculadora de billetes",
+        claves="rendicion rendir buzón buzon planilla rendiciones carga "
+               "calculadora billete billetes conteo arqueo efectivo cheques "
+               "cheque gastos envios envíos recibos tarjetas transferencias "
+               "chofer observaciones secciones seccion detalle importe "
+               "cantidad total imprimir a4 guardar",
+        frases=["planilla de rendicion", "rendicion por buzon",
+                "cargar la rendicion", "calculadora de billetes",
+                "cuanto efectivo tengo", "conteo de billetes",
+                "imprimir la planilla"],
+        parrafos=[
+            "**Rendición** (botón en el lateral) abre **dos pestañas**: "
+            "**1 · CARGA / RENDICIÓN** y **2 · CALCULADORA DE BILLETES**.",
+            "En la pestaña 1 se carga la planilla completa: **FECHA** y "
+            "**CHOFER**, el **DETALLE** con sus columnas Tipo · Cantidad · "
+            "Importe · Total (agregás filas con + AGREGAR), las "
+            "**SECCIONES** GASTOS, CAJA, ENVÍOS, TARJETAS, TRANSFERENCIAS "
+            "y RECIBOS, los **CHEQUES** (cliente, N.º de cheque, banco e "
+            "importe) y las **OBSERVACIONES**.",
+            "**TARJETAS y TRANSFERENCIAS se precargan solas** con las "
+            "ventas del día y cualquier campo se corrige a mano; "
+            "**PRECARGAR DEL DÍA** las vuelve a traer y **LIMPIAR TODO** "
+            "arranca de cero.",
+            "En la pestaña 2 contás los billetes de $100 a $20.000: cada "
+            "fila calcula **Cantidad × valor = importe** y al final cierra "
+            "el **TOTAL EFECTIVO**. Ese total **se copia solo** al campo "
+            "**EFECTIVO** de la pestaña 1 y a la planilla impresa, así no "
+            "hay que escribirlo dos veces.",
+            "APRETÁ **GUARDAR RENDICIÓN** para que quede guardada la del "
+            "día (hay **un registro por fecha**: se actualiza y nunca se "
+            "duplica) y **GENERAR PLANILLA A4** para obtener el archivo "
+            "con todo lo cargado, listo para imprimir en **una sola hoja "
+            "A4 vertical**.",
+        ],
+        seccion="sección 21 del manual",
+        ejemplos=["¿Cómo cargo la rendición?",
+                  "¿Cómo uso la calculadora de billetes?",
+                  "¿Cómo imprimo la planilla en A4?"],
+    ),
+    dict(
         id="historial",
         titulo="Historial de cierres y detalle de un cierre",
         claves="historial cierres cerrados detalle ver dias anteriores "
@@ -610,6 +651,7 @@ SUGERENCIAS = [
     "¿Cómo cierro la caja?",
     "No me deja registrar ventas",
     "¿Cómo exporto a Excel?",
+    "¿Cómo cargo la planilla de rendición?",
     "¿Cómo creo un usuario nuevo?",
     "¿Cómo respaldo los datos?",
 ]

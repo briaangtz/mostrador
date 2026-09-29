@@ -659,6 +659,18 @@ def init():
                 reabierta          INTEGER NOT NULL DEFAULT 0
             );
 
+            -- Rendición por buzón: los datos cargados en la pestaña de la
+            -- planilla (detalle, secciones, cheques, observaciones) y el
+            -- conteo de billetes de la calculadora. Se guarda un solo
+            -- registro por día; el contenido va en JSON para poder sumar
+            -- campos sin migrar la tabla.
+            CREATE TABLE IF NOT EXISTS rendiciones (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha       TEXT NOT NULL UNIQUE,
+                datos       TEXT NOT NULL DEFAULT '{}',
+                actualizada TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS config (
                 clave TEXT PRIMARY KEY,
                 valor TEXT
@@ -1786,3 +1798,84 @@ def reabrir_caja(caja_id):
 def cierre_pendiente():
     """True si existe alguna caja sin cerrar (de hoy u otro día)."""
     return len(cajas_abiertas()) > 0
+
+
+# ---------------------------------------------------------------------------
+# Rendiciones (planilla por buzón)
+# ---------------------------------------------------------------------------
+
+def guardar_rendicion(fecha, datos, *, loguear=True):
+    """Guarda (o actualiza) la rendición de un día.
+
+    `datos` es un dict con todo lo cargado en la pestaña CARGA / RENDICIÓN
+    y el conteo de billetes de la calculadora: se serializa a JSON para que
+    la tabla no tenga que migrar cada vez que aparece un campo nuevo.
+    Hay un único registro por fecha.
+    """
+    if not fecha:
+        raise ValueError("La rendición necesita una fecha.")
+    texto = json.dumps(datos if isinstance(datos, dict) else {},
+                       ensure_ascii=False)
+    marca = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with db() as con:
+        previo = con.execute(
+            "SELECT id FROM rendiciones WHERE fecha = ?", (fecha,)
+        ).fetchone()
+        if previo:
+            con.execute(
+                "UPDATE rendiciones SET datos = ?, actualizada = ? "
+                "WHERE fecha = ?",
+                (texto, marca, fecha),
+            )
+        else:
+            con.execute(
+                "INSERT INTO rendiciones (fecha, datos, actualizada) "
+                "VALUES (?, ?, ?)",
+                (fecha, texto, marca),
+            )
+    if loguear:
+        log_actividad("Rendición",
+                      f"Rendición del {fecha_larga(fecha)} guardada")
+    return rendicion_de(fecha)
+
+
+def rendicion_de(fecha):
+    """Rendición guardada de una fecha (dict vacío si todavía no hay)."""
+    if not fecha:
+        return {}
+    with db() as con:
+        fila = con.execute(
+            "SELECT datos FROM rendiciones WHERE fecha = ?", (fecha,)
+        ).fetchone()
+    if not fila or not fila[0]:
+        return {}
+    try:
+        datos = json.loads(fila[0])
+    except (TypeError, ValueError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def rendiciones():
+    """Todas las rendiciones guardadas, de la más nueva a la más vieja."""
+    with db() as con:
+        filas = con.execute(
+            "SELECT fecha, datos, actualizada FROM rendiciones "
+            "ORDER BY fecha DESC"
+        ).fetchall()
+    out = []
+    for f in filas:
+        try:
+            datos = json.loads(f["datos"]) if f["datos"] else {}
+        except (TypeError, ValueError):
+            datos = {}
+        out.append({"fecha": f["fecha"],
+                    "datos": datos if isinstance(datos, dict) else {},
+                    "actualizada": f["actualizada"]})
+    return out
+
+
+def borrar_rendicion(fecha):
+    """Quita la rendición guardada de una fecha (para recargarla de cero)."""
+    with db() as con:
+        con.execute("DELETE FROM rendiciones WHERE fecha = ?", (fecha,))

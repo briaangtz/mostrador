@@ -588,9 +588,57 @@ que responde con lo que el sistema efectivamente hace y **nunca inventa**.
 
 Cubre: apertura y cierre de caja, arqueo y diferencia, reapertura de
 cajas, ventas y comprobantes, medios de pago y tarjetas, Excel e
-impresión A4, historial y estadísticas, usuarios y permisos, Mi cuenta y
-fotos, respaldos, productos y precios, nuevo día, errores frecuentes,
-trazabilidad, instalación y qué hace el programa.
+impresión A4, rendición por buzón y calculadora de billetes, historial y
+estadísticas, usuarios y permisos, Mi cuenta y fotos, respaldos,
+productos y precios, nuevo día, errores frecuentes, trazabilidad,
+instalación y qué hace el programa.
+
+---
+
+## 21. Rendición por buzón (planilla + calculadora de billetes)
+
+Botón **Rendición** en el lateral (permiso `rendicion`). La pantalla tiene
+**dos pestañas**, las dos siempre a la vista:
+
+### Pestaña 1 — CARGA / RENDICIÓN
+
+Se carga una sola vez todo lo que muestra la planilla:
+
+| Sector | Campos |
+| ------ | ------ |
+| Cabecera | FECHA · CHOFER |
+| Detalle | TIPO · CANTIDAD · IMPORTE · TOTAL (filas con **+ AGREGAR**) |
+| Secciones | GASTOS · CAJA · ENVÍOS · TARJETAS · TRANSFERENCIAS · RECIBOS |
+| Efectivo | TOTAL DE BILLETES (viene de la pestaña 2, no se escribe) |
+| Cheques | CLIENTE · N.º DE CHEQUE · BANCO · IMPORTE |
+| Pies | OBSERVACIONES |
+
+* **TARJETAS** y **TRANSFERENCIAS** se **precargan con las ventas del día**
+  y se corrigen a mano cuando haga falta; **PRECARGAR DEL DÍA** las vuelve
+  a traer y **LIMPIAR TODO** arranca de cero.
+* **GUARDAR RENDICIÓN** guarda por día: hay **un solo registro por fecha**
+  (se actualiza, nunca se duplica) y al volver a entrar sigue todo cargado.
+
+### Pestaña 2 — CALCULADORA DE BILLETES
+
+Filas **BILLETE | CANTIDAD | IMPORTE** con las denominaciones
+$100, $200, $500, $1.000, $2.000, $10.000 y $20.000: cada fila calcula
+`Cantidad × valor` en vivo y al pie cierra el **TOTAL EFECTIVO**.
+
+**El enlace es automático**: ese total aparece solo en el campo
+**EFECTIVO** de la pestaña 1 y en la planilla impresa. Si cambiás un
+billete, cambian los dos. Así nunca se carga la misma cifra dos veces ni
+quedan números distintos.
+
+### Planilla A4
+
+**GENERAR PLANILLA A4** guarda lo cargado (y lo exporta) en un `.xlsx`
+con la estructura del formulario original: título, cabecera, detalle,
+secciones, chequeos, conteo de billetes y observaciones, con los totales
+calculados. La hoja queda configurada para **imprimir en UNA sola hoja
+A4 vertical** (`fitToWidth = fitToHeight = 1`, sin cuadrícula y con área
+de impresión definida), en tipografía grande y con los casilleros sin
+cargar en blanco.
 
 ---
 
@@ -645,9 +693,10 @@ se abre con `Iniciar.bat` o `python main.py`.
 | `ui_inicio.py`        | Pantalla "Caja del día"                        |
 | `ui_ventas.py`        | Registro, edición y borrado de ventas, comprobante |
 | `ui_estadisticas.py`  | Estadísticas con filtros y evolución diaria   |
-| `excel.py`            | Excel por secciones (A4 horizontal) a imprimir  |
+| `excel.py`            | Excel por secciones (A4 horizontal) y planilla de rendición (A4 vertical) |
 | `ui_cierre.py`        | Ventana de cierre, arqueo y autenticación      |
 | `ui_historial.py`     | Historial y detalle de cierres, reapertura      |
+| `ui_rendicion.py`     | Rendición por buzón: carga + calculadora de billetes |
 | `ui_config.py`        | Precios, fondo, respaldos y contraseña propia   |
 | `ui_cuenta.py`        | Mi cuenta: foto de perfil, datos y contraseña   |
 | `ayuda.py`            | Base de conocimiento y buscador del soporte     |

@@ -1546,6 +1546,149 @@ check("vacío" in pv5.lbl_importe.cget("text")
 check("PASO 1" in pv5.lbl_pasos.cget("text")
       and "PASO 2" in pv5.lbl_pasos.cget("text"),
       "ui ticket: el formulario explica los dos pasos del flujo")
+# ---------------- Rendición por buzón: carga, calculadora y planilla A4 ----------------
+from util import money as _money, parse_numero as _pn
+
+# Nivel de datos: un registro por fecha (se actualiza, nunca se duplica)
+_d_r = {"fecha": db.hoy(), "chofer": "Ramírez", "gastos": 15000,
+        "billetes": {"100": 3, "20000": 1}, "total_billetes": 20300}
+db.guardar_rendicion(db.hoy(), _d_r, loguear=False)
+check(db.rendicion_de(db.hoy())["chofer"] == "Ramírez",
+      "rendición: se guarda y se recupera la rendición del día")
+db.guardar_rendicion(db.hoy(), dict(_d_r, chofer="Otro"), loguear=False)
+check(len(db.rendiciones()) == 1
+      and db.rendicion_de(db.hoy())["chofer"] == "Otro",
+      "rendición: hay UN solo registro por día (se actualiza, no duplica)")
+check(db.rendicion_de("1999-01-01") == {},
+      "rendición: un día sin cargar queda vacío")
+db.borrar_rendicion(db.hoy())
+check(db.rendicion_de(db.hoy()) == {}, "rendición: la rendición se puede borrar")
+
+app6 = main_mod.App()
+app6.update()
+check("rendicion" in app6.paneles and "rendicion" in app6.botones_nav,
+      "rendición: la pantalla nueva está en el lateral")
+check(db.puede("rendicion"),
+      "rendición: el permiso existe y el DESARROLLADOR lo tiene")
+app6.mostrar("rendicion")
+app6.update()
+pr = app6.paneles["rendicion"]
+check(len(pr.notebook.tabs()) == 2,
+      "rendición: tiene las dos pestañas (carga y calculadora)")
+
+# Pestaña mixta: lo que el sistema ya sabe del día queda precargado y editable
+_res_r = db.resumen(db.get_caja(db.hoy())["id"])
+_tarj_esp = _res_r["debito"] + _res_r["credito"]
+check((_pn(pr.secciones["tarjetas"].get()) or 0) == _tarj_esp,
+      f"rendición: TARJETAS se precarga con las ventas del día "
+      f"(obtuvo {pr.secciones['tarjetas'].get()}, esperaba {_money(_tarj_esp)})")
+check((_pn(pr.secciones["transferencias"].get()) or 0)
+      == _res_r["transferencias"],
+      "rendición: TRANSFERENCIAS también se precarga del día")
+pr.secciones["gastos"].set("15000")        # lo demás lo carga el usuario
+check(pr.secciones["gastos"].get() == "15000",
+      "rendición: cualquier sección se puede cargar a mano")
+
+# Calculadora de billetes: cantidad × valor = importe, y total al pie
+pr.celdas_billetes[100].insert(0, "3")
+pr.celdas_billetes[1000].insert(0, "2")
+pr.celdas_billetes[20000].insert(0, "1")
+pr._recalcular_billetes()
+check(abs(pr.total_billetes - 22300) < 0.01,
+      f"rendición: 3×$100 + 2×$1.000 + 1×$20.000 = 22.300 "
+      f"(obtuvo {pr.total_billetes})")
+check(pr.lbl_total_billetes.cget("text") == "$22.300",
+      f"rendición: se ve el TOTAL EFECTIVO "
+      f"(obtuvo {pr.lbl_total_billetes.cget('text')})")
+
+# El enlace es automático: el total aparece en la pestaña de la planilla
+check(pr.var_efectivo.get() == "$22.300",
+      f"rendición: el total se copia SOLO al campo EFECTIVO de la planilla "
+      f"(obtuvo {pr.var_efectivo.get()})")
+pr.celdas_billetes[20000].delete(0, "end")
+pr.celdas_billetes[20000].insert(0, "2")
+pr._recalcular_billetes()
+check(pr.var_efectivo.get() == "$42.300",
+      f"rendición: al cambiar los billetes cambia el efectivo de la planilla "
+      f"(obtuvo {pr.var_efectivo.get()})")
+
+# Detalle de la planilla: Tipo · Cantidad · Importe · Total
+pr.combo_tipo.set("Garrafa 10 kg")
+pr.var_cant_det.set("3")
+pr.var_imp_det.set("23000")
+pr._agregar_item()
+app6.update()
+check(len(pr.detalle) == 1 and pr.lbl_total_detalle.cget("text") == "$69.000",
+      f"rendición: la fila entra al detalle y suma el total "
+      f"(obtuvo {pr.lbl_total_detalle.cget('text')})")
+
+# Cheques: cliente, número, banco e importe
+pr.var_cheque_cliente.set("Juan Pérez")
+pr.var_cheque_numero.set("000123")
+pr.var_cheque_banco.set("Nación")
+pr.var_cheque_importe.set("50000")
+pr._agregar_cheque()
+check(pr.lbl_total_cheques.cget("text") == "$50.000",
+      f"rendición: total de cheques "
+      f"(obtuvo {pr.lbl_total_cheques.cget('text')})")
+
+pr.var_chofer.set("Gómez")
+check(pr._guardar() is not None, "rendición: se guarda desde la interfaz")
+_g = db.rendicion_de(db.hoy())
+check(_g["chofer"] == "Gómez" and len(_g["detalle"]) == 1
+      and len(_g["cheques"]) == 1 and abs(_g["total_billetes"] - 42300) < 0.01,
+      "rendición: quedan guardados chofer, detalle, cheque y billetes")
+pr.refresh()
+check(pr.var_chofer.get() == "Gómez" and len(pr.detalle) == 1,
+      "rendición: al refrescar la pantalla no se pisa lo cargado")
+
+# Planilla A4: una sola hoja, con todos los campos del formulario
+_ruta_planilla = os.path.join(tempfile.gettempdir(),
+                              "planilla_rendicion_test.xlsx")
+if os.path.exists(_ruta_planilla):
+    os.remove(_ruta_planilla)
+_ult = xl.exportar_rendicion(_g, _ruta_planilla)
+_wbp = load_workbook(_ruta_planilla)
+_wsp = _wbp.active
+check(_wsp.page_setup.orientation == "portrait",
+      "rendición A4: la hoja va en vertical")
+check(str(_wsp.page_setup.paperSize) == str(_wsp.PAPERSIZE_A4),
+      "rendición A4: el papel es A4")
+check(_wsp.page_setup.fitToWidth == 1 and _wsp.page_setup.fitToHeight == 1
+      and _wsp.sheet_properties.pageSetUpPr.fitToPage is True,
+      "rendición A4: entra en UNA sola hoja (no se divide en dos)")
+check(_wsp.print_area == f"'{_wsp.title}'!$A$1:$H${_ult}",
+      f"rendición A4: el área de impresión cubre toda la planilla "
+      f"(obtuvo {_wsp.print_area})")
+
+_txt_r = [str(c.value) for f in _wsp.iter_rows() for c in f
+          if c.value is not None]
+for _campo in ("PLANILLA DE RENDICIÓN POR BUZÓN", "FECHA", "CHOFER", "TIPO",
+               "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA", "ENVÍOS",
+               "TARJETAS", "TRANSFERENCIAS", "RECIBOS", "CLIENTE",
+               "N.º CHEQUE", "BANCO", "BILLETE", "TOTAL EFECTIVO",
+               "OBSERVACIONES"):
+    check(any(_campo in t for t in _txt_r),
+          f"rendición A4: conserva el campo {_campo}")
+_num_r = [c.value for f in _wsp.iter_rows() for c in f
+          if isinstance(c.value, (int, float))]
+check(any(abs(n - 42300) < 0.01 for n in _num_r),
+      "rendición A4: el TOTAL EFECTIVO de la calculadora llega a la planilla")
+check(any(abs(n - 69000) < 0.01 for n in _num_r),
+      "rendición A4: el TOTAL DEL DETALLE llega a la planilla")
+check(any(abs(n - 50000) < 0.01 for n in _num_r),
+      "rendición A4: el TOTAL CHEQUES llega a la planilla")
+check(xl.total_billetes_de({}) == 0
+      and abs(xl.total_billetes_de({"billetes": {"1000": 2}}) - 2000) < 0.01,
+      "rendición A4: el total de billetes se puede calcular solo con el conteo")
+
+# El soporte también explica la pantalla nueva
+for _pregunta_r in ("planilla de rendicion", "calculadora de billetes",
+                    "imprimir la planilla"):
+    _rr = ayuda.resolver(_pregunta_r)
+    check(_rr["ok"] and _rr["tema"]["id"] == "rendicion",
+          f"soporte: responde rendición ante «{_pregunta_r}»")
+app6.destroy()
 app5.destroy()
 
 os.remove(TMP)

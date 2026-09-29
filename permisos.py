@@ -25,6 +25,7 @@ PERMISOS = {
     "pago_credito":       ["DESARROLLADOR", "USUARIO"],
     # --- Secciones del sistema ---
     "historial":          ["DESARROLLADOR", "USUARIO"],
+    "rendicion":          ["DESARROLLADOR", "USUARIO"],
     "estadisticas":       ["DESARROLLADOR"],
     "configuracion":      ["DESARROLLADOR"],
     "panel_admin":        ["DESARROLLADOR"],
@@ -47,6 +48,8 @@ DESCRIPCIONES = {
     "pago_debito": "Registrar pagos con tarjeta de débito",
     "pago_credito": "Registrar pagos con tarjeta de crédito",
     "historial": "Consultar el historial y el detalle de los cierres de caja",
+    "rendicion": "Cargar la planilla de rendición por buzón y usar la "
+                 "calculadora de billetes",
     "estadisticas": "Consultar la sección de Estadísticas",
     "configuracion": "Modificar precios de productos, fondo inicial y "
                      "parámetros generales",
@@ -69,6 +72,7 @@ ETIQUETAS = {
     "pago_debito": "Cobrar con Débito",
     "pago_credito": "Cobrar con Crédito",
     "historial": "Ver Historial de cierres",
+    "rendicion": "Cargar planilla de rendición",
     "estadisticas": "Ver Estadísticas",
     "configuracion": "Ver Configuración",
     "panel_admin": "Panel de Administración",
@@ -83,7 +87,7 @@ GRUPOS = [
     ("CAJAS", ["abrir_caja", "cerrar_caja", "reabrir_caja"]),
     ("VENTAS Y COBROS", ["ventas", "pago_efectivo", "pago_transferencia",
                          "pago_debito", "pago_credito"]),
-    ("SECCIONES", ["historial", "estadisticas", "configuracion",
+    ("SECCIONES", ["historial", "rendicion", "estadisticas", "configuracion",
                    "panel_admin", "admin_usuarios", "ver_actividad"]),
     ("REPORTES Y PERFIL", ["exportar_excel", "cambiar_mia_clave"]),
 ]

@@ -639,3 +639,287 @@ def exportar_movimientos(desde, hasta, destino):
 def datetime_texto():
     """Fecha y hora de generación del archivo."""
     return datetime.now().strftime("%d/%m/%Y %H:%M")
+
+
+# ---------------------------------------------------------------------------
+# Planilla de rendición por buzón (una hoja A4 vertical)
+# ---------------------------------------------------------------------------
+
+# 8 columnas: la planilla se arma con dos bloques de a 4 columnas
+# (detalle a la izquierda, secciones a la derecha) y bloques completos
+# para cheques, billetes y observaciones.
+ANCHOS_RENDICION = [20, 11, 13, 13, 16, 11, 11, 13]
+
+# Secciones de la planilla, en el orden en que aparecen en el formulario
+SECCIONES_RENDICION = [
+    ("gastos", "GASTOS"),
+    ("caja", "CAJA"),
+    ("envios", "ENVÍOS"),
+    ("tarjetas", "TARJETAS"),
+    ("transferencias", "TRANSFERENCIAS"),
+    ("recibos", "RECIBOS"),
+]
+
+MIN_FILAS_DETALLE = 7
+MIN_FILAS_CHEQUES = 7
+
+
+def total_billetes_de(datos):
+    """Total efectivo de la calculadora: sale del campo guardado o del
+    conteo de billetes (por si se pasa solo el conteo)."""
+    datos = datos or {}
+    if datos.get("total_billetes") is not None:
+        try:
+            return float(datos["total_billetes"])
+        except (TypeError, ValueError):
+            pass
+    total = 0.0
+    for clave, cant in (datos.get("billetes") or {}).items():
+        try:
+            total += float(clave) * int(cant or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def exportar_rendicion(datos, destino):
+    """
+    Vuelca lo cargado en la pestaña CARGA / RENDICIÓN (más el conteo de la
+    calculadora de billetes) a UNA hoja A4 vertical, ajustada para que no
+    se divida nunca en dos páginas.
+
+    Devuelve la última fila usada.
+    """
+    datos = datos or {}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rendición"
+
+    trazo = Side(style="thin", color="B7C0CC")
+    borde = Border(left=trazo, right=trazo, top=trazo, bottom=trazo)
+    f_titulo = Font(bold=True, size=18, color="FFFFFF")
+    f_seccion = Font(bold=True, size=12, color="111827")
+    f_rotulo = Font(bold=True, size=11, color="111827")
+    f_valor = Font(size=11, color="111827")
+    f_dato = Font(size=11, color="111827")
+    f_total = Font(bold=True, size=13, color="111827")
+    f_efectivo = Font(bold=True, size=16, color="15803d")
+    f_pie = Font(italic=True, size=9, color="999999")
+    fondo_titulo = PatternFill(start_color=AZUL, end_color=AZUL,
+                               fill_type="solid")
+    fondo_rotulo = PatternFill(start_color=GRIS_CLARO, end_color=GRIS_CLARO,
+                               fill_type="solid")
+    fondo_verde = PatternFill(start_color="DCFCE7", end_color="DCFCE7",
+                              fill_type="solid")
+    al_izq = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    al_der = Alignment(horizontal="right", vertical="center")
+    al_ctr = Alignment(horizontal="center", vertical="center")
+
+    def pintar(fila, col_ini, col_fin, valor=None, *, fuente=None, fondo=None,
+               alineacion=None, formato=None, bordear=True):
+        """Escribe una celda (uniendo columnas si hace falta)."""
+        if col_fin > col_ini:
+            ws.merge_cells(start_row=fila, start_column=col_ini,
+                           end_row=fila, end_column=col_fin)
+        c = ws.cell(row=fila, column=col_ini, value=valor)
+        if fuente:
+            c.font = fuente
+        if fondo:
+            c.fill = fondo
+        if alineacion:
+            c.alignment = alineacion
+        if formato:
+            c.number_format = formato
+        if bordear:
+            for col in range(col_ini, col_fin + 1):
+                ws.cell(row=fila, column=col).border = borde
+        return c
+
+    fila = 1
+    # ---------------- Título ----------------
+    pintar(fila, 1, 8, "PLANILLA DE RENDICIÓN POR BUZÓN", fuente=f_titulo,
+           fondo=fondo_titulo, alineacion=al_ctr, bordear=False)
+    ws.row_dimensions[fila].height = 34
+    fila += 1
+
+    # ---------------- Cabecera: fecha y chofer ----------------
+    pintar(fila, 1, 2, "FECHA", fuente=f_rotulo, fondo=fondo_rotulo,
+           alineacion=al_izq)
+    pintar(fila, 3, 4, fecha_corta(datos.get("fecha") or ""),
+           fuente=f_dato, alineacion=al_ctr)
+    pintar(fila, 5, 6, "CHOFER", fuente=f_rotulo, fondo=fondo_rotulo,
+           alineacion=al_izq)
+    pintar(fila, 7, 8, datos.get("chofer") or "", fuente=f_dato,
+           alineacion=al_ctr)
+    ws.row_dimensions[fila].height = 24
+    fila += 2
+
+    # ---------------- Detalle (izquierda) y secciones (derecha) ----------------
+    pintar(fila, 1, 4, "DETALLE — TIPO · CANTIDAD · IMPORTE · TOTAL",
+           fuente=f_seccion, fondo=fondo_rotulo, alineacion=al_izq)
+    pintar(fila, 5, 8, "SECCIONES DE LA PLANILLA", fuente=f_seccion,
+           fondo=fondo_rotulo, alineacion=al_izq)
+    ws.row_dimensions[fila].height = 24
+    fila += 1
+
+    # Encabezados de las dos columnas de la planilla
+    for col_ini, col_fin, texto in ((1, 1, "TIPO"), (2, 2, "CANTIDAD"),
+                                    (3, 3, "IMPORTE"), (4, 4, "TOTAL"),
+                                    (5, 6, "SECCIÓN"), (7, 8, "IMPORTE")):
+        pintar(fila, col_ini, col_fin, texto, fuente=f_rotulo,
+               fondo=fondo_rotulo,
+               alineacion=al_der if col_ini in (2, 3, 4, 7) else al_izq)
+    ws.row_dimensions[fila].height = 22
+    fila += 1
+
+    detalle = list(datos.get("detalle") or [])
+    n_det = max(MIN_FILAS_DETALLE, len(detalle))
+    for i in range(n_det):
+        it = detalle[i] if i < len(detalle) else None
+        cant = int(it["cantidad"]) if it else 0
+        imp = float(it["importe"]) if it else 0.0
+        pintar(fila, 1, 1, it["tipo"] if it else None, fuente=f_dato,
+               alineacion=al_izq)
+        pintar(fila, 2, 2, cant if it else None, fuente=f_dato,
+               alineacion=al_der, formato=FORMATO_ENTERO)
+        pintar(fila, 3, 3, imp if it else None, fuente=f_dato,
+               alineacion=al_der, formato=FORMATO_MONEDA)
+        pintar(fila, 4, 4, (cant * imp) if it else None, fuente=f_dato,
+               alineacion=al_der, formato=FORMATO_MONEDA)
+
+        # Derecha: las secciones; la última es el efectivo de la calculadora
+        if i < len(SECCIONES_RENDICION):
+            clave, texto = SECCIONES_RENDICION[i]
+            valor = datos.get(clave)
+            try:
+                valor = float(valor) if valor not in (None, "") else None
+            except (TypeError, ValueError):
+                valor = None
+            if valor == 0:            # casillero sin cargar = casillero en blanco
+                valor = None
+            pintar(fila, 5, 6, texto, fuente=f_rotulo, fondo=fondo_rotulo,
+                   alineacion=al_izq)
+            pintar(fila, 7, 8, valor, fuente=f_dato, alineacion=al_der,
+                   formato=FORMATO_MONEDA)
+        elif i == len(SECCIONES_RENDICION):
+            pintar(fila, 5, 6, "EFECTIVO (BILLETES)", fuente=f_rotulo,
+                   fondo=fondo_verde, alineacion=al_izq)
+            pintar(fila, 7, 8, total_billetes_de(datos), fuente=f_total,
+                   fondo=fondo_verde, alineacion=al_der,
+                   formato=FORMATO_MONEDA)
+        else:
+            pintar(fila, 5, 6, None, fondo=fondo_rotulo, alineacion=al_izq)
+            pintar(fila, 7, 8, None, alineacion=al_der)
+        ws.row_dimensions[fila].height = 20
+        fila += 1
+
+    total_det = sum(float(it["cantidad"]) * float(it["importe"])
+                    for it in detalle)
+    pintar(fila, 1, 3, "TOTAL DEL DETALLE", fuente=f_total, alineacion=al_der)
+    pintar(fila, 4, 4, total_det, fuente=f_total, alineacion=al_der,
+           formato=FORMATO_MONEDA)
+    pintar(fila, 5, 8, None)
+    ws.row_dimensions[fila].height = 24
+    fila += 2
+
+    # ---------------- Cheques (izquierda) y billetes (derecha) ----------------
+    pintar(fila, 1, 4, "CHEQUES", fuente=f_seccion, fondo=fondo_rotulo,
+           alineacion=al_izq)
+    pintar(fila, 5, 8, "CALCULADORA DE BILLETES", fuente=f_seccion,
+           fondo=fondo_rotulo, alineacion=al_izq)
+    ws.row_dimensions[fila].height = 24
+    fila += 1
+
+    for col_ini, col_fin, texto, alineado in (
+            (1, 1, "CLIENTE", al_izq), (2, 2, "N.º CHEQUE", al_izq),
+            (3, 3, "BANCO", al_izq), (4, 4, "IMPORTE", al_der),
+            (5, 6, "BILLETE", al_izq), (7, 7, "CANTIDAD", al_der),
+            (8, 8, "IMPORTE", al_der)):
+        pintar(fila, col_ini, col_fin, texto, fuente=f_rotulo,
+               fondo=fondo_rotulo, alineacion=alineado)
+    ws.row_dimensions[fila].height = 22
+    fila += 1
+
+    cheques = list(datos.get("cheques") or [])
+    billetes = datos.get("billetes") or {}
+    n_filas = max(MIN_FILAS_CHEQUES, len(cheques), len(db.DENOMINACIONES))
+    total_cheques = 0.0
+    for i in range(n_filas):
+        ch = cheques[i] if i < len(cheques) else None
+        if ch:
+            total_cheques += float(ch["importe"])
+        pintar(fila, 1, 1, ch["cliente"] if ch else None, fuente=f_dato,
+               alineacion=al_izq)
+        pintar(fila, 2, 2, (ch["numero"] or "") if ch else None,
+               fuente=f_dato, alineacion=al_izq)
+        pintar(fila, 3, 3, (ch["banco"] or "") if ch else None,
+               fuente=f_dato, alineacion=al_izq)
+        pintar(fila, 4, 4, float(ch["importe"]) if ch else None,
+               fuente=f_dato, alineacion=al_der, formato=FORMATO_MONEDA)
+
+        if i < len(db.DENOMINACIONES):
+            denom = db.DENOMINACIONES[i]
+            try:
+                cant = int(billetes.get(str(denom), 0) or 0)
+            except (TypeError, ValueError):
+                cant = 0
+            pintar(fila, 5, 6, float(denom), fuente=f_dato,
+                   alineacion=al_izq, formato=FORMATO_MONEDA)
+            pintar(fila, 7, 7, cant, fuente=f_dato, alineacion=al_der,
+                   formato=FORMATO_ENTERO)
+            pintar(fila, 8, 8, float(denom) * cant, fuente=f_dato,
+                   alineacion=al_der, formato=FORMATO_MONEDA)
+        else:
+            pintar(fila, 5, 6, None, alineacion=al_izq)
+            pintar(fila, 7, 7, None, alineacion=al_der)
+            pintar(fila, 8, 8, None, alineacion=al_der)
+        ws.row_dimensions[fila].height = 20
+        fila += 1
+
+    pintar(fila, 1, 3, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
+    pintar(fila, 4, 4, total_cheques, fuente=f_total, alineacion=al_der,
+           formato=FORMATO_MONEDA)
+    pintar(fila, 5, 7, "TOTAL EFECTIVO", fuente=f_total, fondo=fondo_verde,
+           alineacion=al_der)
+    pintar(fila, 8, 8, total_billetes_de(datos), fuente=f_efectivo,
+           fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
+    ws.row_dimensions[fila].height = 30
+    fila += 2
+
+    # ---------------- Observaciones ----------------
+    pintar(fila, 1, 8, "OBSERVACIONES", fuente=f_seccion, fondo=fondo_rotulo,
+           alineacion=al_izq)
+    ws.row_dimensions[fila].height = 24
+    fila += 1
+
+    obs = (datos.get("observaciones") or "").strip()
+    pintar(fila, 1, 8, obs if obs else " ", fuente=f_dato, alineacion=al_izq)
+    ws.row_dimensions[fila].height = 60
+    ultima_fila = fila
+    fila += 1
+
+    u = db.usuario_sesion() or {}
+    pie = datetime_texto() + (f"  —  Generado por: {u.get('usuario', '—')}"
+                              if u else "")
+    pintar(fila, 1, 8, pie, fuente=f_pie, alineacion=al_der, bordear=False)
+    ultima_fila = fila
+
+    # ---------------- Anchos de columna ----------------
+    for i, ancho in enumerate(ANCHOS_RENDICION, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = ancho
+
+    # ---------------- Impresión: UNA hoja A4 vertical ----------------
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.4, bottom=0.4,
+                                  header=0.2, footer=0.2)
+    ws.print_options.horizontalCentered = True
+    ws.print_area = f"A1:H{ultima_fila}"
+
+    wb.save(destino)
+    return ultima_fila

@@ -20,6 +20,7 @@ from ui_ventas import VentasPanel
 from ui_estadisticas import EstadisticasPanel
 from ui_config import ConfigPanel
 from ui_historial import HistorialPanel
+from ui_rendicion import RendicionPanel
 from ui_admin import AdminPanel
 from ui_cuenta import CuentaPanel
 from ui_ayuda import SoporteVentana
@@ -31,6 +32,7 @@ NAV = [
     ("stats", "Estadísticas\nVentas y reportes", "estadisticas"),
     ("config", "Configuración\nPrecios y seguridad", None),
     ("historial", "Historial\nde cierres", "historial"),
+    ("rendicion", "Rendición\nPlanilla por buzón", "rendicion"),
     ("admin", "Administración\nUsuarios y actividad", "panel_admin"),
     ("cuenta", "Mi cuenta\nPerfil y seguridad", None),
 ]
@@ -118,7 +120,7 @@ class App(tk.Tk):
         sidebar.pack_propagate(False)
 
         marca = tk.Frame(sidebar, bg=st.BARRA)
-        marca.pack(fill="x", padx=16, pady=(22, 24))
+        marca.pack(fill="x", padx=16, pady=(16, 16))
 
         # Botón flotante de soporte: esquina del lateral, siempre visible y
         # sin tapar nunca el contenido de los paneles ni su scroll.
@@ -141,7 +143,7 @@ class App(tk.Tk):
             b = tk.Button(
                 sidebar, text=texto, anchor="w", relief="flat", bd=0,
                 bg=st.BARRA, fg="#c7d2e4", font=(st.FUENTE, 10, "bold"),
-                padx=18, pady=12, cursor="hand2",
+                padx=18, pady=9, cursor="hand2",
                 command=lambda k=clave: self.mostrar(k),
             )
             b.bind("<Enter>", lambda e, btn=b: btn.config(bg="#22304d"))
@@ -151,7 +153,7 @@ class App(tk.Tk):
         self._actualizar_nav()
 
         pie = tk.Frame(sidebar, bg=st.BARRA)
-        pie.pack(side="bottom", fill="x", padx=16, pady=14)
+        pie.pack(side="bottom", fill="x", padx=16, pady=10)
 
         fila_usuario = tk.Frame(pie, bg=st.BARRA)
         fila_usuario.pack(fill="x")
@@ -160,7 +162,7 @@ class App(tk.Tk):
         self._foto_nav_ref = None
         self.lbl_foto_nav = tk.Label(fila_usuario, text="👤", bg="#1e293b",
                                      fg="#9fb0cc", font=(st.FUENTE, 18),
-                                     width=5, height=3)
+                                     width=5, height=2)
         self.lbl_foto_nav.pack(side="left", padx=(0, 10))
 
         col_usuario = tk.Frame(fila_usuario, bg=st.BARRA)
@@ -171,8 +173,9 @@ class App(tk.Tk):
         self._usuario_nav_texto = None
         self._item_usuario = None
         self._anim_usu_id = None
-        # Alto suficiente para "Usuario: ...\nRango: ..." en dos líneas:
-        # si el rango es largo (DESARROLLADOR) el texto no se corta nunca.
+        # Alto suficiente para "Usuario: ...\nRango: ..." en TRES líneas
+        # (el rango largo como DESARROLLADOR se parte en dos): el texto
+        # nunca se corta ni arriba ni abajo.
         marco_usuario = tk.Frame(col_usuario, bg=st.BARRA, height=56)
         marco_usuario.pack(fill="x")
         marco_usuario.pack_propagate(False)
@@ -204,6 +207,7 @@ class App(tk.Tk):
             "stats": EstadisticasPanel(contenedor, self),
             "config": ConfigPanel(contenedor, self),
             "historial": HistorialPanel(contenedor, self),
+            "rendicion": RendicionPanel(contenedor, self),
             "admin": AdminPanel(contenedor, self),
             "cuenta": CuentaPanel(contenedor, self),
         }
