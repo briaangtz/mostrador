@@ -150,20 +150,34 @@ TEMAS = [
         claves="venta ventas vender registrar carga cargar producto "
                "cantidad precio unitario cliente nombre total editar "
                "modificar corregir eliminar borrar formulario guardar "
-               "listado varias masiva vaciar seleccion",
+               "listado varias masiva vaciar seleccion ticket tickets "
+               "agregar productos medios importe faltan cuadre suman",
         frases=["registrar una venta", "cargar una venta", "como se vende",
                 "editar venta", "eliminar venta", "borrar venta",
                 "corregir una venta", "borrar todas las ventas",
-                "vaciar la caja", "eliminar varias ventas"],
+                "vaciar la caja", "eliminar varias ventas",
+                "agregar al ticket", "registrar un ticket"],
         parrafos=[
-            "En la pantalla **Ventas** completás: **Producto** (carga su "
-            "precio solo), **Cantidad**, **Precio unitario** (editable), "
-            "**Cliente** (opcional) y **Medio de pago**. El total se "
-            "calcula solo: cantidad × precio unitario.",
+            "En la pantalla **Ventas** cada venta es un **TICKET** con dos "
+            "pasos. **Paso 1:** elegís **Producto** (carga su precio solo), "
+            "**Cantidad** y **Precio unitario**, y apretás **+ AGREGAR AL "
+            "TICKET**. Repetís por cada producto que se lleve el cliente.",
+            "**Paso 2:** elegís el **Medio de pago** y su **Importe** y "
+            "apretás **+ AGREGAR MEDIO DE PAGO**. Si el ticket se paga con "
+            "dos medios (por ejemplo efectivo + transferencia) cargás los "
+            "dos. Si no cargás ningún importe, ese medio se completa solo "
+            "con el total del ticket.",
+            "Abajo de las dos listas se ve el cuadre: en rojo **FALTAN $X** "
+            "cuando los medios no suman exactamente el total (y **no deja "
+            "registrar**) y en verde **PAGOS = TOTAL** cuando cierra. Si "
+            "algún medio es Transferencia, el **N° de comprobante** es "
+            "obligatorio. Recién con todo cerrado apretás **REGISTRAR "
+            "VENTA** y la venta queda guardada con su ticket, productos, "
+            "medios, importes y comprobante.",
             "Las ventas del día se listan abajo. Para corregir algo, "
             "seleccioná la venta y apretá **Editar venta seleccionada**: se "
-            "carga en el formulario, arreglás y apretás **GUARDAR "
-            "CAMBIOS**.",
+            "carga el ticket con todos sus productos y sus medios de pago, "
+            "arreglás y apretás **GUARDAR CAMBIOS**.",
             "**Para borrar en masa** (no hace falta ir una por una): con "
             "Ctrl o Shift + clic marcás **varias ventas** a la vez y apretás "
             "**Eliminar seleccionadas** — se borran todas juntas con una "
@@ -220,6 +234,12 @@ TEMAS = [
             "Los importes se guardan por separado en la base (débito y "
             "crédito), así que el desglose siempre está disponible aunque "
             "se muestre agrupado.",
+            "**Un ticket puede pagarse con varios medios**: cargás el "
+            "primero con su importe y apretás **+ AGREGAR MEDIO DE PAGO**; "
+            "después el segundo (o tercero). Los importes tienen que sumar "
+            "exactamente el total: si faltan o sobran, el aviso en rojo "
+            "dice cuánto falta y **no deja registrar**. El dinero queda "
+            "repartido por medio **sin que la venta se cuente dos veces**.",
             "El combo de la venta solo ofrece los medios que tu usuario "
             "**tiene permiso** para cobrar: si elegís uno no permitido, el "
             "sistema rechaza la venta.",
@@ -240,6 +260,9 @@ TEMAS = [
             "Cuando el medio de pago es **Transferencia**, el campo **N° DE "
             "COMPROBANTE** es **obligatorio**: se marca en rojo y sin ese "
             "número no se puede guardar la venta.",
+            "Se pide **dentro del mismo ticket**, también cuando la "
+            "transferencia es solo una parte del pago (por ejemplo $30.000 "
+            "en efectivo y el resto transferido).",
             "En los demás medios de pago ese campo es opcional.",
             "El número queda en la venta, en el listado, en el historial, "
             "en el detalle del cierre y en el Excel. El cierre también "
@@ -282,7 +305,10 @@ TEMAS = [
             "UNIDADES** y **CONTROL DE DINERO**, con la cuenta "
             "EFEC(...) + TARJETA(...) + TRANS(...) = total. Si dice "
             "**COINCIDE** el cuadre está bien; si dice **REVISAR**, hay que "
-            "revisar antes de imprimir.",
+            "revisar antes de imprimir. Si una venta se pagó con dos medios, "
+            "las **unidades** van al medio que aporta más dinero y el "
+            "**dinero** se reparte entre garrafas y envases proporcional a "
+            "esa venta: así los dos recuadros suman exacto.",
             "Después sigue el detalle en tres secciones — "
             "**TRANSFERENCIAS**, **TARJETAS** (bloque "
             "TARJETA DE DÉBITO y bloque TARJETA DE CRÉDITO, cada uno con su "

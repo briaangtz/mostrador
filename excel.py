@@ -57,9 +57,37 @@ ORDEN_ROTULOS = {"10": 0, "15": 1, "45": 2, "ME": 3, "ECO": 4}
 
 
 def _carga(v):
-    """Detalle de la carga: '3 × Garrafa 10 kg'."""
+    """Detalle de la carga: '1 × Garrafa 10 kg + 1 × Garrafa 15 kg'."""
+    if v.get("items"):
+        return db.texto_items(v["items"]) or "—"
     producto = v.get("producto") or "Producto"
-    return f"{v['cantidad']} × {producto}"
+    return f"{v.get('cantidad', 0)} × {producto}"
+
+
+def _filas_pago(movimientos, medio):
+    """Filas del detalle para un medio de pago: UNA por cada cobro de ese
+    medio. Así una venta mixta aparece en cada sección que utilizó, con el
+    importe que le tocó a cada una (y los subtotales cierran exactos),
+    siempre identificada con el número de ticket al que pertenece."""
+    filas = []
+    for v in movimientos:
+        pagos = [p for p in (v.get("pagos") or []) if p["medio"] == medio]
+        if not pagos and not v.get("pagos") and v.get("medio") == medio:
+            pagos = [{"medio": medio, "importe": v["total"],
+                      "comprobante": v.get("comprobante")}]
+        for i, pg in enumerate(pagos):
+            cliente = (v.get("cliente") or "").strip()
+            numero = f"#{v['id']}"
+            filas.append({
+                "ticket": v["id"],
+                "nombre": f"{numero} · {cliente}" if i == 0 and cliente
+                          else numero,
+                "cliente": cliente if i == 0 else "",
+                "carga": _carga(v),
+                "comprobante": pg.get("comprobante"),
+                "total": float(pg["importe"]),
+            })
+    return filas
 
 
 # ---------------------------------------------------------------------------
@@ -76,11 +104,14 @@ def _productos_resumen(movimientos):
     for p in db.productos():
         orden.append(p["id"])
         nombres[p["id"]] = p["nombre"]
+    # Cada venta (ticket) puede llevar varios productos: se recorren sus
+    # ítems; si viniera en el formato viejo se usa la fila entera.
     for v in movimientos:
-        pid = v.get("producto_id")
-        if pid is not None and pid not in nombres:
-            orden.append(pid)
-            nombres[pid] = v.get("producto") or f"Producto {pid}"
+        for it in (v.get("items") or [v]):
+            pid = it.get("producto_id")
+            if pid is not None and pid not in nombres:
+                orden.append(pid)
+                nombres[pid] = it.get("producto") or f"Producto {pid}"
 
     garrafas, envases = [], []
     for pid in orden:
@@ -90,34 +121,72 @@ def _productos_resumen(movimientos):
 
 
 def _unidades_por_medio(movimientos):
-    """{medio: {producto_id: [cantidad, dinero]}} con todo lo del período."""
+    """{medio: {producto_id: unidades}} de todo el período.
+
+    Las unidades de una venta MIXTA (varios medios de pago) se acreditan
+    al MEDIO PRINCIPAL, el que aporta más dinero de esa venta; así los
+    totales de unidades siempre cierran sin fracciones. El dinero sí se
+    reparte exacto entre todos los medios (ver _dinero_por_medio).
+    """
     datos = {}
     for v in movimientos:
-        celda = datos.setdefault(v["medio"], {})
-        cantidad, dinero = celda.get(v["producto_id"], (0, 0.0))
-        celda[v["producto_id"]] = (cantidad + int(v["cantidad"]),
-                                   dinero + float(v["total"]))
+        medio = v.get("medio") or db.medio_principal(v.get("pagos") or [])
+        if not medio:
+            continue
+        celda = datos.setdefault(medio, {})
+        for it in (v.get("items") or [v]):
+            pid = it.get("producto_id")
+            if pid is None:
+                continue
+            celda[pid] = celda.get(pid, 0) + int(it["cantidad"])
     return datos
 
 
-def _sumar_medios(datos, medios):
-    """Une en un solo mapa por producto todos los medios de una sección."""
+def _familia_de(nombre):
+    """'envases' si el producto es un envase suelto, si no 'garrafas'."""
+    return "envases" if db.es_envase(nombre) else "garrafas"
+
+
+def _dinero_por_medio(movimientos):
+    """{(medio, familia): dinero cobrado}.
+
+    El dinero de cada venta se reparte entre sus productos en la misma
+    proporción de sus subtotales (una venta con garrafas y envases deja
+    exacto el total de cada familia) y entre los medios de pago según lo
+    que canceló cada uno (una venta mixta reparte su total entre los
+    medios que la pagaron).
+    """
+    datos = {}
+    for v in movimientos:
+        items = v.get("items") or [v]
+        pagos = v.get("pagos") or [
+            {"medio": v.get("medio"), "importe": v["total"]}
+        ]
+        total = float(v.get("total") or 0)
+        partes = {"garrafas": 0.0, "envases": 0.0}
+        for it in items:
+            monto = float(it.get("subtotal", it.get("total")) or 0)
+            partes[_familia_de(it.get("producto"))] += monto
+        if total <= 0:
+            total = sum(float(p["importe"]) for p in pagos)
+        for pg in pagos:
+            importe = float(pg["importe"])
+            for fam, monto in partes.items():
+                if monto <= 0 or total <= 0:
+                    continue
+                clave = (pg["medio"], fam)
+                datos[clave] = round(datos.get(clave, 0.0)
+                                     + importe * (monto / total), 2)
+    return datos
+
+
+def _sumar_unidades(datos, medios):
+    """Une en un solo mapa por producto las unidades de esos medios."""
     salida = {}
     for medio in medios:
-        for pid, (cantidad, dinero) in datos.get(medio, {}).items():
-            c, d = salida.get(pid, (0, 0.0))
-            salida[pid] = (c + cantidad, d + dinero)
+        for pid, cantidad in datos.get(medio, {}).items():
+            salida[pid] = salida.get(pid, 0) + cantidad
     return salida
-
-
-def _totales(mapa, productos):
-    """(cantidad, dinero) de una lista de productos dentro de un mapa."""
-    cantidad, dinero = 0, 0.0
-    for pid, _ in productos:
-        c, d = mapa.get(pid, (0, 0.0))
-        cantidad += c
-        dinero += d
-    return cantidad, dinero
 
 
 def etiqueta_corta(nombre):
@@ -141,7 +210,7 @@ def orden_recuadro(productos):
 
 def _vendidos(producto_id, datos_medio):
     """True si ese producto tuvo al menos una unidad vendida en el período."""
-    return any(mapa.get(producto_id, (0, 0.0))[0] > 0
+    return any(mapa.get(producto_id, 0) > 0
                for mapa in datos_medio.values())
 
 
@@ -198,6 +267,7 @@ def exportar_movimientos(desde, hasta, destino):
 
     total_general = 0.0
     cantidad_total = 0
+    tickets_vistos = set()          # tickets distintos que aparecen abajo
 
     def _fila_titulo(texto, fuente, relleno, alto=22, ancho=N_COL):
         """Fila de título (sección o bloque) que ocupa todo el ancho."""
@@ -258,8 +328,8 @@ def exportar_movimientos(desde, hasta, destino):
         for v in items:
             comprobante = (v.get("comprobante") or "").strip() or "—"
             _fila_detalle([
-                (v.get("cliente") or "").strip() or "—",
-                _carga(v),
+                str(v.get("nombre") or v.get("cliente") or "—").strip() or "—",
+                v.get("carga") or _carga(v),
                 comprobante,
                 float(v["total"]),
             ])
@@ -298,8 +368,14 @@ def exportar_movimientos(desde, hasta, destino):
         ws.row_dimensions[fila].height = 26
         fila += 1
 
-    def _recuadro_fila(rotulo, productos, mapa, *, fuente=None, relleno=None):
-        """Fila: rótulo | unidades por producto | unidades totales | $."""
+    def _recuadro_fila(rotulo, productos, mapa, dinero=0.0, *,
+                       fuente=None, relleno=None):
+        """Fila: rótulo | unidades por producto | unidades totales | $.
+
+        `mapa` trae UNIDADES por producto (las de esa sección) y `dinero`
+        es el efectivo/total cobrado con esos medios, que sale de los
+        pagos y por eso siempre cierra exacto.
+        """
         nonlocal fila
         fuente = fuente or Font(size=10)
         col_uni = 2 + len(productos)
@@ -310,13 +386,13 @@ def exportar_movimientos(desde, hasta, destino):
         celda_r.alignment = texto
 
         for i, (pid, _nombre) in enumerate(productos):
-            cantidad = mapa.get(pid, (0, 0.0))[0]
-            celda = ws.cell(row=fila, column=2 + i, value=int(cantidad))
+            celda = ws.cell(row=fila, column=2 + i,
+                            value=int(mapa.get(pid, 0)))
             celda.number_format = FORMATO_ENTERO
             celda.alignment = centro
             celda.font = fuente
 
-        unidades, dinero = _totales(mapa, productos)
+        unidades = sum(int(mapa.get(pid, 0)) for pid, _ in productos)
         celda_u = ws.cell(row=fila, column=col_uni, value=int(unidades))
         celda_u.number_format = FORMATO_ENTERO
         celda_u.alignment = centro
@@ -335,15 +411,27 @@ def exportar_movimientos(desde, hasta, destino):
         ws.row_dimensions[fila].height = 17
         fila += 1
 
-    def _recuadro(titulo, productos, mapa_total, aclaracion=None):
-        """Recuadro: Sección | una columna por producto | Unidades | Total $.
+    def _recuadro(titulo, productos, familia, aclaracion=None):
+        """Recuadro de una familia (garrafas con gas / envases sueltos):
+        Sección | una columna por producto | Unidades | Total $.
 
-        Solo entran productos con ventas; cada bloque cierra con su
-        TOTAL GENERAL y los dos controles de cuadre.
+        Solo entran productos de esa familia con ventas; cada bloque
+        cierra con su TOTAL GENERAL y los dos controles de cuadre. Las
+        unidades van al medio principal de cada venta y el dinero sale de
+        los pagos, repartido entre las familias en la proporción de sus
+        subtotales.
         """
         nonlocal fila
         col_uni = 2 + len(productos)
         col_din = col_uni + 1
+
+        secciones = [
+            (rotulo, _sumar_unidades(datos_medio, medios),
+             _dinero_seccion(medios, familia))
+            for rotulo, medios in RESUMEN_SECCIONES
+        ]
+        mapa_total = _sumar_unidades(datos_medio, medios_periodo)
+        dinero_total = _dinero_seccion(medios_periodo, familia)
 
         _fila_titulo(titulo, Font(bold=True, size=12, color="FFFFFF"),
                      relleno_seccion, ancho=col_din)
@@ -365,22 +453,23 @@ def exportar_movimientos(desde, hasta, destino):
                       + [("Unidades", col_uni), ("Total $", col_din)])
 
         nombres_seccion, unidades_seccion, dinero_seccion = [], [], []
-        for rotulo, mapa in secciones_resumen:
-            _recuadro_fila(rotulo, productos, mapa)
-            c, d = _totales(mapa, productos)
+        for rotulo, mapa, dinero in secciones:
+            _recuadro_fila(rotulo, productos, mapa, dinero)
             nombres_seccion.append(rotulo)
-            unidades_seccion.append(c)
-            dinero_seccion.append(d)
+            unidades_seccion.append(sum(int(mapa.get(pid, 0))
+                                        for pid, _ in productos))
+            dinero_seccion.append(dinero)
 
-        _recuadro_fila("TOTAL GENERAL", productos, mapa_total,
+        _recuadro_fila("TOTAL GENERAL", productos, mapa_total, dinero_total,
                        fuente=Font(bold=True, size=11),
                        relleno=relleno_total)
-        total_unidades, total_dinero = _totales(mapa_total, productos)
+        total_unidades = sum(int(mapa_total.get(pid, 0))
+                             for pid, _ in productos)
 
         _fila_control("CONTROL DE UNIDADES", nombres_seccion,
                       unidades_seccion, total_unidades, ancho=col_din)
         _fila_control("CONTROL DE DINERO", nombres_seccion,
-                      dinero_seccion, total_dinero, ancho=col_din,
+                      dinero_seccion, dinero_total, ancho=col_din,
                       con_dinero=True)
         fila += 1
 
@@ -414,19 +503,22 @@ def exportar_movimientos(desde, hasta, destino):
         fila += 1
 
     datos_medio = _unidades_por_medio(movimientos)
+    dinero_medio = _dinero_por_medio(movimientos)
+    # Todos los medios que recibieron dinero (y los que aportaron unidades)
+    # en el período: así el TOTAL GENERAL cierra aunque aparezca un medio
+    # fuera de las secciones armadas abajo.
+    medios_periodo = sorted({m for (m, _f) in dinero_medio} | set(datos_medio))
+
+    def _dinero_seccion(medios, familia):
+        return round(sum(dinero_medio.get((m, familia), 0.0) for m in medios), 2)
+
     garrafas, envases = _productos_resumen(movimientos)
-    # Solo los productos que se vendieron en el período, en el pedido
+    # Solo los productos que se vendieron en el período, en el orden
     # pedido 10 → 15 → 45 → ME → ECO.
     garrafas = orden_recuadro([p for p in garrafas
                                if _vendidos(p[0], datos_medio)])
     envases = orden_recuadro([p for p in envases
                               if _vendidos(p[0], datos_medio)])
-
-    secciones_resumen = [(rotulo, _sumar_medios(datos_medio, medios))
-                         for rotulo, medios in RESUMEN_SECCIONES]
-    # Total general: se calcula con TODOS los medios que hubo en el período,
-    # así si alguno quedara fuera de las secciones el control lo marca.
-    mapa_total = _sumar_medios(datos_medio, sorted(datos_medio))
 
     _fila_titulo("RESUMEN DE VENTAS POR SECCIÓN DE PAGO",
                  Font(bold=True, size=13, color="FFFFFF"), relleno_enc,
@@ -441,11 +533,11 @@ def exportar_movimientos(desde, hasta, destino):
         fila += 2
     else:
         if garrafas:
-            _recuadro("VENTA DE GARRAFAS (con gas)", garrafas, mapa_total,
+            _recuadro("VENTA DE GARRAFAS (con gas)", garrafas, "garrafas",
                       aclaracion="Solo figuran las garrafas que se vendieron "
                                  "en el período.")
         if envases:
-            _recuadro("VENTA DE ENVASES", envases, mapa_total,
+            _recuadro("VENTA DE ENVASES", envases, "envases",
                       aclaracion="Envases sueltos, sin gas: se venden y se "
                                  "devuelven aparte de las garrafas "
                                  "(10 kg, 15 kg, 45 kg, ME y ECO PROPANO). "
@@ -460,7 +552,11 @@ def exportar_movimientos(desde, hasta, destino):
 
         subtotal_seccion = 0.0
         for i_bloque, (subtitulo, medio) in enumerate(bloques):
-            items = [v for v in movimientos if v["medio"] == medio]
+            # Una fila por cada cobro de ese medio: una venta pagada con
+            # dos medios aparece en las dos secciones, cada una con el
+            # importe que le tocó (nunca se duplica el total).
+            items = _filas_pago(movimientos, medio)
+            tickets_vistos.update(v["ticket"] for v in items)
 
             # Dentro de la sección, cada medio con su propio bloque
             if len(bloques) > 1:
@@ -472,7 +568,6 @@ def exportar_movimientos(desde, hasta, destino):
 
             subtotal = sum(float(v["total"]) for v in items)
             subtotal_seccion += subtotal
-            cantidad_total += len(items)
             rotulo = (f"Total {medio}" if len(bloques) > 1
                       else f"Total {titulo}")
             _subtotal(rotulo, subtotal)
@@ -487,6 +582,9 @@ def exportar_movimientos(desde, hasta, destino):
             ws.cell(row=fila - 1, column=1).font = Font(bold=True, size=12)
             ws.cell(row=fila - 1, column=7).font = Font(bold=True, size=12)
         fila += 1
+
+    # Una venta = una operación: se cuentan tickets, no filas de cobro.
+    cantidad_total = len(tickets_vistos)
 
     # ---------------- Total general ----------------
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=6)
@@ -507,7 +605,7 @@ def exportar_movimientos(desde, hasta, destino):
     fila += 1
 
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=6)
-    celda_t = ws.cell(row=fila, column=1, value="Cantidad de movimientos:")
+    celda_t = ws.cell(row=fila, column=1, value="Cantidad de operaciones:")
     celda_t.font = Font(bold=True, size=10)
     celda_t.alignment = texto_der
     ws.merge_cells(start_row=fila, start_column=7, end_row=fila, end_column=8)

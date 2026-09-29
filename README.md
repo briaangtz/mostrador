@@ -80,13 +80,39 @@ fila **TOTAL GENERAL** con las unidades y la plata de todo el día.
 
 ## 2. Registro de ventas (pestaña "Ventas")
 
-Para cada venta se selecciona:
+Cada venta se registra como un **TICKET**: primero se arman los productos y
+después se carga cómo se pagó. Dos pasos:
 
-* **Producto** (al elegirlo se carga su precio automáticamente)
-* **Cantidad**
-* **Precio unitario** (editable)
-* **Nombre / Cliente** (opcional; se muestra en el listado y viaja al Excel)
-* **Medio de pago**
+**Paso 1 — los productos.** Se elige **Producto** (al elegirlo se carga su
+precio automáticamente), **Cantidad** y **Precio unitario** (editable) y se
+presiona **+ AGREGAR AL TICKET**. Se repite por cada producto que se lleve el
+cliente (2 garrafas de 10, 1 de 45, 1 envase, etc.). Los productos van
+apareciendo en la lista **PRODUCTOS DEL TICKET** con su subtotal, y con
+**Quitar seleccionado** se saca alguno.
+
+**Paso 2 — el pago.** Se elige el **Medio de pago** y, si hace falta, su
+**Importe**, y se presiona **+ AGREGAR MEDIO DE PAGO**. Si pagó con dos medios
+(por ejemplo $30.000 en efectivo y el resto por transferencia) se cargan los
+dos. Los importes quedan en la lista **FORMAS DE PAGO**.
+
+* Si no se carga ningún importe, el medio se completa solo con el total del
+  ticket (el caso más común: todo en un solo medio).
+* El **Nombre / Cliente** (primera fila) es opcional: se muestra en el
+  listado, en el cierre y viaja al Excel.
+* Debajo de las dos listas hay un aviso de cuadre: en rojo **"FALTAN $X …"**
+  y en verde **"PAGOS = TOTAL"**. Si la suma de los medios no da exactamente
+  el total, **no se puede registrar la venta**.
+* Para **Transferencia** el **N° DE COMPROBANTE** es obligatorio dentro del
+  mismo ticket (aunque el resto esté pago en efectivo).
+
+Al presionar **REGISTRAR VENTA** el ticket queda guardado con: n° de ticket,
+fecha y hora, usuario, productos con cantidades y precios, total, medios de
+pago con sus importes, comprobante y nombre del cliente.
+
+El sistema suma las unidades por producto y el dinero **por medio de pago sin
+duplicar la venta**: una venta de $90.000 pagada con $30.000 en efectivo y
+$60.000 transferidos cuenta como **una** operación, $30.000 en efectivo y
+$60.000 en transferencias.
 
 El **total** se calcula solo (`cantidad × precio unitario`) y el sistema
 acumula la cantidad de garrafas vendidas durante el día, por producto y en
@@ -95,12 +121,14 @@ total. Ejemplo: 3 × Garrafa 10 kg a $10.000 = **$30.000**.
 Los campos están repartidos en **dos filas** para que ninguno quede cortado ni
 fuera de pantalla en monitores chicos.
 
-Las ventas del día se listan en pantalla. Si cargaste algo mal (por ejemplo 10
-cuando son 9), seleccionás **una o varias** ventas en la lista (Ctrl o Shift +
+Las ventas del día se listan en pantalla (con sus productos, sus formas de
+pago y su comprobante). Si cargaste algo mal (por ejemplo 10 cuando son 9),
+seleccionás **una o varias** ventas en la lista (Ctrl o Shift +
 clic) y podés:
 
-* **Editar venta seleccionada** — carga la venta en el formulario, corregís la
-  cantidad o el precio y presionás **GUARDAR CAMBIOS** (no hace falta borrar).
+* **Editar venta seleccionada** — carga el ticket en el formulario con todos
+  sus productos y sus medios de pago, corregís lo que haga falta y presionás
+  **GUARDAR CAMBIOS** (no hace falta borrar).
 * **Eliminar seleccionadas** — borra **todas las marcadas de una sola vez**,
   con una sola confirmación (no hace falta ir una por una).
 * **Borrar toda la caja** — vacía por completo la caja del día (también con
@@ -120,6 +148,11 @@ usuario. Los tres botones solo funcionan mientras la caja esté abierta.
 Los importes se mantienen separados en la base y se muestran **agrupados en
 "TARJETAS" con su desglose** (débito / crédito) en la pantalla principal, en el
 cierre, en el historial y en el Excel.
+
+Un mismo ticket puede combinarse con **varios de ellos** (por ejemplo $30.000 en
+efectivo + $60.000 transferidos): cada medio guarda su importe y, cuando es
+transferencia, su N° de comprobante. El dinero se reparte entre los medios sin
+que la venta se cuente dos veces.
 
 ## 4. Pantalla principal (pestaña "Inicio")
 
@@ -249,6 +282,9 @@ COMPROBANTE** se marca en rojo como **OBLIGATORIO**:
 * Sin número de comprobante **no se puede guardar la venta**: aparece el aviso
   *"Para registrar una venta paga con TRANSFERENCIA es obligatorio ingresar el
   N° de comprobante"*.
+* Se pide **dentro del mismo ticket**, también cuando la transferencia es
+  solo una parte del pago (por ejemplo $30.000 en efectivo y el resto
+  transferido).
 * El número queda asociado a esa venta, se muestra en el listado de ventas y se
   conserva en el historial y en el detalle de los cierres.
 
@@ -279,8 +315,16 @@ bloques**, cada uno con su propio subtotal:
 Dentro de TARJETAS cada bloque cierra con su *Total Tarjeta de débito* /
 *Total Tarjeta de crédito*, y la sección cierra con **TOTAL TARJETAS** (la suma
 de los dos bloques). Al final figura el **TOTAL GENERAL** de todas las
-secciones, contado una sola vez. La columna **Nombre** es el cliente cargado en
-la venta (puede quedar vacía).
+secciones, contado una sola vez, y debajo **Cantidad de operaciones** con los
+**tickets únicos** (no las filas). La columna **Nombre** es el cliente cargado
+en la venta (puede quedar vacía).
+
+**Una fila por cobro, con su ticket.** Cada venta aparece en la sección de
+cada medio de pago que la cubrió, con el importe que le tocó y el n° de ticket
+delante (por ejemplo `#12 · María López`). Una venta de $90.000 pagada con
+$30.000 en efectivo y $60.000 transferidos ocupa **dos filas** ($30.000 en
+DINERO EN EFECTIVO y $60.000 en TRANSFERENCIAS) y **nunca** suma $90.000 dos
+veces. La carga completa y el N° de comprobante viajan en cada fila.
 
 Para las transferencias ya no hace falta una exportación aparte: todo lo del
 período sale junto, separado por secciones.
@@ -289,7 +333,21 @@ período sale junto, separado por secciones.
 
 Antes del detalle, la hoja **Movimientos** arranca con el título **RESUMEN DE
 VENTAS POR SECCIÓN DE PAGO** y **dos recuadros compactos** para responder de
-un vistazo cuántas unidades salieron con cada medio de pago.
+un vistazo cuántas unidades y cuánta plata salieron con cada medio de pago.
+
+**Cómo se reparte un ticket pagado con varios medios:**
+
+* Las **unidades** van al **medio principal** de la venta (el que aporta más
+  dinero; si empata, el primero que se cargó). Así las unidades de los
+  recuadros coinciden con las unidades realmente vendidas.
+* El **dinero** de cada fila se reparte **por familia de producto** (garrafas
+  con gas / envases sueltos), proporcional a los subtotales de esa venta. Por
+  ejemplo, si garrafas valen $60.000 y un envase $20.000 de un ticket pagado
+  con $30.000 en efectivo, a garrafas le tocan $22.500 y al envase $7.500.
+* Por eso los dos recuadros **suman el dinero cobrado exacto** y los
+  controles marcan **COINCIDE**: ni se duplica ni se pierde plata.
+* Los **controles de unidades** y **de dinero** (uno por recuadro) comparan
+  las filas del recuadro con el detalle de cobros que sigue abajo.
 
 **Recuadro 1 — VENTA DE GARRAFAS (con gas)** (una columna por producto,
 **solo los que se vendieron** en el período, con sus siglas: 10KG, 15KG, 45KG,

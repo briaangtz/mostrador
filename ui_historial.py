@@ -331,10 +331,10 @@ class DetalleCierre(tk.Toplevel):
         columnas = ("producto", "cantidad", "cliente", "medio", "comprobante",
                     "cajero", "total")
         tree = ttk.Treeview(grupo3, columns=columnas, show="headings", height=6)
-        tree.heading("producto", text="Producto")
+        tree.heading("producto", text="Productos")
         tree.heading("cantidad", text="Cant.")
         tree.heading("cliente", text="Nombre / Cliente")
-        tree.heading("medio", text="Medio de pago")
+        tree.heading("medio", text="Formas de pago")
         tree.heading("comprobante", text="N° Comprobante")
         tree.heading("cajero", text="Registró")
         tree.heading("total", text="Total")
@@ -351,7 +351,8 @@ class DetalleCierre(tk.Toplevel):
         for v in r["ventas"]:
             tree.insert("", "end", values=(
                 v["producto"] or "—", v["cantidad"],
-                v.get("cliente") or "—", v["medio"],
+                v.get("cliente") or "—",
+                v.get("medios_txt") or v.get("medio") or "—",
                 v.get("comprobante") or "—",
                 v.get("cajero") or "—",
                 money(v["total"]),

@@ -168,7 +168,7 @@ class CierreDialog(tk.Toplevel):
                                                 show="headings", height=4)
         self.tree_transferencias.heading("comprobante", text="N° Comprobante")
         self.tree_transferencias.heading("hora", text="Hora")
-        self.tree_transferencias.heading("producto", text="Producto")
+        self.tree_transferencias.heading("producto", text="Productos")
         self.tree_transferencias.heading("cantidad", text="Cant.")
         self.tree_transferencias.heading("importe", text="Importe")
         self.tree_transferencias.column("comprobante", width=170, anchor="w")

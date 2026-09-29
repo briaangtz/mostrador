@@ -1270,6 +1270,249 @@ check(app4.ventana_soporte is _ven and _ven.winfo_viewable(),
       "soporte: al volver a abrirla sigue la conversación")
 app4.destroy()
 
+# ==========================================================================
+# VENTAS COMO TICKET (v1.3): varios productos y varios medios de pago
+# ==========================================================================
+db.cerrar_sesion()
+db.iniciar_sesion("admin", "admin")
+db.reabrir_caja(caja["id"])
+
+_tk10 = db.producto_por_nombre("Garrafa 10 kg")
+_tk15 = db.producto_por_nombre("Garrafa 15 kg")
+_tkenv = db.producto_por_nombre("Envase 10 kg")
+
+_r_antes = db.resumen(caja["id"])
+_st_antes = db.estadisticas(hoy, hoy)
+
+_ticket = db.registrar_ticket(
+    caja["id"],
+    [{"producto_id": _tk10["id"], "cantidad": 1, "precio_unitario": 40000},
+     {"producto_id": _tk15["id"], "cantidad": 3, "precio_unitario": 10000},
+     {"producto_id": _tkenv["id"], "cantidad": 1, "precio_unitario": 20000}],
+    [{"medio": "Efectivo", "importe": 30000},
+     {"medio": "Transferencia", "importe": 60000, "comprobante": "123456789"}],
+    cliente="Mixta")
+check(_ticket["total"] == 90000,
+      "ticket: el total es la suma de los 3 productos")
+check(len(_ticket["items"]) == 3 and len(_ticket["pagos"]) == 2,
+      "ticket: guarda los 3 productos y los 2 medios de pago juntos")
+check("×" in (_ticket["producto"] or "") and "Envase 10 kg" in _ticket["producto"],
+      "ticket: la carga completa queda guardada en la venta")
+check(_ticket["medios_txt"] == "Efectivo + Transferencia",
+      f"ticket: se ven los dos medios de pago (obtuvo {_ticket['medios_txt']})")
+check(_ticket["comprobante"] == "123456789",
+      "ticket: el N° de comprobante queda en el ticket")
+check(_ticket["medio"] == "Transferencia",
+      "ticket: el medio principal es el que aporta más dinero")
+
+_r_desp = db.resumen(caja["id"])
+check(_r_desp["cantidad_ventas"] == _r_antes["cantidad_ventas"] + 1,
+      "ticket: varios productos y varios medios es UNA sola operación")
+check(abs(_r_desp["total_general"] - _r_antes["total_general"] - 90000) < 0.01,
+      "ticket: el total del día crece una sola vez (sin duplicar)")
+check(abs(_r_desp["efectivo"] - _r_antes["efectivo"] - 30000) < 0.01,
+      "ticket: en efectivo solo cuenta lo pagado en efectivo")
+check(abs(_r_desp["transferencias"] - _r_antes["transferencias"] - 60000) < 0.01,
+      "ticket: en transferencias solo cuenta lo transferido")
+check(_r_desp["n_transferencias"] == _r_antes["n_transferencias"] + 1,
+      "ticket: el cobro mixto cuenta UNA transferencia")
+check(_r_desp["total_garrafas"] == _r_antes["total_garrafas"] + 5,
+      f"ticket: suma las unidades de los 3 productos "
+      f"(1 + 3 + 1 = 5, obtuvo "
+      f"{_r_desp['total_garrafas'] - _r_antes['total_garrafas']})")
+_st_desp = db.estadisticas(hoy, hoy)
+check(abs(_st_desp["total_vendido"] - _st_antes["total_vendido"] - 90000) < 0.01,
+      "ticket: las estadísticas cuentan el dinero una sola vez")
+check(_st_desp["cantidad_ventas"] == _st_antes["cantidad_ventas"] + 1,
+      "ticket: las estadísticas cuentan tickets, no cobros")
+
+# ---- Validaciones del ticket (punto 5 de la especificación) ----
+_err_suma = ""
+try:
+    db.registrar_ticket(
+        caja["id"],
+        [{"producto_id": _tk10["id"], "cantidad": 1, "precio_unitario": 10000}],
+        [{"medio": "Efectivo", "importe": 4000},
+         {"medio": "Tarjeta de débito", "importe": 4000}])
+except ValueError as e:
+    _err_suma = str(e)
+check(bool(_err_suma) and "faltan" in _err_suma.lower(),
+      f"ticket: avisa cuánto falta para completar la venta "
+      f"(obtuvo {_err_suma or '—'})")
+check_error(lambda: db.registrar_ticket(
+    caja["id"], [],
+    [{"medio": "Efectivo", "importe": 1000}]),
+    "ticket: no se puede guardar un ticket sin productos")
+check_error(lambda: db.registrar_ticket(
+    caja["id"],
+    [{"producto_id": _tk10["id"], "cantidad": 0, "precio_unitario": 1000}],
+    [{"medio": "Efectivo", "importe": 0}]),
+    "ticket: ni cantidad ni importe en cero")
+check(db.resumen(caja["id"])["cantidad_ventas"] == _r_antes["cantidad_ventas"] + 1,
+      "ticket: lo rechazado no se guarda")
+
+# ---- Excel: con un ticket mixto los controles siguen cerrando ----
+_xl_mix = os.path.join(_tempfile.gettempdir(), "excel_mixto.xlsx")
+if os.path.exists(_xl_mix):
+    os.remove(_xl_mix)
+_n_xl, _m_xl = xl.exportar_movimientos(hoy, hoy, _xl_mix)
+_r_xl = db.resumen(caja["id"])
+check(_n_xl == _r_xl["cantidad_ventas"],
+      f"excel: cuenta tickets únicos ({_n_xl}) y no filas de cobro")
+check(abs(_m_xl - _r_xl["total_general"]) < 0.01,
+      "excel: el total del reporte es el dinero cobrado en los medios")
+_wsx = load_workbook(_xl_mix).active
+_filas_xl = [[str(c.value) for c in f if c.value is not None]
+             for f in _wsx.iter_rows()]
+_mixta = [f for f in _filas_xl
+          if f and str(f[0]).startswith("#") and "Mixta" in " ".join(f)]
+check(len(_mixta) == 2,
+      f"excel: el ticket mixto tiene una fila por cada cobro "
+      f"(obtuvo {len(_mixta)})")
+_con_tx = [f for f in _mixta if any("123456789" in x for x in f)]
+check(len(_con_tx) == 1,
+      "excel: la transferencia figura una sola vez y con su comprobante")
+if _con_tx:
+    _nums = []
+    for x in _con_tx[0]:
+        try:
+            _nums.append(float(x))
+        except (TypeError, ValueError):
+            pass
+    check(any(abs(v - 60000) < 0.01 for v in _nums),
+          "excel: en transferencias solo figura el importe transferido "
+          "($60.000), no los $90.000 de la venta")
+else:
+    check(False, "excel: en transferencias solo figura el importe transferido")
+_ctrl_xl = [f for f in _filas_xl if f and str(f[0]).startswith("CONTROL DE ")]
+check(len(_ctrl_xl) >= 2
+      and all(str(f[-1]) == "COINCIDE" for f in _ctrl_xl),
+      "excel: con un ticket mixto los controles siguen dando COINCIDE")
+check(any(str(f[0]).startswith("Total ") for f in _filas_xl if f),
+      "excel: el detalle agrupa los cobros por medio de pago")
+
+# ---- Edición y borrado del ticket ----
+_editado = db.actualizar_ticket(
+    _ticket["id"],
+    [{"producto_id": _tk10["id"], "cantidad": 3, "precio_unitario": 40000}],
+    [{"medio": "Efectivo", "importe": 120000}],
+    cliente="Editada")
+check(_editado["total"] == 120000 and len(_editado["items"]) == 1
+      and len(_editado["pagos"]) == 1,
+      "ticket: se puede editar la lista de productos y la de pagos")
+db.eliminar_ventas([_ticket["id"]])
+_con = _sqlite.connect(db.DB_PATH)
+_huerfanos = (
+    _con.execute("SELECT COUNT(*) FROM venta_items WHERE venta_id NOT IN "
+                 "(SELECT id FROM ventas)").fetchone()[0]
+    + _con.execute("SELECT COUNT(*) FROM venta_pagos WHERE venta_id NOT IN "
+                   "(SELECT id FROM ventas)").fetchone()[0])
+_con.close()
+check(_huerfanos == 0,
+      "ticket: al borrar no quedan productos ni pagos huérfanos")
+
+# ---- Migración: las ventas viejas (1 producto + 1 medio) sobreviven ----
+_mig = os.path.join(_tempfile.gettempdir(), "garrafas_migracion.db")
+if os.path.exists(_mig):
+    os.remove(_mig)
+_ruta_ok = db.DB_PATH
+db.DB_PATH = _mig
+_con = _sqlite.connect(_mig)
+_con.executescript("""
+CREATE TABLE productos (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT,
+    familia TEXT, precio REAL, activo INTEGER DEFAULT 1);
+CREATE TABLE cajas (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT,
+    estado TEXT, saldo_base REAL DEFAULT 0, creado TEXT);
+CREATE TABLE ventas (id INTEGER PRIMARY KEY AUTOINCREMENT, caja_id INTEGER,
+    producto_id INTEGER, cantidad INTEGER, precio_unitario REAL, total REAL,
+    medio TEXT, fecha_hora TEXT, registrada_por INTEGER);
+INSERT INTO productos (nombre, familia, precio)
+    VALUES ('Garrafa 10 kg', 'garrafas', 10000);
+INSERT INTO cajas (fecha, estado, creado) VALUES ('2024-01-01', 'abierta', 'x');
+INSERT INTO ventas (caja_id, producto_id, cantidad, precio_unitario, total,
+                    medio, fecha_hora)
+    VALUES (1, 1, 3, 10000, 30000, 'Efectivo', '2024-01-01 10:00:00');
+""")
+_con.commit()
+_con.close()
+db.init()
+_vieja = db.venta_por_id(1)
+check(_vieja is not None and _vieja["cantidad"] == 3
+      and _vieja["producto_id"] == 1 and _vieja["total"] == 30000
+      and _vieja["medio"] == "Efectivo",
+      "migración: la venta vieja queda como ticket con producto y medio")
+check(len(_vieja["items"]) == 1 and len(_vieja["pagos"]) == 1,
+      "migración: tiene un producto y un medio de pago")
+db.init()
+check(db.venta_por_id(1) is not None and db.venta_por_id(2) is None,
+      "migración: volver a iniciar no duplica ni rompe nada")
+db.DB_PATH = _ruta_ok
+os.remove(_mig)
+
+# ---- Interfaz: armar y registrar un ticket desde Ventas ----
+app5 = main_mod.App()
+app5.update()
+app5.mostrar("ventas")
+app5.update()
+pv5 = app5.paneles["ventas"]
+_antes_ui = db.resumen(caja["id"])["cantidad_ventas"]
+
+pv5.combo_producto.current(0)
+pv5.var_cantidad.set("2")
+pv5.var_precio.set("10000")
+pv5._agregar_item()
+check(len(pv5._items) == 1, "ui ticket: el producto entra al ticket")
+pv5.combo_producto.current(1)
+pv5.var_cantidad.set("1")
+pv5.var_precio.set("15000")
+pv5._agregar_item()
+app5.update()
+check(len(pv5._items) == 2 and abs(pv5._total - 35000) < 0.01,
+      f"ui ticket: el total junta los dos productos "
+      f"(obtuvo {pv5._total}, esperaba 35000)")
+check(len(pv5.tree_items.get_children()) == 2,
+      "ui ticket: los productos se ven en la lista del ticket")
+
+pv5.combo_medio.set("Efectivo")
+pv5.var_importe.set("10000")
+pv5._agregar_pago()
+pv5.combo_medio.set("Tarjeta de débito")
+pv5.var_importe.set("25000")
+pv5._agregar_pago()
+app5.update()
+check(len(pv5._pagos) == 2 and len(pv5.tree_pagos.get_children()) == 2,
+      "ui ticket: los dos medios de pago quedan en la lista")
+check("FALTAN" not in pv5.lbl_pago.cget("text")
+      and "PAGOS = TOTAL" in pv5.lbl_pago.cget("text"),
+      f"ui ticket: avisa que los pagos suman el total "
+      f"(obtuvo {pv5.lbl_pago.cget('text')})")
+
+pv5._registrar()
+app5.update()
+check(db.resumen(caja["id"])["cantidad_ventas"] == _antes_ui + 1,
+      "ui ticket: registra el ticket completo de una sola vez")
+_nuevo = db.venta_por_id(int(pv5.tree.get_children()[-1]))
+check(_nuevo is not None and len(_nuevo["items"]) == 2
+      and len(_nuevo["pagos"]) == 2 and abs(_nuevo["total"] - 35000) < 0.01,
+      "ui ticket: quedan guardados los 2 productos y los 2 cobros")
+check("Tarjeta de débito" in _nuevo["medios_txt"],
+      "ui ticket: en la lista se ven las dos formas de pago")
+check(pv5.var_cliente.get() == "" and pv5.var_importe.get() == "",
+      "ui ticket: al registrar vuelve a quedar limpio para la próxima venta")
+
+# Suma incompleta: no se registra y avisa cuánto falta
+ERRORES.clear()
+pv5.combo_medio.set("Efectivo")
+pv5.var_importe.set("1000")
+pv5._registrar()
+app5.update()
+check(db.resumen(caja["id"])["cantidad_ventas"] == _antes_ui + 1,
+      "ui ticket: un cobro que no suma el total bloquea el registro")
+check(any("faltan" in str(e).lower() for e in ERRORES),
+      f"ui ticket: muestra cuánto falta para completar la venta "
+      f"(obtuvo {len(ERRORES)} avisos)")
+app5.destroy()
+
 os.remove(TMP)
 import shutil as _shutil
 _shutil.rmtree(db.dir_respaldos(), ignore_errors=True)

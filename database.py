@@ -610,15 +610,33 @@ def init():
                 creado   TEXT
             );
 
+            -- Una venta es un TICKET: puede llevar varios productos
+            -- (venta_items) y abonarse con varios medios de pago
+            -- (venta_pagos), siempre que la suma de los pagos dé el total.
             CREATE TABLE IF NOT EXISTS ventas (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 caja_id        INTEGER NOT NULL REFERENCES cajas(id),
-                producto_id    INTEGER NOT NULL,
-                cantidad       INTEGER NOT NULL,
-                precio_unitario REAL   NOT NULL,
+                fecha_hora     TEXT    NOT NULL,
+                cliente        TEXT,
                 total          REAL    NOT NULL,
-                medio          TEXT    NOT NULL,
-                fecha_hora     TEXT    NOT NULL
+                registrada_por INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS venta_items (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                venta_id        INTEGER NOT NULL,
+                producto_id     INTEGER NOT NULL,
+                cantidad        INTEGER NOT NULL,
+                precio_unitario REAL    NOT NULL,
+                subtotal        REAL    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS venta_pagos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                venta_id    INTEGER NOT NULL,
+                medio       TEXT    NOT NULL,
+                importe     REAL    NOT NULL,
+                comprobante TEXT
             );
 
             CREATE TABLE IF NOT EXISTS cierres (
@@ -676,14 +694,59 @@ def init():
             """
         )
 
-        # Migraciones de bases de datos creadas con versiones anteriores
+        # Ejes de las tablas de detalle de cada venta (ticket)
+        con.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS ix_items_venta
+                ON venta_items(venta_id);
+            CREATE INDEX IF NOT EXISTS ix_pagos_venta
+                ON venta_pagos(venta_id);
+            """
+        )
+
+        # Migración de bases creadas con versiones anteriores: la tabla vieja
+        # guardaba UN producto y UN medio por venta. Ahora cada venta es un
+        # TICKET con sus productos (venta_items) y sus formas de pago
+        # (venta_pagos). Las ventas viejas se pasan al formato nuevo
+        # conservando id, fecha, cliente, total y comprobante.
         columnas_ventas = {r["name"] for r in con.execute("PRAGMA table_info(ventas)")}
-        if "comprobante" not in columnas_ventas:
-            con.execute("ALTER TABLE ventas ADD COLUMN comprobante TEXT")
-        if "registrada_por" not in columnas_ventas:
-            con.execute("ALTER TABLE ventas ADD COLUMN registrada_por INTEGER")
-        if "cliente" not in columnas_ventas:
-            con.execute("ALTER TABLE ventas ADD COLUMN cliente TEXT")
+        if "producto_id" in columnas_ventas:
+            if "comprobante" not in columnas_ventas:
+                con.execute("ALTER TABLE ventas ADD COLUMN comprobante TEXT")
+            if "registrada_por" not in columnas_ventas:
+                con.execute("ALTER TABLE ventas ADD COLUMN registrada_por INTEGER")
+            if "cliente" not in columnas_ventas:
+                con.execute("ALTER TABLE ventas ADD COLUMN cliente TEXT")
+            con.execute("ALTER TABLE ventas RENAME TO ventas_viejas")
+            con.executescript(
+                """
+                CREATE TABLE ventas (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    caja_id        INTEGER NOT NULL,
+                    fecha_hora     TEXT    NOT NULL,
+                    cliente        TEXT,
+                    total          REAL    NOT NULL,
+                    registrada_por INTEGER
+                );
+
+                INSERT INTO ventas (id, caja_id, fecha_hora, cliente, total,
+                                    registrada_por)
+                    SELECT id, caja_id, fecha_hora, cliente, total,
+                           registrada_por
+                    FROM ventas_viejas;
+
+                INSERT INTO venta_items (venta_id, producto_id, cantidad,
+                                         precio_unitario, subtotal)
+                    SELECT id, producto_id, cantidad, precio_unitario, total
+                    FROM ventas_viejas;
+
+                INSERT INTO venta_pagos (venta_id, medio, importe, comprobante)
+                    SELECT id, medio, total, comprobante
+                    FROM ventas_viejas;
+
+                DROP TABLE ventas_viejas;
+                """
+            )
 
         columnas_cierres = {r["name"] for r in con.execute("PRAGMA table_info(cierres)")}
         if "n_transferencias" not in columnas_cierres:
@@ -989,85 +1052,284 @@ def get_caja_por_id(caja_id):
 
 
 # ---------------------------------------------------------------------------
-# Ventas
+# Ventas = TICKETS: una venta puede tener varios productos (venta_items) y
+# abonarse con uno o varios medios de pago (venta_pagos), siempre que la
+# suma de los pagos dé exactamente el total de la venta.
 # ---------------------------------------------------------------------------
 
-def registrar_venta(caja_id, producto_id, cantidad, precio_unitario, medio,
-                    comprobante=None, cliente=None):
+def _items_de(con, venta_ids):
+    """{venta_id: [item, ...]} con los productos de cada venta."""
+    ids = list(venta_ids)
+    if not ids:
+        return {}
+    comodines = ",".join("?" * len(ids))
+    filas = con.execute(
+        f"""
+        SELECT i.*, p.nombre AS producto
+        FROM venta_items i
+        LEFT JOIN productos p ON p.id = i.producto_id
+        WHERE i.venta_id IN ({comodines})
+        ORDER BY i.id
+        """,
+        ids,
+    ).fetchall()
+    salida = {}
+    for fila in filas:
+        salida.setdefault(fila["venta_id"], []).append(dict(fila))
+    return salida
+
+
+def _pagos_de(con, venta_ids):
+    """{venta_id: [pago, ...]} con las formas de pago de cada venta."""
+    ids = list(venta_ids)
+    if not ids:
+        return {}
+    comodines = ",".join("?" * len(ids))
+    filas = con.execute(
+        f"SELECT * FROM venta_pagos WHERE venta_id IN ({comodines}) ORDER BY id",
+        ids,
+    ).fetchall()
+    salida = {}
+    for fila in filas:
+        salida.setdefault(fila["venta_id"], []).append(dict(fila))
+    return salida
+
+
+def texto_items(items):
+    """'1 × Garrafa 10 kg + 2 × Garrafa 15 kg'."""
+    return " + ".join(
+        f"{i['cantidad']} × {i.get('producto') or 'Producto'}" for i in items
+    )
+
+
+def texto_pagos(pagos):
+    """'Efectivo'  ·  'Efectivo + Tarjeta de débito'."""
+    nombres = []
+    for p in pagos:
+        if p["medio"] not in nombres:
+            nombres.append(p["medio"])
+    return " + ".join(nombres)
+
+
+def medio_principal(pagos):
+    """Medio que aporta más importe (en empate, el primero cargado).
+
+    Es el medio al que se le acreditan las UNIDADES de esa venta en los
+    reportes; el dinero siempre se reparte exacto entre todos los medios.
+    """
+    if not pagos:
+        return None
+    mejor = pagos[0]
+    for p in pagos[1:]:
+        if float(p["importe"]) > float(mejor["importe"]):
+            mejor = p
+    return mejor["medio"]
+
+
+def comprobante_de(pagos, medio=None):
+    """N° de comprobante de un pago (si hay medio, el de ese medio)."""
+    for p in pagos:
+        if medio and p["medio"] != medio:
+            continue
+        if (p.get("comprobante") or "").strip():
+            return p["comprobante"]
+    return None
+
+
+def _armar_ticket(fila, items, pagos):
+    """Dict de una venta con sus productos, sus pagos y los datos
+    heredados (producto, cantidad, medio...) que siguen usando los
+    reportes y las pantallas."""
+    v = dict(fila)
+    items = items or []
+    pagos = pagos or []
+    un_solo = len(items) == 1
+    primero = items[0] if items else None
+
+    v["items"] = items
+    v["pagos"] = pagos
+    v["cantidad"] = sum(int(i["cantidad"]) for i in items)
+    v["producto_id"] = primero["producto_id"] if un_solo else None
+    v["producto"] = ((primero.get("producto") if un_solo
+                      else texto_items(items)) or None)
+    v["precio_unitario"] = float(primero["precio_unitario"]) if un_solo else None
+    v["medio"] = medio_principal(pagos)
+    v["medios_txt"] = texto_pagos(pagos)
+    v["comprobante"] = (comprobante_de(pagos, "Transferencia")
+                        or comprobante_de(pagos))
+    return v
+
+
+def _normalizar_items(items):
+    """Valida y normaliza la lista de productos de un ticket."""
+    salida = []
+    for it in items or []:
+        try:
+            pid = int(it["producto_id"])
+            cantidad = int(it["cantidad"])
+            precio = float(it["precio_unitario"])
+        except (TypeError, ValueError, KeyError):
+            raise ValueError("Revisá el producto, la cantidad y el precio.")
+        prod = producto_por_id(pid)
+        if not prod:
+            raise ValueError("El producto seleccionado ya no existe.")
+        if cantidad <= 0:
+            raise ValueError(
+                f"La cantidad de {prod['nombre']} tiene que ser mayor a cero."
+            )
+        if precio <= 0:
+            raise ValueError(
+                f"El precio de {prod['nombre']} tiene que ser mayor a cero."
+            )
+        salida.append({
+            "producto_id": pid,
+            "cantidad": cantidad,
+            "precio_unitario": precio,
+            "subtotal": cantidad * precio,
+            "producto": prod["nombre"],
+        })
+    if not salida:
+        raise ValueError("La venta necesita al menos un producto.")
+    return salida
+
+
+def _normalizar_pagos(pagos, total):
+    """Valida las formas de pago: medios válidos, importes > 0,
+    comprobante obligatorio en transferencia y SUMA = total."""
+    salida = []
+    for pg in pagos or []:
+        medio = str(pg.get("medio") or "").strip()
+        try:
+            importe = float(pg.get("importe") or 0)
+        except (TypeError, ValueError):
+            importe = 0.0
+        comprobante = (pg.get("comprobante") or "").strip() or None
+        if medio not in MEDIOS_PAGO:
+            raise ValueError(f"Medio de pago no válido: {medio or '—'}.")
+        if importe <= 0:
+            raise ValueError(f"El importe en {medio} tiene que ser mayor a cero.")
+        # El N° de comprobante de la transferencia es obligatorio y se pide
+        # en la pantalla de ventas (ui_ventas); acá solo se guarda.
+        salida.append({"medio": medio, "importe": importe,
+                       "comprobante": comprobante})
+    if not salida:
+        raise ValueError("Falta indicar cómo se pagó la venta.")
+
+    pagado = sum(p["importe"] for p in salida)
+    if abs(pagado - float(total)) >= 0.01:
+        diferencia = float(total) - pagado
+        if diferencia > 0:
+            raise ValueError(
+                f"Faltan ${diferencia:,.0f} para completar la venta: "
+                f"total ${float(total):,.0f} y ya se cargaron "
+                f"${pagado:,.0f}.".replace(",", ".")
+            )
+        raise ValueError(
+            f"Los pagos superan el total en ${-diferencia:,.0f}: "
+            f"total ${float(total):,.0f} y se cargaron "
+            f"${pagado:,.0f}.".replace(",", ".")
+        )
+    return salida
+
+
+def _descripcion_ticket(t):
+    """Texto de registro de actividad para una venta (ticket)."""
+    texto = (f"#{t['id']} — {texto_items(t['items'])} — {t['medios_txt']} — "
+             f"${t['total']:,.0f}".replace(",", "."))
+    if t.get("comprobante"):
+        texto += f" — Comprobante: {t['comprobante']}"
+    if t.get("cliente"):
+        texto += f" — Cliente: {t['cliente']}"
+    return texto
+
+
+def registrar_ticket(caja_id, items, pagos, cliente=None):
+    """Registra una venta completa: uno o varios productos y una o varias
+    formas de pago cuya suma da exactamente el total.
+
+    items: [{"producto_id", "cantidad", "precio_unitario"}, ...]
+    pagos: [{"medio", "importe", "comprobante"}, ...]
+    Devuelve el ticket guardado (con id, total, items y pagos).
+    """
     if not apertura_de(caja_id):
         raise ValueError(
             "La caja todavía no fue abierta. "
             "Presioná ABRIR CAJA antes de registrar ventas."
         )
-    total = float(cantidad) * float(precio_unitario)
+    items_limpios = _normalizar_items(items)
+    total = sum(i["subtotal"] for i in items_limpios)
+    pagos_limpios = _normalizar_pagos(pagos, total)
     u = usuario_sesion()
+
     with db() as con:
-        con.execute(
-            "INSERT INTO ventas (caja_id, producto_id, cantidad, precio_unitario, "
-            "total, medio, fecha_hora, comprobante, registrada_por, cliente) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                caja_id,
-                producto_id,
-                int(cantidad),
-                float(precio_unitario),
-                total,
-                medio,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                (comprobante or "").strip() or None,
-                u["id"] if u else None,
-                (cliente or "").strip() or None,
-            ),
+        cur = con.execute(
+            "INSERT INTO ventas (caja_id, fecha_hora, cliente, total, "
+            "registrada_por) VALUES (?, ?, ?, ?, ?)",
+            (caja_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             (cliente or "").strip() or None, total,
+             u["id"] if u else None),
         )
-    prod = producto_por_id(producto_id)
-    log_actividad(
-        "Venta registrada",
-        f"{cantidad} × {prod['nombre'] if prod else 'producto'} — {medio} — "
-        f"${total:,.0f}".replace(",", ".") +
-        (f" — Comprobante: {comprobante}" if comprobante else "") +
-        (f" — Cliente: {cliente}" if cliente else ""),
-        u,
+        venta_id = cur.lastrowid
+        con.executemany(
+            "INSERT INTO venta_items (venta_id, producto_id, cantidad, "
+            "precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
+            [(venta_id, i["producto_id"], i["cantidad"], i["precio_unitario"],
+              i["subtotal"]) for i in items_limpios],
+        )
+        con.executemany(
+            "INSERT INTO venta_pagos (venta_id, medio, importe, comprobante) "
+            "VALUES (?, ?, ?, ?)",
+            [(venta_id, p["medio"], p["importe"], p["comprobante"])
+             for p in pagos_limpios],
+        )
+
+    ticket = venta_por_id(venta_id)
+    log_actividad("Venta registrada", _descripcion_ticket(ticket), u)
+    return ticket
+
+
+def registrar_venta(caja_id, producto_id, cantidad, precio_unitario, medio,
+                    comprobante=None, cliente=None):
+    """Atajo de UN producto y UN medio de pago. Devuelve el total
+    (como en las versiones anteriores del sistema)."""
+    total = float(cantidad) * float(precio_unitario)
+    ticket = registrar_ticket(
+        caja_id,
+        [{"producto_id": producto_id, "cantidad": cantidad,
+          "precio_unitario": precio_unitario}],
+        [{"medio": medio, "importe": total, "comprobante": comprobante}],
+        cliente=cliente,
     )
-    return total
+    return ticket["total"]
 
 
 def ventas_de(caja_id):
+    """Ventas (tickets) de una caja, con sus productos y sus pagos."""
     with db() as con:
         filas = con.execute(
             """
-            SELECT v.*, p.nombre AS producto,
-                   COALESCE(u.usuario, '(usuario eliminado)') AS cajero
+            SELECT v.*, COALESCE(u.usuario, '(usuario eliminado)') AS cajero
             FROM ventas v
-            LEFT JOIN productos p ON p.id = v.producto_id
             LEFT JOIN usuarios u ON u.id = v.registrada_por
             WHERE v.caja_id = ?
             ORDER BY v.id
             """,
             (caja_id,),
         ).fetchall()
-    return [dict(f) for f in filas]
+        ids = [f["id"] for f in filas]
+        items = _items_de(con, ids)
+        pagos = _pagos_de(con, ids)
+    return [_armar_ticket(f, items.get(f["id"], []), pagos.get(f["id"], []))
+            for f in filas]
 
 
 def eliminar_venta(venta_id):
-    venta = venta_por_id(venta_id)
-    with db() as con:
-        con.execute("DELETE FROM ventas WHERE id = ?", (venta_id,))
-    if venta:
-        prod = producto_por_id(venta["producto_id"])
-        log_actividad(
-            "Venta eliminada",
-            f"#{venta_id} — {venta['cantidad']} × "
-            f"{prod['nombre'] if prod else 'producto'} — "
-            f"${venta['total']:,.0f}".replace(",", "."),
-        )
+    return eliminar_ventas([venta_id])
 
 
 def eliminar_ventas(venta_ids):
-    """Elimina varias ventas de una sola vez. Devuelve cuántas borró.
-
-    Se usa para borrar en masa (selección múltiple o vaciado de caja).
-    El registro de actividad se escribe después, ya con la transacción
-    cerrada, para no trabar la base.
+    """Elimina varias ventas (tickets) de una sola vez. Devuelve cuántas
+    borró. El registro de actividad se escribe con la transacción cerrada.
     """
     ids = [int(i) for i in venta_ids]
     if not ids:
@@ -1075,69 +1337,103 @@ def eliminar_ventas(venta_ids):
     comodines = ",".join("?" * len(ids))
     with db() as con:
         filas = con.execute(
-            f"SELECT id, producto_id, cantidad, total FROM ventas "
-            f"WHERE id IN ({comodines})", ids).fetchall()
+            f"SELECT * FROM ventas WHERE id IN ({comodines})", ids
+        ).fetchall()
+        borradas = [f["id"] for f in filas]
+        items = _items_de(con, borradas)
+        pagos = _pagos_de(con, borradas)
+        con.execute(f"DELETE FROM venta_items WHERE venta_id IN ({comodines})",
+                    ids)
+        con.execute(f"DELETE FROM venta_pagos WHERE venta_id IN ({comodines})",
+                    ids)
         con.execute(f"DELETE FROM ventas WHERE id IN ({comodines})", ids)
-        nombres = {}
-        for fila in filas:
-            pid = fila["producto_id"]
-            if pid not in nombres:
-                p = con.execute("SELECT nombre FROM productos WHERE id = ?",
-                                (pid,)).fetchone()
-                nombres[pid] = p["nombre"] if p else "producto"
 
-    for fila in filas:
-        log_actividad(
-            "Venta eliminada",
-            f"#{fila['id']} — {fila['cantidad']} × {nombres[fila['producto_id']]} — "
-            f"${fila['total']:,.0f}".replace(",", "."),
-        )
+    for f in filas:
+        ticket = _armar_ticket(f, items.get(f["id"], []), pagos.get(f["id"], []))
+        log_actividad("Venta eliminada", _descripcion_ticket(ticket))
     return len(filas)
+
+
+def actualizar_ticket(venta_id, items, pagos, cliente=None):
+    """Corrige una venta ya registrada: vuelve a cargar sus productos y
+    sus formas de pago (recalcula el total)."""
+    if not venta_por_id(venta_id):
+        raise ValueError("La venta indicada ya no existe.")
+    items_limpios = _normalizar_items(items)
+    total = sum(i["subtotal"] for i in items_limpios)
+    pagos_limpios = _normalizar_pagos(pagos, total)
+    u = usuario_sesion()
+
+    with db() as con:
+        con.execute(
+            "UPDATE ventas SET cliente = ?, total = ?, registrada_por = ? "
+            "WHERE id = ?",
+            ((cliente or "").strip() or None, total,
+             u["id"] if u else None, venta_id),
+        )
+        con.execute("DELETE FROM venta_items WHERE venta_id = ?", (venta_id,))
+        con.execute("DELETE FROM venta_pagos WHERE venta_id = ?", (venta_id,))
+        con.executemany(
+            "INSERT INTO venta_items (venta_id, producto_id, cantidad, "
+            "precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
+            [(venta_id, i["producto_id"], i["cantidad"], i["precio_unitario"],
+              i["subtotal"]) for i in items_limpios],
+        )
+        con.executemany(
+            "INSERT INTO venta_pagos (venta_id, medio, importe, comprobante) "
+            "VALUES (?, ?, ?, ?)",
+            [(venta_id, p["medio"], p["importe"], p["comprobante"])
+             for p in pagos_limpios],
+        )
+
+    ticket = venta_por_id(venta_id)
+    log_actividad("Venta modificada", _descripcion_ticket(ticket))
+    return ticket
 
 
 def actualizar_venta(venta_id, producto_id, cantidad, precio_unitario, medio,
                      comprobante=None, cliente=None):
-    """Corrige una venta ya registrada (recalcula el total)."""
-    total = float(cantidad) * float(precio_unitario)
-    previa = venta_por_id(venta_id)
-    with db() as con:
-        con.execute(
-            "UPDATE ventas SET producto_id = ?, cantidad = ?, precio_unitario = ?, "
-            "total = ?, medio = ?, comprobante = ?, cliente = ?, "
-            "registrada_por = ? WHERE id = ?",
-            (producto_id, int(cantidad), float(precio_unitario), total, medio,
-             (comprobante or "").strip() or None,
-             (cliente or "").strip() or None,
-             (usuario_sesion() or {}).get("id") or
-             (previa or {}).get("registrada_por"),
-             venta_id),
-        )
-    prod = producto_por_id(producto_id)
-    log_actividad(
-        "Venta modificada",
-        f"#{venta_id} — {cantidad} × {prod['nombre'] if prod else 'producto'} — "
-        f"{medio} — ${total:,.0f}".replace(",", "."),
+    """Atajo para corregir una venta de UN producto y UN medio de pago.
+    Devuelve el total."""
+    ticket = actualizar_ticket(
+        venta_id,
+        [{"producto_id": producto_id, "cantidad": cantidad,
+          "precio_unitario": precio_unitario}],
+        [{"medio": medio, "importe": float(cantidad) * float(precio_unitario),
+          "comprobante": comprobante}],
+        cliente=cliente,
     )
-    return total
+    return ticket["total"]
 
 
 def venta_por_id(venta_id):
+    """Una venta (ticket) con sus productos y sus pagos, o None."""
     with db() as con:
-        fila = con.execute("SELECT * FROM ventas WHERE id = ?",
-                           (venta_id,)).fetchone()
-    return dict(fila) if fila else None
+        fila = con.execute(
+            """
+            SELECT v.*, COALESCE(u.usuario, '(usuario eliminado)') AS cajero
+            FROM ventas v
+            LEFT JOIN usuarios u ON u.id = v.registrada_por
+            WHERE v.id = ?
+            """,
+            (venta_id,),
+        ).fetchone()
+        if not fila:
+            return None
+        items = _items_de(con, [venta_id]).get(venta_id, [])
+        pagos = _pagos_de(con, [venta_id]).get(venta_id, [])
+    return _armar_ticket(fila, items, pagos)
 
 
 def resumen(caja_id):
     """
     Resumen completo de la caja:
-      - ventas por producto (cantidad y total)
-      - totales por medio de pago
+      - ventas por producto (cantidad y total) sumando los ítems
+      - totales por medio de pago sumando los pagos de cada ticket
       - totales generales
     """
     ventas = ventas_de(caja_id)
-    productos_lista = productos(solo_activos=False)
-    nombres = {p["id"]: p["nombre"] for p in productos_lista}
+    nombres = {p["id"]: p["nombre"] for p in productos(solo_activos=False)}
 
     por_producto = {}
     for p in productos(solo_activos=True):
@@ -1146,23 +1442,39 @@ def resumen(caja_id):
     medios = {clave: 0.0 for clave in CLAVE_MEDIO.values()}
     total_vendido = 0.0
     total_garrafas = 0
+    transferencias_lista = []
 
     for v in ventas:
-        pid = v["producto_id"]
-        if pid not in por_producto:
-            por_producto[pid] = {
-                "nombre": v["producto"] or nombres.get(pid, "Producto"),
-                "cantidad": 0,
-                "total": 0.0,
-            }
-        por_producto[pid]["cantidad"] += v["cantidad"]
-        por_producto[pid]["total"] += v["total"]
+        # Unidades y dinero por producto: salen de los ítems del ticket
+        for it in v["items"]:
+            pid = it["producto_id"]
+            if pid not in por_producto:
+                por_producto[pid] = {
+                    "nombre": it.get("producto") or nombres.get(pid, "Producto"),
+                    "cantidad": 0,
+                    "total": 0.0,
+                }
+            por_producto[pid]["cantidad"] += int(it["cantidad"])
+            por_producto[pid]["total"] += float(it["subtotal"])
+            total_garrafas += int(it["cantidad"])
 
-        clave = CLAVE_MEDIO.get(v["medio"], "efectivo")
-        medios[clave] += v["total"]
+        # Dinero por medio de pago: sale de los pagos (una venta mixta
+        # reparte su total entre los medios que la cancelaron)
+        for pg in v["pagos"]:
+            clave = CLAVE_MEDIO.get(pg["medio"], "efectivo")
+            medios[clave] += float(pg["importe"])
+            if pg["medio"] == "Transferencia":
+                transferencias_lista.append({
+                    "id": v["id"],
+                    "fecha_hora": v["fecha_hora"],
+                    "comprobante": pg.get("comprobante") or "",
+                    "producto": v["producto"],
+                    "cantidad": v["cantidad"],
+                    "total": float(pg["importe"]),
+                    "medio": pg["medio"],
+                })
 
-        total_vendido += v["total"]
-        total_garrafas += v["cantidad"]
+        total_vendido += float(v["total"])
 
     fondo = get_fondo_inicial()
     ap = apertura_de(caja_id)
@@ -1170,18 +1482,6 @@ def resumen(caja_id):
         fondo = float(ap["monto_inicial"])
     efectivo_esperado = medios["efectivo"] + fondo
     total_general = sum(medios.values())
-
-    transferencias_lista = [
-        {
-            "id": v["id"],
-            "fecha_hora": v["fecha_hora"],
-            "comprobante": v.get("comprobante") or "",
-            "producto": v["producto"],
-            "cantidad": v["cantidad"],
-            "total": v["total"],
-        }
-        for v in ventas if v["medio"] == "Transferencia"
-    ]
 
     return {
         "por_producto": por_producto,
@@ -1206,22 +1506,26 @@ def resumen(caja_id):
 # ---------------------------------------------------------------------------
 
 def ventas_rango(desde, hasta):
-    """Ventas de las cajas cuya fecha esté entre 'desde' y 'hasta' (ISO)."""
+    """Ventas (tickets) de las cajas cuya fecha esté entre 'desde' y
+    'hasta' (ISO), con sus productos y sus pagos."""
     with db() as con:
         filas = con.execute(
             """
-            SELECT v.*, p.nombre AS producto, k.fecha AS fecha,
+            SELECT v.*, k.fecha AS fecha,
                    COALESCE(u.usuario, '(usuario eliminado)') AS cajero
             FROM ventas v
             JOIN cajas k ON k.id = v.caja_id
-            LEFT JOIN productos p ON p.id = v.producto_id
             LEFT JOIN usuarios u ON u.id = v.registrada_por
             WHERE k.fecha >= ? AND k.fecha <= ?
             ORDER BY k.fecha, v.id
             """,
             (desde, hasta),
         ).fetchall()
-    return [dict(f) for f in filas]
+        ids = [f["id"] for f in filas]
+        items = _items_de(con, ids)
+        pagos = _pagos_de(con, ids)
+    return [_armar_ticket(f, items.get(f["id"], []), pagos.get(f["id"], []))
+            for f in filas]
 
 
 def cierres_rango(desde, hasta):
@@ -1254,31 +1558,41 @@ def estadisticas(desde, hasta):
     total_garrafas = 0
 
     for v in ventas:
-        pid = v["producto_id"]
-        if pid not in por_producto:
-            por_producto[pid] = {
-                "nombre": v["producto"] or f"Producto {pid}",
-                "cantidad": 0,
-                "total": 0.0,
-            }
-        por_producto[pid]["cantidad"] += v["cantidad"]
-        por_producto[pid]["total"] += v["total"]
-
-        clave = CLAVE_MEDIO.get(v["medio"], "efectivo")
-        medios[clave] += v["total"]
+        for it in v["items"]:
+            pid = it["producto_id"]
+            if pid not in por_producto:
+                por_producto[pid] = {
+                    "nombre": it.get("producto") or f"Producto {pid}",
+                    "cantidad": 0,
+                    "total": 0.0,
+                }
+            por_producto[pid]["cantidad"] += int(it["cantidad"])
+            por_producto[pid]["total"] += float(it["subtotal"])
 
         fecha = v["fecha"]
         dia = dias.setdefault(fecha, {"total": 0.0, "garrafas": 0, "ventas": 0})
-        dia["total"] += v["total"]
-        dia["garrafas"] += v["cantidad"]
+        dia["total"] += float(v["total"])
+        dia["garrafas"] += int(v["cantidad"])
         dia["ventas"] += 1
 
-        if v["medio"] == "Transferencia":
-            n_transferencias += 1
-            transferencias.append(v)
+        for pg in v["pagos"]:
+            clave = CLAVE_MEDIO.get(pg["medio"], "efectivo")
+            medios[clave] += float(pg["importe"])
+            if pg["medio"] == "Transferencia":
+                n_transferencias += 1
+                transferencias.append({
+                    "id": v["id"],
+                    "fecha": v.get("fecha"),
+                    "fecha_hora": v["fecha_hora"],
+                    "comprobante": pg.get("comprobante") or "",
+                    "producto": v["producto"],
+                    "cantidad": v["cantidad"],
+                    "total": float(pg["importe"]),
+                    "medio": pg["medio"],
+                })
 
-        total_vendido += v["total"]
-        total_garrafas += v["cantidad"]
+        total_vendido += float(v["total"])
+        total_garrafas += int(v["cantidad"])
 
     evolucion = [
         {"fecha": f, **dias[f]} for f in sorted(dias)
@@ -1345,13 +1659,23 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
     u = usuario_sesion() if cerrado_por is None else usuario_por_id(cerrado_por)
     hora = datetime.now().strftime("%H:%M:%S")
     with db() as con:
-        # Operaciones y comprobantes de la caja, para el registro del cierre
+        # Operaciones y comprobantes de la caja, para el registro del cierre.
+        # Una operación = un ticket (aunque tenga varios productos o varios
+        # medios de pago); los comprobantes salen de los pagos con
+        # transferencia.
         filas = con.execute(
-            "SELECT medio, comprobante FROM ventas WHERE caja_id = ?", (caja_id,)
+            "SELECT id FROM ventas WHERE caja_id = ?", (caja_id,)
         ).fetchall()
         n_operaciones = len(filas)
+        trans = con.execute(
+            "SELECT p.comprobante FROM venta_pagos p "
+            "JOIN ventas v ON v.id = p.venta_id "
+            "WHERE v.caja_id = ? AND p.medio = 'Transferencia' "
+            "ORDER BY p.id",
+            (caja_id,),
+        ).fetchall()
         comprobantes = ", ".join(
-            (f["comprobante"] or "—") for f in filas if f["medio"] == "Transferencia"
+            (t["comprobante"] or "—") for t in trans
         )
 
         # Si había un cierre previo activo, se marca como reabierto/anulado
