@@ -150,10 +150,11 @@ TEMAS = [
         claves="venta ventas vender registrar carga cargar producto "
                "cantidad precio unitario cliente nombre total editar "
                "modificar corregir eliminar borrar formulario guardar "
-               "listado",
+               "listado varias masiva vaciar seleccion",
         frases=["registrar una venta", "cargar una venta", "como se vende",
                 "editar venta", "eliminar venta", "borrar venta",
-                "corregir una venta"],
+                "corregir una venta", "borrar todas las ventas",
+                "vaciar la caja", "eliminar varias ventas"],
         parrafos=[
             "En la pantalla **Ventas** completás: **Producto** (carga su "
             "precio solo), **Cantidad**, **Precio unitario** (editable), "
@@ -162,13 +163,46 @@ TEMAS = [
             "Las ventas del día se listan abajo. Para corregir algo, "
             "seleccioná la venta y apretá **Editar venta seleccionada**: se "
             "carga en el formulario, arreglás y apretás **GUARDAR "
-            "CAMBIOS**. O directamente **Eliminar venta seleccionada**.",
-            "Los dos botones solo funcionan mientras la caja esté "
-            "**abierta**.",
+            "CAMBIOS**.",
+            "**Para borrar en masa** (no hace falta ir una por una): con "
+            "Ctrl o Shift + clic marcás **varias ventas** a la vez y apretás "
+            "**Eliminar seleccionadas** — se borran todas juntas con una "
+            "sola confirmación. Y si querés empezar de cero, **Borrar toda "
+            "la caja** vacía por completo el día (también te pregunta "
+            "antes).",
+            "Los tres botones solo funcionan mientras la caja esté "
+            "**abierta**, y cada venta borrada queda registrada en el "
+            "registro de actividad con tu usuario.",
         ],
         seccion="sección 2 del manual",
         ejemplos=["¿Cómo registro una venta?",
                   "Cargué mal la cantidad, ¿cómo la corrijo?"],
+    ),
+    dict(
+        id="pantalla_inicio",
+        titulo="Pantalla Inicio: lo vendido y el TOTAL GENERAL",
+        claves="inicio pantalla resumen unidades total general vendidas "
+               "vendido producto productos lista barras tarjetas efectivo "
+               "transferencias dia",
+        frases=["pantalla inicio", "que muestra el inicio", "total general",
+                "cuantas unidades vendi", "ventas por producto"],
+        parrafos=[
+            "La pantalla **Inicio** muestra la **CAJA DEL DÍA**: fecha, "
+            "unidades vendidas, total vendido, lo cobrado en efectivo, "
+            "transferencias y tarjetas, y quién abrió la caja con cuánto "
+            "monto inicial.",
+            "Debajo, **VENTAS POR PRODUCTO** lista **únicamente lo que se "
+            "vendió**: los productos sin ventas no ocupan lugar ni se "
+            "muestran.",
+            "Cada fila trae el dinero y las **unidades** de ese producto y, "
+            "al final, hay una fila **TOTAL GENERAL** con la suma de "
+            "**todas las unidades** y de **todo el dinero** del día. "
+            "Ejemplo: si vendiste 2 en efectivo, 2 en tarjeta y 6 en "
+            "transferencia, el TOTAL GENERAL dice **10 unidades**.",
+        ],
+        seccion="sección 4 del manual",
+        ejemplos=["¿Qué muestra la pantalla Inicio?",
+                  "¿Qué es el TOTAL GENERAL?"],
     ),
     dict(
         id="medios_pago",
@@ -222,10 +256,11 @@ TEMAS = [
         claves="excel exportar exportacion archivo xlsx hoja imprimir "
                "impresion a4 horizontal planilla descargar movimiento "
                "movimientos secciones general resumen unidades envases "
-               "control efectivo tarjeta transferencia",
+               "control efectivo tarjeta transferencia recuadro recuadros "
+               "columnas vendidos",
         frases=["exportar a excel", "bajar el excel", "imprimir el excel",
                 "excel a4", "hoja de calculo", "resumen de unidades",
-                "cuántas garrafas salieron"],
+                "cuántas garrafas salieron", "resumen de ventas"],
         parrafos=[
             "En **Estadísticas** apretá **EXPORTAR A EXCEL**, elegí el "
             "archivo y el rango de fechas (con los filtros de arriba).",
@@ -233,18 +268,21 @@ TEMAS = [
             "tocar nada: orientación horizontal, tamaño A4, ajuste al ancho "
             "de una página, títulos repetidos en cada página, área de "
             "impresión y encabezado congelado.",
-            "Arriba de todo hay un **resumen por sección de pago** — "
-            "**EFEC**, **TARJETA** y **TRANS** — con las unidades de cada "
-            "producto en cada sección. Cada bloque suma primero las "
-            "**garrafas con gas** en **TOTAL DE ENVASES**, después los "
-            "**envases sueltos** en **TOTAL DE ENVASES SUELTOS** (los dos "
-            "números van por separado y nunca se mezclan) y cierra con "
-            "**TOTAL DE UNIDADES** y **TOTAL DE DINERO**.",
-            "Al final está el **TOTAL GENERAL DE GARRAFAS Y ENVASES** y dos "
-            "filas de **CONTROL DE UNIDADES** y **CONTROL DE DINERO**, que "
-            "comprueban que EFEC + TARJETA + TRANS dan igual al total. "
-            "Si dice **COINCIDE** el cuadre está bien; si dice **REVISAR**, "
-            "hay que revisar antes de imprimir.",
+            "Arriba de todo sale el título **RESUMEN DE VENTAS POR SECCIÓN "
+            "DE PAGO** y **dos recuadros**. El primero, **VENTA DE GARRAFAS "
+            "(con gas)**, tiene **una columna por producto que se vendió** "
+            "(con sus siglas 10KG, 15KG, 45KG, ME y ECO, en ese orden; las "
+            "que no se vendieron no aparecen) y las filas **EFEC**, "
+            "**TARJETA** y **TRANS**, que cierran con su **TOTAL GENERAL**.",
+            "El segundo recuadro, **VENTA DE ENVASES**, es igual pero solo "
+            "con los **envases sueltos**, con un texto que aclara qué son "
+            "y que nunca se suman con las garrafas con gas. Si no se vendió "
+            "ningún envase, ese recuadro no aparece.",
+            "Debajo de cada recuadro hay dos filas de **CONTROL DE "
+            "UNIDADES** y **CONTROL DE DINERO**, con la cuenta "
+            "EFEC(...) + TARJETA(...) + TRANS(...) = total. Si dice "
+            "**COINCIDE** el cuadre está bien; si dice **REVISAR**, hay que "
+            "revisar antes de imprimir.",
             "Después sigue el detalle en tres secciones — "
             "**TRANSFERENCIAS**, **TARJETAS** (bloque "
             "TARJETA DE DÉBITO y bloque TARJETA DE CRÉDITO, cada uno con su "
@@ -396,10 +434,10 @@ TEMAS = [
             "ECO PROPANO** más los **envases sueltos** (10 kg, 15 kg, "
             "45 kg, ME y ECO PROPANO) con precios de ejemplo.",
             "Hay que distinguir las dos familias: las **garrafas con gas** "
-            "se suman juntas en el Excel (TOTAL DE ENVASES) y los "
-            "**envases sueltos** van en su fila aparte "
-            "(TOTAL DE ENVASES SUELTOS). El programa las separa solo: "
-            "todo producto que empieza con “Envase” es envase suelto.",
+            "van al recuadro **VENTA DE GARRAFAS (con gas)** del Excel y los "
+            "**envases sueltos** van al recuadro aparte **VENTA DE "
+            "ENVASES**. El programa las separa solo: todo producto que "
+            "empieza con “Envase” es envase suelto.",
             "Ahí mismo están el **fondo inicial** general y otros "
             "parámetros. Solo el rango **DESARROLLADOR** puede modificar "
             "precios y configuración.",

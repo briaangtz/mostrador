@@ -131,7 +131,7 @@ class VentasPanel(tk.Frame):
         columnas = ("hora", "producto", "cantidad", "precio", "cliente",
                     "medio", "comprobante", "total", "cajero")
         self.tree = ttk.Treeview(marco_lista, columns=columnas, show="headings",
-                                 height=12, selectmode="browse")
+                                 height=12, selectmode="extended")
         self.tree.heading("hora", text="Hora")
         self.tree.heading("producto", text="Producto")
         self.tree.heading("cantidad", text="Cant.")
@@ -178,7 +178,7 @@ class VentasPanel(tk.Frame):
                              lambda e: self.btn_editar.config(bg=st.ACENTO))
 
         self.btn_eliminar = tk.Button(
-            pie, text="Eliminar venta seleccionada", command=self._eliminar,
+            pie, text="Eliminar seleccionadas", command=self._eliminar,
             relief="flat", bg=st.ROJO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
             padx=14, pady=8, cursor="hand2",
         )
@@ -187,6 +187,17 @@ class VentasPanel(tk.Frame):
                                lambda e: self.btn_eliminar.config(bg="#b91c1c"))
         self.btn_eliminar.bind("<Leave>",
                                lambda e: self.btn_eliminar.config(bg=st.ROJO))
+
+        self.btn_vaciar = tk.Button(
+            pie, text="Borrar toda la caja", command=self._vaciar_caja,
+            relief="flat", bg="#7f1d1d", fg="#ffffff",
+            font=(st.FUENTE, 10, "bold"), padx=14, pady=8, cursor="hand2",
+        )
+        self.btn_vaciar.pack(side="left", padx=(10, 0))
+        self.btn_vaciar.bind("<Enter>",
+                             lambda e: self.btn_vaciar.config(bg="#5b1010"))
+        self.btn_vaciar.bind("<Leave>",
+                             lambda e: self.btn_vaciar.config(bg="#7f1d1d"))
 
         self.btn_cancelar = tk.Button(
             pie, text="Cancelar edición", command=self._cancelar_edicion,
@@ -201,8 +212,9 @@ class VentasPanel(tk.Frame):
 
         self.lbl_ayuda = tk.Label(
             contenido,
-            text="¿Cargaste de más? Seleccioná la venta en la lista y usá "
-                 "Editar (corrige sin borrar) o Eliminar.",
+            text="¿Cargaste de más? Seleccioná una o varias ventas (Ctrl o "
+                 "Shift + clic) y usá Editar (corrige sin borrar), "
+                 "Eliminar seleccionadas o Borrar toda la caja.",
             bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
             wraplength=760, anchor="w", justify="left",
         )
@@ -403,27 +415,62 @@ class VentasPanel(tk.Frame):
         self.var_cantidad.set("1")
         self.var_comprobante.set("")
 
+    def _caja_operativa(self, accion):
+        """True (y avisa) si no se puede operar sobre la caja actual."""
+        caja = self.app.caja_actual()
+        if caja and caja["estado"] == "abierta":
+            return True
+        messagebox.showerror("Caja cerrada",
+                             f"No se pueden {accion} de una caja cerrada.",
+                             parent=self)
+        return False
+
     def _eliminar(self):
         if self._sin_permiso_ventas():
             return
-        caja = self.app.caja_actual()
-        if not caja or caja["estado"] != "abierta":
-            messagebox.showerror("Caja cerrada",
-                                 "No se pueden eliminar ventas de una caja cerrada.",
-                                 parent=self)
+        if not self._caja_operativa("eliminar ventas"):
             return
         sel = self.tree.selection()
         if not sel:
-            messagebox.showwarning("Eliminar", "Seleccioná una venta de la lista.",
+            messagebox.showwarning(
+                "Eliminar",
+                "Seleccioná una o más ventas de la lista "
+                "(Ctrl o Shift + clic para elegir varias).",
+                parent=self)
+            return
+        ids = [int(i) for i in sel]
+        if len(ids) == 1:
+            texto = "¿Eliminar la venta seleccionada?"
+        else:
+            texto = (f"¿Eliminar las {len(ids)} ventas seleccionadas?\n"
+                     "No se puede deshacer.")
+        if not messagebox.askyesno("Eliminar ventas", texto, parent=self):
+            return
+        db.eliminar_ventas(ids)
+        if self._editando_id in ids:
+            self._limpiar_edicion()
+        self.app.refrescar_todo()
+
+    def _vaciar_caja(self):
+        """Borra de una sola vez todo lo cargado en la caja del día."""
+        if self._sin_permiso_ventas():
+            return
+        if not self._caja_operativa("eliminar ventas"):
+            return
+        ids = [int(i) for i in self.tree.get_children()]
+        if not ids:
+            messagebox.showwarning("Borrar caja",
+                                   "No hay ventas cargadas en esta caja.",
                                    parent=self)
             return
-        venta_id = int(sel[0])
-        if not messagebox.askyesno("Eliminar venta",
-                                   "¿Eliminar la venta seleccionada?", parent=self):
+        if not messagebox.askyesno(
+                "Borrar toda la caja",
+                f"¿Eliminar las {len(ids)} ventas de esta caja?\n"
+                "Se borra todo lo cargado. No se puede deshacer.",
+                parent=self):
             return
-        db.eliminar_venta(venta_id)
-        if self._editando_id == venta_id:
-            self._limpiar_edicion()
+        db.eliminar_ventas(ids)
+        self._limpiar_edicion()
         self.app.refrescar_todo()
 
     # ------------------------------------------------------------- refresco
@@ -472,6 +519,8 @@ class VentasPanel(tk.Frame):
                                   bg=st.VERDE if operativa else "#a3d9b5")
         self.btn_eliminar.config(state="normal" if operativa else "disabled",
                                  bg=st.ROJO if operativa else "#f0a8a8")
+        self.btn_vaciar.config(state="normal" if operativa else "disabled",
+                               bg="#7f1d1d" if operativa else "#d9a3a3")
 
         # Solo se ofrecen los medios de pago que el usuario puede registrar
         medios = self._medios_permitidos()

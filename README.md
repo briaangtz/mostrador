@@ -63,16 +63,20 @@ precios** (también se pueden agregar o quitar productos).
 
 **Dos familias que se tratan distinto en el Excel:**
 
-* **Garrafas con gas** — las cinco garrafas. Al exportar se suman todas juntas
-  en la fila **TOTAL DE ENVASES** (el total de envases que salieron).
+* **Garrafas con gas** — las cinco garrafas. Van al recuadro **VENTA DE
+  GARRAFAS** y su total nunca se mezcla con el de los envases.
 * **Envases sueltos** — las cinco garrafas sin gas (que se devuelven o se
-  venden aparte). Van en su propia fila **TOTAL DE ENVASES SUELTOS** y **nunca
-  se mezclan** con el total de garrafas con gas.
+  venden aparte). Van al recuadro **VENTA DE ENVASES**, con un texto que
+  aclara de qué son.
 
 La clasificación es por nombre: todo producto que empieza con **"Envase"**
 (envase nuevo incluido) entra en la segunda familia. *Garrafa 15ME* pasó a
 llamarse **Garrafa ME** (el renombre se hace solo al abrir la base, sin tocar
 ventas viejas).
+
+En la pantalla **Inicio**, la lista *VENTAS POR PRODUCTO* muestra **únicamente
+lo que se vendió** (los productos sin ventas no ocupan lugar) y cierra con una
+fila **TOTAL GENERAL** con las unidades y la plata de todo el día.
 
 ## 2. Registro de ventas (pestaña "Ventas")
 
@@ -92,13 +96,18 @@ Los campos están repartidos en **dos filas** para que ninguno quede cortado ni
 fuera de pantalla en monitores chicos.
 
 Las ventas del día se listan en pantalla. Si cargaste algo mal (por ejemplo 10
-cuando son 9), seleccionás la venta en la lista y podés:
+cuando son 9), seleccionás **una o varias** ventas en la lista (Ctrl o Shift +
+clic) y podés:
 
 * **Editar venta seleccionada** — carga la venta en el formulario, corregís la
   cantidad o el precio y presionás **GUARDAR CAMBIOS** (no hace falta borrar).
-* **Eliminar venta seleccionada** — la quita y recalcula los totales del día.
+* **Eliminar seleccionadas** — borra **todas las marcadas de una sola vez**,
+  con una sola confirmación (no hace falta ir una por una).
+* **Borrar toda la caja** — vacía por completo la caja del día (también con
+  confirmación y contando cuántas ventas se eliminan).
 
-Ambos botones solo funcionan mientras la caja esté abierta.
+Cada venta borrada queda registrada en el historial de actividad con su
+usuario. Los tres botones solo funcionan mientras la caja esté abierta.
 
 ## 3. Medios de pago
 
@@ -121,7 +130,10 @@ cierre, en el historial y en el Excel.
 * Total vendido
 * Efectivo / Transferencias / **Tarjetas** (con detalle "Débito … • Crédito …")
 * Total general
-* Ventas por producto
+* Ventas por producto — **solo lo que se vendió** (los productos sin ventas
+  no ocupan lugar), cada fila con su plata y sus **unidades**, y una fila
+  final **TOTAL GENERAL** con la suma de todas las unidades y de todo el
+  dinero del día.
 
 Y dos botones, cada uno con el **usuario responsable**:
 
@@ -273,29 +285,51 @@ la venta (puede quedar vacía).
 Para las transferencias ya no hace falta una exportación aparte: todo lo del
 período sale junto, separado por secciones.
 
-### Resumen de unidades arriba de la hoja
+### Dos recuadros arriba de la hoja
 
-Antes del detalle, la hoja **Movimientos** arranca con un **resumen por
-sección de pago** para responder de un vistazo cuántas garrafas salieron con
-cada medio:
+Antes del detalle, la hoja **Movimientos** arranca con el título **RESUMEN DE
+VENTAS POR SECCIÓN DE PAGO** y **dos recuadros compactos** para responder de
+un vistazo cuántas unidades salieron con cada medio de pago.
 
-* Bloques **EFEC**, **TARJETA** y **TRANS** (en ese orden).
-* Dentro de cada bloque: una fila por producto con sus **unidades**, luego
-  **TOTAL DE ENVASES** (solo garrafas con gas), después las filas de
-  **envases sueltos** y **TOTAL DE ENVASES SUELTOS**, y al final
-  **TOTAL DE UNIDADES** y **TOTAL DE DINERO** de esa sección.
-* Bloque final **TOTAL GENERAL DE GARRAFAS Y ENVASES**: lo mismo sumando las
-  tres secciones.
+**Recuadro 1 — VENTA DE GARRAFAS (con gas)** (una columna por producto,
+**solo los que se vendieron** en el período, con sus siglas: 10KG, 15KG, 45KG,
+ME, ECO; aclaración: *"Solo figuran las garrafas que se vendieron en el
+período"*):
 
-Dos filas de control cierran el resumen:
+| Sección         | 10KG | 15KG | Unidades | Total $ |
+| --------------- | ---- | ---- | -------- | ------- |
+| EFEC            | 2    | 1    | 3        | $35.000 |
+| TARJETA         | 0    | 2    | 2        | $30.000 |
+| TRANS           | 1    | 0    | 1        | $15.000 |
+| **TOTAL GENERAL** | 3  | 3    | **6**    | **$80.000** |
 
-| Control            | Qué verifica                   |
-| ------------------ | ------------------------------ |
-| CONTROL DE UNIDADES | EFEC + TARJETA + TRANS = TOTAL GENERAL |
-| CONTROL DE DINERO   | lo mismo, en pesos             |
+| Control            | Qué muestra                                              |
+| ------------------ | -------------------------------------------------------- |
+| CONTROL DE UNIDADES | `EFEC(3) + TARJETA(2) + TRANS(1) = 6` → **COINCIDE**      |
+| CONTROL DE DINERO   | `EFEC($35.000) + TARJETA($30.000) + TRANS($15.000) = $80.000` → **COINCIDE** |
 
-Cada control indica **COINCIDE** o **REVISAR**, así que un descuadre salta a la
-vista antes de imprimir. El detalle de movimientos que sigue abajo no cambia.
+* Las filas son **EFEC**, **TARJETA** y **TRANS**; la que cierra el cuadro es
+  **TOTAL GENERAL** (EFEC + TARJETA + TRANS, contado una sola vez por
+  producto).
+* Los dos controles comparan lo de arriba con el detalle de movimientos que
+  sigue abajo y marcan **COINCIDE** o **REVISAR**: así un descuadre salta a la
+  vista antes de imprimir.
+* Cada recuadro tiene la misma estructura; lo único que cambian son las
+  columnas: **una por producto que se vendió**, en el orden 10 → 15 → 45 →
+  ME → ECO.
+* Si no hubo ventas en el período aparece una sola fila: *Sin ventas en el
+  período.*
+
+**Recuadro 2 — VENTA DE ENVASES** (igual, pero solo con los **envases
+sueltos** que se vendieron). Su aclaración dice qué son: *"Envases sueltos,
+sin gas: se venden y se devuelven aparte de las garrafas (10 kg, 15 kg, 45 kg,
+ME y ECO PROPANO). Nunca se suman con las garrafas con gas."* No aparece si no
+se vendió ningún envase. Así los envases nunca se mezclan con las garrafas
+con gas.
+
+El detalle de movimientos que sigue abajo no cambia: columnas **Nombre | Carga
+| N° Comprobante / Tarjeta | Total** (cada campo ocupa dos columnas) y el
+**TOTAL GENERAL** en la última fila.
 
 ## 12. Transferencias en el cierre de caja
 

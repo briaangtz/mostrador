@@ -1062,6 +1062,39 @@ def eliminar_venta(venta_id):
         )
 
 
+def eliminar_ventas(venta_ids):
+    """Elimina varias ventas de una sola vez. Devuelve cuántas borró.
+
+    Se usa para borrar en masa (selección múltiple o vaciado de caja).
+    El registro de actividad se escribe después, ya con la transacción
+    cerrada, para no trabar la base.
+    """
+    ids = [int(i) for i in venta_ids]
+    if not ids:
+        return 0
+    comodines = ",".join("?" * len(ids))
+    with db() as con:
+        filas = con.execute(
+            f"SELECT id, producto_id, cantidad, total FROM ventas "
+            f"WHERE id IN ({comodines})", ids).fetchall()
+        con.execute(f"DELETE FROM ventas WHERE id IN ({comodines})", ids)
+        nombres = {}
+        for fila in filas:
+            pid = fila["producto_id"]
+            if pid not in nombres:
+                p = con.execute("SELECT nombre FROM productos WHERE id = ?",
+                                (pid,)).fetchone()
+                nombres[pid] = p["nombre"] if p else "producto"
+
+    for fila in filas:
+        log_actividad(
+            "Venta eliminada",
+            f"#{fila['id']} — {fila['cantidad']} × {nombres[fila['producto_id']]} — "
+            f"${fila['total']:,.0f}".replace(",", "."),
+        )
+    return len(filas)
+
+
 def actualizar_venta(venta_id, producto_id, cantidad, precio_unitario, medio,
                      comprobante=None, cliente=None):
     """Corrige una venta ya registrada (recalcula el total)."""

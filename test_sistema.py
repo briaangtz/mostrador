@@ -318,7 +318,7 @@ check("Débito $150.000" in app.paneles["inicio"]
       .cards_detalle["tarjetas"].cget("text"),
       "la tarjeta TARJETAS discrimina débito y crédito")
 
-# Punto 4: con los 10 productos, Inicio no corta ni oculta nada
+# Punto 4: el listado de Inicio muestra solo lo vendido y nada queda oculto
 inicio = app.paneles["inicio"]
 app.update()
 check(getattr(inicio, "canvas_scroll", None) is not None,
@@ -326,10 +326,26 @@ check(getattr(inicio, "canvas_scroll", None) is not None,
 check(inicio.lbl_estado_caja.winfo_ismapped()
       and str(inicio.lbl_estado_caja.cget("text")).strip() != "",
       "punto 4: se ve el estado de la caja en Inicio")
-_filas_inicio = len(inicio.contenedor_producto.winfo_children())
-check(_filas_inicio == 10,
-      f"punto 4: el listado de Inicio trae los 10 productos "
-      f"(obtuvo {_filas_inicio})")
+
+_r_ini = db.resumen(caja["id"])
+_vendidos_ini = [i for i in _r_ini["por_producto"].values()
+                 if int(i["cantidad"]) > 0]
+_filas_inicio = inicio.contenedor_producto.winfo_children()
+check(len(_filas_inicio) == len(_vendidos_ini) + 2,
+      f"punto 4: Inicio lista solo los {len(_vendidos_ini)} productos "
+      f"vendidos + su total (obtuvo {len(_filas_inicio)} filas)")
+check(len(_vendidos_ini) < 10,
+      f"punto 4: los productos sin ventas no ocupan lugar en Inicio "
+      f"(se muestran {len(_vendidos_ini)} de 10)")
+
+_uni_ini = sum(int(i["cantidad"]) for i in _vendidos_ini)
+_textos_total = [str(w.cget("text"))
+                 for w in _filas_inicio[-1].winfo_children()]
+check(any(t == "TOTAL GENERAL" for t in _textos_total)
+      and any(t == f"{_uni_ini} unidades" for t in _textos_total),
+      f"punto 4: fila TOTAL GENERAL con {_uni_ini} unidades "
+      f"(obtuvo {_textos_total})")
+
 inicio.canvas_scroll.yview_moveto(1.0)
 inicio.update_idletasks()
 _cy = inicio.canvas_scroll.winfo_rooty()
@@ -474,6 +490,42 @@ check(db.venta_por_id(int(ultima)) is None, "venta eliminada desde la lista")
 check(db.resumen(caja["id"])["cantidad_ventas"] == 8,
       "los totales se actualizaron al eliminar")
 
+# Borrado masivo: varias ventas seleccionadas de una sola vez
+_antes_m = db.resumen(caja["id"])["cantidad_ventas"]
+_ids_m = []
+for _ in range(3):
+    db.registrar_venta(caja["id"], p10["id"], 1, 10000, "Efectivo")
+    _ids_m.append(str([v["id"] for v in db.ventas_de(caja["id"])
+                       if v["producto_id"] == p10["id"]][-1]))
+app.refrescar_todo()
+app.mostrar("ventas")
+app.update()
+panel = app.paneles["ventas"]
+check(str(panel.tree.cget("selectmode")) == "extended",
+      "el listado de ventas permite selección múltiple")
+
+# Punto 4: la fila de botones (Editar / Eliminar / Borrar toda la caja)
+# tiene que entrar entera en el panel, sin cortarse en 1366x768.
+panel.update_idletasks()
+_ancho_panel = panel.winfo_width()
+_llega = 0
+for _w in panel.btn_eliminar.master.pack_slaves():
+    if _w.winfo_ismapped() and _w.winfo_width() > 1:
+        _llega = max(_llega, _w.winfo_x() + _w.winfo_width())
+check(_llega <= _ancho_panel - 40,
+      f"punto 4: la fila de botones de Ventas entra entera "
+      f"(llega hasta {_llega} de {_ancho_panel - 40})")
+
+panel.tree.selection_set(*_ids_m)
+check(len(panel.tree.selection()) == 3,
+      "se pueden seleccionar varias ventas a la vez (Ctrl o Shift)")
+panel._eliminar()
+app.update()
+_despues_m = db.resumen(caja["id"])["cantidad_ventas"]
+check(_despues_m == _antes_m,
+      f"borrado masivo: las 3 ventas seleccionadas se borran juntas "
+      f"(obtuvo {_despues_m}, esperaba {_antes_m})")
+
 # ---------------- Transferencias: comprobante obligatorio ----------------
 panel.combo_medio.set("Transferencia")
 panel.var_cantidad.set("2")
@@ -578,11 +630,6 @@ check(len(fila_total_tarjetas) == 1
       and abs(float(fila_total_tarjetas[0][-1]) - 240000) < 0.01,
       f"excel: TOTAL TARJETAS = 240.000 "
       f"(obtuvo {fila_total_tarjetas[0][-1] if fila_total_tarjetas else '—'})")
-filas_totales = [f for f in filas_txt
-                 if f and str(f[0]) == "TOTAL GENERAL"]
-check(len(filas_totales) == 1
-      and abs(float(filas_totales[0][-1]) - monto_xl) < 0.01,
-      "excel: un solo TOTAL GENERAL con el monto completo")
 
 # Columnas pedidas: Nombre / Carga / N° Comprobante-Tarjeta / Total
 check(any(t == "Nombre" for t in textos), "excel: columna Nombre")
@@ -600,29 +647,31 @@ check(any("×" in t for t in textos), "excel: incluye el detalle de la carga")
 check(any("TOTAL GENERAL" in t for t in textos),
       "excel: incluye el total general")
 
-# ---- Resumen de unidades por sección (EFEC / TARJETA / TRANS) ----
-def _bloque(desde_txt):
-    """Todas las filas desde el rótulo pedido hasta el final de la hoja."""
-    for i, f in enumerate(filas_txt):
-        if f and str(f[0]) == desde_txt:
-            return filas_txt[i:]
-    return []
-
-
-def _fila_bloque(desde_txt, rotulo):
-    """Primera fila con ese rótulo dentro del bloque pedido."""
-    for f in _bloque(desde_txt):
-        if str(f[0]) == rotulo:
-            return f
-    return None
-
-
+# ---- Recuadro por sección: Sección | 10 KG | 15 KG | 45 KG | Un. | $ ----
 movs_xl = db.ventas_rango(hoy, hoy)
 SECCIONES_XL = {
     "EFEC": ["Efectivo"],
     "TARJETA": ["Tarjeta de débito", "Tarjeta de crédito"],
     "TRANS": ["Transferencia"],
 }
+PRODUCTOS_XL = ["Garrafa 10 kg", "Garrafa 15 kg", "Garrafa 45 kg"]
+
+
+def _fila_primera(primero):
+    """Primera fila cuyo primer dato sea exactamente ese rótulo."""
+    for f in filas_txt:
+        if f and str(f[0]) == primero:
+            return f
+    return None
+
+
+_enc = _fila_primera("Sección")
+check(_enc is not None and list(_enc) ==
+      ["Sección", "10 KG", "15 KG", "45 KG", "Unidades", "Total $"],
+      f"excel: encabezado del recuadro "
+      f"(obtuvo {_enc if _enc else '—'})")
+check(_enc is not None and "ME" not in _enc and "ECO" not in _enc,
+      "excel: solo aparecen las garrafas que se vendieron")
 
 for _seccion in SECCIONES_XL:
     check(any(t == _seccion for t in textos),
@@ -631,50 +680,47 @@ for _seccion in SECCIONES_XL:
 for _seccion, _medios in SECCIONES_XL.items():
     _uni = sum(v["cantidad"] for v in movs_xl if v["medio"] in _medios)
     _din = sum(float(v["total"]) for v in movs_xl if v["medio"] in _medios)
-    _f_uni = _fila_bloque(_seccion, "TOTAL DE UNIDADES")
-    _f_din = _fila_bloque(_seccion, "TOTAL DE DINERO")
-    check(_f_uni is not None and int(_f_uni[1]) == _uni,
+    _f = _fila_primera(_seccion)
+    check(_f is not None and len(_f) == 6 and int(_f[4]) == _uni,
           f"excel: {_seccion} suma {_uni} unidades")
-    check(_f_din is not None and abs(float(_f_din[1]) - _din) < 0.01,
+    check(_f is not None and len(_f) == 6 and abs(float(_f[5]) - _din) < 0.01,
           f"excel: {_seccion} suma ${_din:,.0f}")
+    # Unidades de cada producto dentro de esa sección (columnas en orden)
+    for _i, _producto in enumerate(PRODUCTOS_XL):
+        _esperado = sum(v["cantidad"] for v in movs_xl
+                        if v["medio"] in _medios
+                        and v["producto"] == _producto)
+        check(_f is not None and len(_f) == 6
+              and int(_f[1 + _i]) == _esperado,
+              f"excel: {_seccion} informa {_esperado} unidades "
+              f"de {_producto}")
 
-# Cada producto informa sus unidades dentro de cada sección
-for _producto in ("Garrafa 10 kg", "Garrafa 15 kg", "Garrafa 45 kg",
-                  "Garrafa ME", "Garrafa ECO PROPANO"):
-    _esperado = sum(v["cantidad"] for v in movs_xl
-                    if v["medio"] == "Efectivo" and v["producto"] == _producto)
-    _f = _fila_bloque("EFEC", _producto)
-    check(_f is not None and int(_f[1]) == _esperado,
-          f"excel: EFEC informa {_esperado} unidades de {_producto}")
-
-# TOTAL DE ENVASES solo cuenta garrafas con gas (los envases van aparte)
-_gas_efec = sum(v["cantidad"] for v in movs_xl
-                if v["medio"] == "Efectivo" and not db.es_envase(v["producto"]))
-_f_gas = _fila_bloque("EFEC", "TOTAL DE ENVASES")
-check(_f_gas is not None and int(_f_gas[1]) == _gas_efec,
-      f"excel: TOTAL DE ENVASES de EFEC = {_gas_efec} (solo garrafas con gas)")
-_env_efec = sum(v["cantidad"] for v in movs_xl
-                if v["medio"] == "Efectivo" and db.es_envase(v["producto"]))
-_f_env = _fila_bloque("EFEC", "TOTAL DE ENVASES SUELTOS")
-check(_f_env is not None and int(_f_env[1]) == _env_efec,
-      f"excel: los envases sueltos de EFEC se informan aparte ({_env_efec})")
-
-# TOTAL GENERAL con todas las unidades y todo el dinero del período
-_f_uni_g = _fila_bloque("TOTAL GENERAL DE GARRAFAS Y ENVASES",
-                        "TOTAL DE UNIDADES")
-_f_din_g = _fila_bloque("TOTAL GENERAL DE GARRAFAS Y ENVASES",
-                        "TOTAL DE DINERO")
+# TOTAL GENERAL del recuadro: unidades y dinero de todo el período
+_fila_tg = next((f for f in filas_txt
+                 if f and str(f[0]) == "TOTAL GENERAL" and len(f) == 6), None)
 uni_total = sum(v["cantidad"] for v in movs_xl)
-check(_f_uni_g is not None and int(_f_uni_g[1]) == uni_total,
+check(_fila_tg is not None and int(_fila_tg[4]) == uni_total,
       f"excel: total general de unidades = {uni_total}")
-check(_f_din_g is not None and abs(float(_f_din_g[1]) - monto_xl) < 0.01,
+check(_fila_tg is not None and abs(float(_fila_tg[5]) - monto_xl) < 0.01,
       "excel: total general de dinero coincide con el total del reporte")
 
-# Control de cuadre: EFEC + TARJETA + TRANS = TOTAL GENERAL
+# El recuadro de envases NO aparece si no se vendieron envases
+check(not any("VENTA DE ENVASES" in str(f[0]) for f in filas_txt if f),
+      "excel: sin envases vendidos no aparece el recuadro de envases")
+
+# Control de cuadre: EFEC + TARJETA + TRANS = TOTAL GENERAL (por recuadro)
 controles = [f for f in filas_txt if f and str(f[0]).startswith("CONTROL DE ")]
-check(len(controles) == 2, f"excel: hay 2 filas de control (obtuvo {len(controles)})")
+check(len(controles) >= 2 and len(controles) % 2 == 0,
+      f"excel: hay controles de unidades y de dinero (obtuvo {len(controles)})")
 check(all(str(f[-1]) == "COINCIDE" for f in controles),
       "excel: los controles de unidades y de dinero cuadran")
+
+# El TOTAL GENERAL del detalle sigue dando el total del período
+_filas_tg_detalle = [f for f in filas_txt
+                     if f and str(f[0]) == "TOTAL GENERAL" and len(f) == 2]
+check(len(_filas_tg_detalle) == 1
+      and abs(float(_filas_tg_detalle[0][1]) - monto_xl) < 0.01,
+      "excel: un solo TOTAL GENERAL del detalle con el monto completo")
 
 # Configuración de impresión: A4 horizontal ajustado al ancho
 check(str(ws.page_setup.orientation) == "landscape",
@@ -686,12 +732,58 @@ check(int(ws.page_setup.fitToWidth or 0) == 1,
 check(ws.sheet_properties.pageSetUpPr is not None
       and ws.sheet_properties.pageSetUpPr.fitToPage,
       "excel: escala 'ajustar al ancho' activa")
-check("$A$1" in str(ws.print_area) and "$D$" in str(ws.print_area),
+check("$A$1" in str(ws.print_area) and "$H$" in str(ws.print_area),
       f"excel: área de impresión definida (obtuvo {ws.print_area})")
 check(str(ws.print_title_rows).replace("$", "") == "1:3",
       f"excel: encabezados visibles en cada página "
       f"(obtuvo {ws.print_title_rows})")
 _os.remove(destino)
+
+# ---- El recuadro de envases aparece solo cuando se venden ----
+_p_env = db.producto_por_nombre("Envase 10 kg")
+db.registrar_venta(caja["id"], _p_env["id"], 3, 8000, "Efectivo")
+_v_env = [v["id"] for v in db.ventas_de(caja["id"])
+          if v["producto_id"] == _p_env["id"]][-1]
+destino_env = _os.path.join(_tempfile.gettempdir(), "movimientos_envases.xlsx")
+xl.exportar_movimientos(hoy, hoy, destino_env)
+_ws_env = load_workbook(destino_env).active
+_filas_env = [[str(c.value) for c in fila if c.value is not None]
+              for fila in _ws_env.iter_rows()]
+_enc_env = next((f for f in _filas_env
+                 if f and str(f[0]) == "Sección" and "10 KG" in f), None)
+check(_enc_env is not None,
+      "excel: con envases vendidos aparece el recuadro VENTA DE ENVASES")
+check(any("VENTA DE ENVASES" in str(f[0]) for f in _filas_env if f),
+      "excel: el recuadro de envases aclara de qué son")
+check(any(str(f[0]) == "EFEC" and len(f) == 4
+          and int(f[1]) == 3 and int(f[2]) == 3
+          for f in _filas_env if f),
+      "excel: el recuadro de envases informa 3 unidades en EFEC")
+check(any(str(f[0]).startswith("CONTROL DE UNIDADES") for f in _filas_env if f),
+      "excel: el recuadro de envases tiene su propio control de cuadre")
+db.eliminar_venta(_v_env)
+_os.remove(destino_env)
+
+# ---------------- Borrado masivo: vaciar una caja entera ----------------
+app.cambiar_caja("2026-12-29")
+caja_v = app.caja_actual()
+db.registrar_apertura(caja_v["id"], 5000)
+db.registrar_venta(caja_v["id"], p10["id"], 2, 10000, "Efectivo")
+db.registrar_venta(caja_v["id"], p10["id"], 1, 10000, "Efectivo")
+app.refrescar_todo()
+app.mostrar("ventas")
+app.update()
+pnl_v = app.paneles["ventas"]
+check(len(pnl_v.tree.get_children()) == 2,
+      "la caja de prueba arranca con 2 ventas cargadas")
+pnl_v._vaciar_caja()
+app.update()
+check(db.resumen(caja_v["id"])["cantidad_ventas"] == 0,
+      "borrar toda la caja deja la caja sin ventas")
+check(len(pnl_v.tree.get_children()) == 0,
+      "el listado queda vacío después de vaciar la caja")
+app.cambiar_caja(caja["fecha"])
+app.refrescar_todo()
 
 app.destroy()
 

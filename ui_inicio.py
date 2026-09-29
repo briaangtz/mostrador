@@ -390,24 +390,46 @@ class InicioPanel(tk.Frame):
                     fg=st.TEXTO_SUAVE,
                 )
 
-        # Ventas por producto
+        # Ventas por producto: solo lo que se vendió, con su total general
         for w in self.contenedor_producto.winfo_children():
             w.destroy()
         self.filas_producto = {}
-        if not r["por_producto"]:
-            tk.Label(self.contenedor_producto, text="Sin productos configurados.",
+        vendidos = [(pid, info) for pid, info in r["por_producto"].items()
+                    if int(info["cantidad"]) > 0]
+        if not vendidos:
+            tk.Label(self.contenedor_producto,
+                     text=("Sin productos configurados."
+                           if not r["por_producto"]
+                           else "Todavía no se vendió nada en esta caja."),
                      bg=st.FONDO, fg=st.TEXTO_SUAVE).pack(anchor="w")
-        for pid, info in r["por_producto"].items():
+        for pid, info in vendidos:
             fila = tk.Frame(self.contenedor_producto, bg=st.FONDO)
             fila.pack(fill="x", pady=2)
             tk.Label(fila, text=f"• {info['nombre']}", bg=st.FONDO, fg=st.TEXTO,
                      font=(st.FUENTE, 11), anchor="w").pack(side="left")
-            tk.Label(fila, text=f"{info['cantidad']} garrafas", bg=st.FONDO,
+            tk.Label(fila, text=f"{info['cantidad']} unidades", bg=st.FONDO,
                      fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
                      anchor="e").pack(side="right", padx=(0, 20))
             tk.Label(fila, text=money(info["total"]), bg=st.FONDO, fg=st.TEXTO,
                      font=(st.FUENTE, 11, "bold"), width=14, anchor="e").pack(
                 side="right")
+
+        # Total general: la suma de todas las unidades y de todo el dinero
+        if vendidos:
+            unidades_t = sum(int(info["cantidad"]) for _pid, info in vendidos)
+            dinero_t = sum(float(info["total"]) for _pid, info in vendidos)
+            tk.Frame(self.contenedor_producto, bg=st.BARRA, height=2).pack(
+                fill="x", pady=(8, 4))
+            total = tk.Frame(self.contenedor_producto, bg=st.FONDO)
+            total.pack(fill="x")
+            tk.Label(total, text="TOTAL GENERAL", bg=st.FONDO, fg=st.TEXTO,
+                     font=(st.FUENTE, 12, "bold"), anchor="w").pack(side="left")
+            tk.Label(total, text=f"{unidades_t} unidades", bg=st.FONDO,
+                     fg=st.VERDE_OSCURO, font=(st.FUENTE, 11, "bold"),
+                     anchor="e").pack(side="right", padx=(0, 20))
+            tk.Label(total, text=money(dinero_t), bg=st.FONDO,
+                     fg=st.VERDE_OSCURO, font=(st.FUENTE, 12, "bold"),
+                     width=14, anchor="e").pack(side="right")
 
 
 class AbrirCajaDialog(tk.Toplevel):
