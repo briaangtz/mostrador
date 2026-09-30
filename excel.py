@@ -650,21 +650,38 @@ def datetime_texto():
 # para cheques, billetes y observaciones.
 ANCHOS_RENDICION = [20, 11, 13, 13, 16, 11, 11, 13]
 
-# Secciones de la planilla, en el orden en que aparecen en el formulario
+# Secciones de la planilla, en el orden en que aparecen en el formulario.
+# Sin ENVÍOS: al usuario no le sirve y no se imprime.
 SECCIONES_RENDICION = [
     ("gastos", "GASTOS"),
     ("caja", "CAJA"),
-    ("envios", "ENVÍOS"),
     ("tarjetas", "TARJETAS"),
     ("transferencias", "TRANSFERENCIAS"),
     ("recibos", "RECIBOS"),
 ]
 
-MIN_FILAS_DETALLE = 7
 MIN_FILAS_CHEQUES = 7
 
-# Tamaño de la letra del TOTAL DE BILLETES: el número más grande de la hoja
-TAM_TOTAL_BILLETES = 44
+# --- Para que la hoja llene el A4 de punta a punta --------------------------
+# Se imprime en A4 vertical con 0,4" de margen y ajustada a UNA hoja: Excel
+# encoge el contenido a una escala fija (manda el ancho de las columnas) y
+# con ese mismo porcentaje imprime el alto. Si las filas suman menos que
+# eso, queda papel en blanco abajo.
+A4_ALTO_PT = 841.89               # 297 mm
+MARGEN_PT = 0.4 * 72              # 0,4" en cada costado
+
+# Escala a la que Excel imprime esta planilla, medida sobre el PDF que
+# genera (el ancho de las columnas, que está en "caracteres", no se puede
+# pasar a puntos a mano sin equivocarse). Se usa un pelín más chica que la
+# medida —0,852 y no 0,855— para que las filas sumen un poco más de lo
+# justo y, al escalar, la hoja cierre sin papel en blanco abajo.
+ESCALA_IMPRESION = 0.852
+
+
+def alto_objetivo_a4():
+    """Alto que deben sumar las filas para que, una vez impreso a la escala
+    anterior, el contenido llene el A4 entero."""
+    return (A4_ALTO_PT - 2 * MARGEN_PT) / ESCALA_IMPRESION
 
 
 def total_billetes_de(datos):
@@ -707,6 +724,7 @@ def exportar_rendicion(datos, destino):
     f_valor = Font(size=11, color="111827")
     f_dato = Font(size=11, color="111827")
     f_total = Font(bold=True, size=13, color="111827")
+    f_efectivo = Font(bold=True, size=16, color="15803d")
     f_pie = Font(italic=True, size=9, color="999999")
     fondo_titulo = PatternFill(start_color=AZUL, end_color=AZUL,
                                fill_type="solid")
@@ -755,80 +773,51 @@ def exportar_rendicion(datos, destino):
     pintar(fila, 7, 8, datos.get("chofer") or "", fuente=f_dato,
            alineacion=al_ctr)
     ws.row_dimensions[fila].height = 24
-    fila += 2
+    fila += 1
+    ws.row_dimensions[fila].height = 15        # separador en blanco
+    fila += 1
 
-    # ---------------- Detalle (izquierda) y secciones (derecha) ----------------
-    pintar(fila, 1, 4, "DETALLE — TIPO · CANTIDAD · IMPORTE · TOTAL",
-           fuente=f_seccion, fondo=fondo_rotulo, alineacion=al_izq)
-    pintar(fila, 5, 8, "SECCIONES DE LA PLANILLA", fuente=f_seccion,
+    # ---------------- Secciones de la planilla ----------------
+    # Sin el detalle de venta: la hoja queda para el resumen y las secciones
+    # ocupan todo el ancho.
+    pintar(fila, 1, 8, "SECCIONES DE LA PLANILLA", fuente=f_seccion,
            fondo=fondo_rotulo, alineacion=al_izq)
     ws.row_dimensions[fila].height = 24
     fila += 1
 
-    # Encabezados de las dos columnas de la planilla
-    for col_ini, col_fin, texto in ((1, 1, "TIPO"), (2, 2, "CANTIDAD"),
-                                    (3, 3, "IMPORTE"), (4, 4, "TOTAL"),
-                                    (5, 6, "SECCIÓN"), (7, 8, "IMPORTE")):
-        pintar(fila, col_ini, col_fin, texto, fuente=f_rotulo,
-               fondo=fondo_rotulo,
-               alineacion=al_der if col_ini in (2, 3, 4, 7) else al_izq)
+    pintar(fila, 1, 4, "SECCIÓN", fuente=f_rotulo, fondo=fondo_rotulo,
+           alineacion=al_izq)
+    pintar(fila, 5, 8, "IMPORTE", fuente=f_rotulo, fondo=fondo_rotulo,
+           alineacion=al_der)
     ws.row_dimensions[fila].height = 22
     fila += 1
 
-    detalle = list(datos.get("detalle") or [])
-    n_det = max(MIN_FILAS_DETALLE, len(detalle))
-    for i in range(n_det):
-        it = detalle[i] if i < len(detalle) else None
-        cant = int(it["cantidad"]) if it else 0
-        imp = float(it["importe"]) if it else 0.0
-        pintar(fila, 1, 1, it["tipo"] if it else None, fuente=f_dato,
+    for clave, texto in SECCIONES_RENDICION:
+        valor = datos.get(clave)
+        try:
+            valor = float(valor) if valor not in (None, "") else None
+        except (TypeError, ValueError):
+            valor = None
+        if valor == 0:            # casillero sin cargar = casillero en blanco
+            valor = None
+        pintar(fila, 1, 4, texto, fuente=f_rotulo, fondo=fondo_rotulo,
                alineacion=al_izq)
-        pintar(fila, 2, 2, cant if it else None, fuente=f_dato,
-               alineacion=al_der, formato=FORMATO_ENTERO)
-        pintar(fila, 3, 3, imp if it else None, fuente=f_dato,
-               alineacion=al_der, formato=FORMATO_MONEDA)
-        pintar(fila, 4, 4, (cant * imp) if it else None, fuente=f_dato,
-               alineacion=al_der, formato=FORMATO_MONEDA)
-
-        # Derecha: las secciones; la última es el efectivo de la calculadora
-        if i < len(SECCIONES_RENDICION):
-            clave, texto = SECCIONES_RENDICION[i]
-            valor = datos.get(clave)
-            try:
-                valor = float(valor) if valor not in (None, "") else None
-            except (TypeError, ValueError):
-                valor = None
-            if valor == 0:            # casillero sin cargar = casillero en blanco
-                valor = None
-            pintar(fila, 5, 6, texto, fuente=f_rotulo, fondo=fondo_rotulo,
-                   alineacion=al_izq)
-            pintar(fila, 7, 8, valor, fuente=f_dato, alineacion=al_der,
-                   formato=FORMATO_MONEDA)
-        elif i == len(SECCIONES_RENDICION):
-            pintar(fila, 5, 6, "EFECTIVO (BILLETES)", fuente=f_rotulo,
-                   fondo=fondo_verde, alineacion=al_izq)
-            pintar(fila, 7, 8, total_billetes_de(datos), fuente=f_total,
-                   fondo=fondo_verde, alineacion=al_der,
-                   formato=FORMATO_MONEDA)
-        else:
-            pintar(fila, 5, 6, None, fondo=fondo_rotulo, alineacion=al_izq)
-            pintar(fila, 7, 8, None, alineacion=al_der)
-        ws.row_dimensions[fila].height = 20
+        pintar(fila, 5, 8, valor, fuente=f_dato, alineacion=al_der,
+               formato=FORMATO_MONEDA)
+        ws.row_dimensions[fila].height = 22
         fila += 1
 
-    total_det = sum(float(it["cantidad"]) * float(it["importe"])
-                    for it in detalle)
-    pintar(fila, 1, 3, "TOTAL DEL DETALLE", fuente=f_total, alineacion=al_der)
-    pintar(fila, 4, 4, total_det, fuente=f_total, alineacion=al_der,
-           formato=FORMATO_MONEDA)
-    pintar(fila, 5, 8, None)
-    ws.row_dimensions[fila].height = 24
-    fila += 2
+    # La última sección es el efectivo que sale de la calculadora
+    pintar(fila, 1, 4, "EFECTIVO (BILLETES)", fuente=f_rotulo,
+           fondo=fondo_verde, alineacion=al_izq)
+    pintar(fila, 5, 8, total_billetes_de(datos), fuente=f_total,
+           fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
+    ws.row_dimensions[fila].height = 26
+    fila += 1
+    ws.row_dimensions[fila].height = 15      # separador en blanco
+    fila += 1
 
-    # ---------------- Cheques (izquierda) y total de billetes (derecha) -----
-    # A la derecha NO hay tabla de denominaciones: ocupa ese espacio un
-    # solo bloque con el TOTAL DE BILLETES en grande y sin bordes, para
-    # que la hoja A4 quede cerrada de un vistazo.
+    # ---------------- Cheques (izquierda) y billetes (derecha) ----------------
     pintar(fila, 1, 4, "CHEQUES", fuente=f_seccion, fondo=fondo_rotulo,
            alineacion=al_izq)
     pintar(fila, 5, 8, "TOTAL DE BILLETES", fuente=f_seccion,
@@ -838,15 +827,18 @@ def exportar_rendicion(datos, destino):
 
     for col_ini, col_fin, texto, alineado in (
             (1, 1, "CLIENTE", al_izq), (2, 2, "N.º CHEQUE", al_izq),
-            (3, 3, "BANCO", al_izq), (4, 4, "IMPORTE", al_der)):
+            (3, 3, "BANCO", al_izq), (4, 4, "IMPORTE", al_der),
+            (5, 6, "BILLETE", al_izq), (7, 7, "CANTIDAD", al_der),
+            (8, 8, "IMPORTE", al_der)):
         pintar(fila, col_ini, col_fin, texto, fuente=f_rotulo,
                fondo=fondo_rotulo, alineacion=alineado)
     ws.row_dimensions[fila].height = 22
-    fila_bloque = fila              # primer renglón del bloque derecho
     fila += 1
 
+    # Conteo por denominación: cuántos billetes de cada uno y cuánto suman
     cheques = list(datos.get("cheques") or [])
-    n_filas = max(MIN_FILAS_CHEQUES, len(cheques))
+    billetes = datos.get("billetes") or {}
+    n_filas = max(MIN_FILAS_CHEQUES, len(cheques), len(db.DENOMINACIONES))
     total_cheques = 0.0
     for i in range(n_filas):
         ch = cheques[i] if i < len(cheques) else None
@@ -860,27 +852,37 @@ def exportar_rendicion(datos, destino):
                fuente=f_dato, alineacion=al_izq)
         pintar(fila, 4, 4, float(ch["importe"]) if ch else None,
                fuente=f_dato, alineacion=al_der, formato=FORMATO_MONEDA)
+
+        if i < len(db.DENOMINACIONES):
+            denom = db.DENOMINACIONES[i]
+            try:
+                cant = int(billetes.get(str(denom), 0) or 0)
+            except (TypeError, ValueError):
+                cant = 0
+            pintar(fila, 5, 6, float(denom), fuente=f_dato,
+                   alineacion=al_izq, formato=FORMATO_MONEDA)
+            pintar(fila, 7, 7, cant, fuente=f_dato, alineacion=al_der,
+                   formato=FORMATO_ENTERO)
+            pintar(fila, 8, 8, float(denom) * cant, fuente=f_dato,
+                   alineacion=al_der, formato=FORMATO_MONEDA)
+        else:
+            pintar(fila, 5, 6, None, alineacion=al_izq)
+            pintar(fila, 7, 7, None, alineacion=al_der)
+            pintar(fila, 8, 8, None, alineacion=al_der)
         ws.row_dimensions[fila].height = 20
         fila += 1
 
     pintar(fila, 1, 3, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
     pintar(fila, 4, 4, total_cheques, fuente=f_total, alineacion=al_der,
            formato=FORMATO_MONEDA)
+    pintar(fila, 5, 7, "TOTAL EFECTIVO", fuente=f_total, fondo=fondo_verde,
+           alineacion=al_der)
+    pintar(fila, 8, 8, total_billetes_de(datos), fuente=f_efectivo,
+           fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
     ws.row_dimensions[fila].height = 30
-    fila_ultimo = fila              # último renglón del bloque derecho
-    fila += 2
-
-    # El total, ocupando todo el espacio de la tabla vieja: una celda
-    # única, sin bordes ni relleno y con la letra más grande de la hoja.
-    ws.merge_cells(start_row=fila_bloque, start_column=5,
-                   end_row=fila_ultimo, end_column=8)
-    celda_total_billetes = ws.cell(row=fila_bloque, column=5,
-                                   value=total_billetes_de(datos))
-    celda_total_billetes.font = Font(bold=True, size=TAM_TOTAL_BILLETES,
-                                     color="15803d")
-    celda_total_billetes.alignment = Alignment(horizontal="center",
-                                               vertical="center")
-    celda_total_billetes.number_format = FORMATO_MONEDA
+    fila += 1
+    ws.row_dimensions[fila].height = 15        # separador en blanco
+    fila += 1
 
     # ---------------- Observaciones ----------------
     pintar(fila, 1, 8, "OBSERVACIONES", fuente=f_seccion, fondo=fondo_rotulo,
@@ -889,7 +891,9 @@ def exportar_rendicion(datos, destino):
     fila += 1
 
     obs = (datos.get("observaciones") or "").strip()
-    pintar(fila, 1, 8, obs if obs else " ", fuente=f_dato, alineacion=al_izq)
+    pintar(fila, 1, 8, obs if obs else " ", fuente=f_dato,
+           alineacion=Alignment(horizontal="left", vertical="top",
+                                wrap_text=True))
     ws.row_dimensions[fila].height = 60
     ultima_fila = fila
     fila += 1
@@ -898,7 +902,22 @@ def exportar_rendicion(datos, destino):
     pie = datetime_texto() + (f"  —  Generado por: {u.get('usuario', '—')}"
                               if u else "")
     pintar(fila, 1, 8, pie, fuente=f_pie, alineacion=al_der, bordear=False)
+    ws.row_dimensions[fila].height = 16
     ultima_fila = fila
+
+    # ---------------- Reparto del alto: que el A4 quede lleno ---------------
+    # Si las filas suman menos que lo que entra en la página, Excel imprime el
+    # contenido encogido por el ancho y abajo queda papel en blanco: el
+    # sobrante se reparte por igual entre todas las filas de la planilla.
+    _alturas = [(f, ws.row_dimensions[f].height)
+                for f in sorted(ws.row_dimensions)
+                if ws.row_dimensions[f].height]
+    _suma_alturas = sum(h for _, h in _alturas)
+    _objetivo = alto_objetivo_a4()
+    if _suma_alturas and _objetivo > _suma_alturas:
+        _factor = _objetivo / _suma_alturas
+        for _f, _h in _alturas:
+            ws.row_dimensions[_f].height = round(_h * _factor, 2)
 
     # ---------------- Anchos de columna ----------------
     for i, ancho in enumerate(ANCHOS_RENDICION, start=1):

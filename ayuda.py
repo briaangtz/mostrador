@@ -353,8 +353,12 @@ TEMAS = [
             "APRETÁ **GUARDAR RENDICIÓN** para que quede guardada la del "
             "día (hay **un registro por fecha**: se actualiza y nunca se "
             "duplica) y **GENERAR PLANILLA A4** para obtener el archivo "
-            "con todo lo cargado, listo para imprimir en **una sola hoja "
-            "A4 vertical**.",
+            "con las secciones, los cheques, el conteo de billetes y las "
+            "observaciones, listo para imprimir en **una sola hoja A4 "
+            "vertical** y llenando la hoja de punta a punta. El **detalle "
+            "de venta** y los **ENVÍOS** no se imprimen: siguen "
+            "cargándose y guardándose en la pantalla, pero en el papel no "
+            "aparecen.",
         ],
         seccion="sección 21 del manual",
         ejemplos=["¿Cómo cargo la rendición?",

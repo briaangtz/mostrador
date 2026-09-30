@@ -633,17 +633,25 @@ quedan números distintos.
 ### Planilla A4
 
 **GENERAR PLANILLA A4** guarda lo cargado (y lo exporta) en un `.xlsx`
-con la estructura del formulario original: título, cabecera, detalle,
-secciones, cheques y observaciones, con los totales calculados. La hoja
-queda configurada para **imprimir en UNA sola hoja A4 vertical**
+con el resumen de la rendición: cabecera **FECHA · CHOFER**, las
+**SECCIONES** a todo el ancho (cerrando con el EFECTIVO que trae la
+pestaña 2), **CHEQUES** a la izquierda y, a la derecha, el **TOTAL DE
+BILLETES** con el conteo **por denominación**: cuántos billetes de $100,
+$200, $500 … y el importe de cada fila, con el **TOTAL EFECTIVO** al
+pie del bloque. Abajo van **OBSERVACIONES** y el pie de generación, con
+los totales calculados.
+
+Dos cosas **no se imprimen**: el **detalle de venta** (qué producto se
+vendió y en qué cantidad) y la fila de **ENVÍOS**, porque no le
+sirven —en la pantalla siguen cargándose y guardándose igual—.
+
+La hoja va configurada para **imprimir en UNA sola hoja A4 vertical**
 (`fitToWidth = fitToHeight = 1`, sin cuadrícula y con área de impresión
 definida), en tipografía grande y con los casilleros sin cargar en
-blanco.
-
-Al lado de los cheques **no hay tabla de denominaciones**: ese espacio
-lo ocupa un solo bloque con el **TOTAL DE BILLETES**, en letra gigante y
-**sin bordes ni relleno**, de modo que el total se lee de un vistazo y
-la hoja queda cerrada.
+blanco. Las alturas se reparten con `alto_objetivo_a4()` para que el
+contenido **llene la hoja de punta a punta**: el valor apunta a la
+escala a la que Excel imprime esta planilla (medida sobre el PDF que
+genera), de modo que no sobre papel en blanco abajo.
 
 ---
 

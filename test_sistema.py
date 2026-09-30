@@ -1663,10 +1663,10 @@ check(_wsp.print_area == f"'{_wsp.title}'!$A$1:$H${_ult}",
 
 _txt_r = [str(c.value) for f in _wsp.iter_rows() for c in f
           if c.value is not None]
-for _campo in ("PLANILLA DE RENDICIÓN POR BUZÓN", "FECHA", "CHOFER", "TIPO",
-               "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA", "ENVÍOS",
+for _campo in ("PLANILLA DE RENDICIÓN POR BUZÓN", "FECHA", "CHOFER",
+               "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA",
                "TARJETAS", "TRANSFERENCIAS", "RECIBOS", "CLIENTE",
-               "N.º CHEQUE", "BANCO", "TOTAL DE BILLETES",
+               "N.º CHEQUE", "BANCO", "BILLETE", "TOTAL DE BILLETES",
                "OBSERVACIONES"):
     check(any(_campo in t for t in _txt_r),
           f"rendición A4: conserva el campo {_campo}")
@@ -1674,42 +1674,50 @@ _num_r = [c.value for f in _wsp.iter_rows() for c in f
           if isinstance(c.value, (int, float))]
 check(any(abs(n - 42300) < 0.01 for n in _num_r),
       "rendición A4: el TOTAL EFECTIVO de la calculadora llega a la planilla")
-check(any(abs(n - 69000) < 0.01 for n in _num_r),
-      "rendición A4: el TOTAL DEL DETALLE llega a la planilla")
+check(not any("CALCULADORA" in t for t in _txt_r),
+      "rendición A4: el rótulo pasó a TOTAL DE BILLETES, sin CALCULADORA")
 check(any(abs(n - 50000) < 0.01 for n in _num_r),
       "rendición A4: el TOTAL CHEQUES llega a la planilla")
 check(xl.total_billetes_de({}) == 0
       and abs(xl.total_billetes_de({"billetes": {"1000": 2}}) - 2000) < 0.01,
       "rendición A4: el total de billetes se puede calcular solo con el conteo")
 
-# El bloque de billetes: un solo número grande y sin bordes
-check(not any("CALCULADORA" in t for t in _txt_r),
-      "rendición A4: ya no dice CALCULADORA DE BILLETES (dice TOTAL DE BILLETES)")
-_denominaciones = {100, 200, 500, 1000, 2000, 10000, 20000}
-check(not any(n in _denominaciones for n in _num_r),
-      "rendición A4: desapareció la tabla de denominaciones (BILLETE/CANTIDAD)")
-_rango_grande = None
-for _r in _wsp.merged_cells.ranges:
-    if _r.min_col == 5 and _r.max_col == 8 and (_r.max_row - _r.min_row) >= 3:
-        _rango_grande = _r
-check(_rango_grande is not None,
-      "rendición A4: el TOTAL DE BILLETES ocupa todo el espacio de la tabla")
-_celda_grande = (_wsp.cell(_rango_grande.min_row, _rango_grande.min_col)
-                 if _rango_grande else None)
-check(_celda_grande is not None
-      and abs((_celda_grande.value or 0) - 42300) < 0.01,
-      f"rendición A4: en ese bloque está el total de la calculadora "
-      f"(obtuvo {_celda_grande.value if _celda_grande else None})")
-check(_celda_grande is not None and (_celda_grande.font.size or 0) >= 40,
-      f"rendición A4: el TOTAL DE BILLETES va con letra gigante "
-      f"(obtuvo {_celda_grande.font.size if _celda_grande else None})")
-check(_celda_grande is not None and all(
-    _lado is None or getattr(_lado, "style", None) is None
-    for _lado in (_celda_grande.border.left,
-                  _celda_grande.border.right,
-                  _celda_grande.border.top,
-                  _celda_grande.border.bottom)),
-      "rendición A4: el TOTAL DE BILLETES va sin bordes")
+# El detalle de venta y los envíos ya no se imprimen
+check(not any("DETALLE" in t for t in _txt_r),
+      "rendición A4: se fue la sección de DETALLE (no discrimina productos)")
+check(not any("ENVÍO" in t for t in _txt_r),
+      "rendición A4: se fue la sección de ENVIOS")
+check(not any(abs(n - 69000) < 0.01 for n in _num_r),
+      "rendición A4: ya no se imprime el importe por producto")
+
+# El conteo por denominación: cuántos billetes de cada uno y cuánto suman
+_conteo_billetes = {}
+for _fila_xl in _wsp.iter_rows(min_row=1, max_row=_wsp.max_row):
+    _denom_xl = _fila_xl[4].value                # columna E: BILLETE (E:F)
+    if isinstance(_denom_xl, (int, float)):
+        _conteo_billetes[int(_denom_xl)] = (_fila_xl[6].value,     # G: cantidad
+                                            _fila_xl[7].value)     # H: importe
+_esperados = {100: 3, 200: 0, 500: 0, 1000: 2, 2000: 0, 10000: 0,
+              20000: 2}
+for _denom_xl, _cant_esperada in _esperados.items():
+    check(_denom_xl in _conteo_billetes,
+          f"rendición A4: el billete de ${_denom_xl} está en el conteo")
+    _cant_xl, _imp_xl = _conteo_billetes.get(_denom_xl, (None, None))
+    check(_cant_xl == _cant_esperada
+          and abs((_imp_xl or 0) - _denom_xl * _cant_esperada) < 0.01,
+          f"rendición A4: el billete de ${_denom_xl} se cuenta y suma "
+          f"({_cant_esperada} x ${_denom_xl} = {_imp_xl})")
+check(not any(_r.min_col == 5 and _r.max_col == 8
+              and (_r.max_row - _r.min_row) >= 3
+              for _r in _wsp.merged_cells.ranges),
+      "rendición A4: el total de billetes va discriminado, no en un bloque")
+
+# La hoja tiene que llenar el A4 de punta a punta
+_altas_xl = [d.height for d in _wsp.row_dimensions.values() if d.height]
+check(sum(_altas_xl) >= xl.alto_objetivo_a4() * 0.99,
+      f"rendición A4: las filas llenan la hoja entera "
+      f"(suman {sum(_altas_xl):.0f} pt y hacen falta "
+      f"{xl.alto_objetivo_a4():.0f} pt)")
 
 # El soporte también explica la pantalla nueva
 for _pregunta_r in ("planilla de rendicion", "calculadora de billetes",
