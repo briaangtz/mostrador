@@ -634,11 +634,16 @@ quedan números distintos.
 
 **GENERAR PLANILLA A4** guarda lo cargado (y lo exporta) en un `.xlsx`
 con la estructura del formulario original: título, cabecera, detalle,
-secciones, chequeos, conteo de billetes y observaciones, con los totales
-calculados. La hoja queda configurada para **imprimir en UNA sola hoja
-A4 vertical** (`fitToWidth = fitToHeight = 1`, sin cuadrícula y con área
-de impresión definida), en tipografía grande y con los casilleros sin
-cargar en blanco.
+secciones, cheques y observaciones, con los totales calculados. La hoja
+queda configurada para **imprimir en UNA sola hoja A4 vertical**
+(`fitToWidth = fitToHeight = 1`, sin cuadrícula y con área de impresión
+definida), en tipografía grande y con los casilleros sin cargar en
+blanco.
+
+Al lado de los cheques **no hay tabla de denominaciones**: ese espacio
+lo ocupa un solo bloque con el **TOTAL DE BILLETES**, en letra gigante y
+**sin bordes ni relleno**, de modo que el total se lee de un vistazo y
+la hoja queda cerrada.
 
 ---
 

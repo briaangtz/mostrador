@@ -1666,7 +1666,7 @@ _txt_r = [str(c.value) for f in _wsp.iter_rows() for c in f
 for _campo in ("PLANILLA DE RENDICIÓN POR BUZÓN", "FECHA", "CHOFER", "TIPO",
                "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA", "ENVÍOS",
                "TARJETAS", "TRANSFERENCIAS", "RECIBOS", "CLIENTE",
-               "N.º CHEQUE", "BANCO", "BILLETE", "TOTAL EFECTIVO",
+               "N.º CHEQUE", "BANCO", "TOTAL DE BILLETES",
                "OBSERVACIONES"):
     check(any(_campo in t for t in _txt_r),
           f"rendición A4: conserva el campo {_campo}")
@@ -1681,6 +1681,35 @@ check(any(abs(n - 50000) < 0.01 for n in _num_r),
 check(xl.total_billetes_de({}) == 0
       and abs(xl.total_billetes_de({"billetes": {"1000": 2}}) - 2000) < 0.01,
       "rendición A4: el total de billetes se puede calcular solo con el conteo")
+
+# El bloque de billetes: un solo número grande y sin bordes
+check(not any("CALCULADORA" in t for t in _txt_r),
+      "rendición A4: ya no dice CALCULADORA DE BILLETES (dice TOTAL DE BILLETES)")
+_denominaciones = {100, 200, 500, 1000, 2000, 10000, 20000}
+check(not any(n in _denominaciones for n in _num_r),
+      "rendición A4: desapareció la tabla de denominaciones (BILLETE/CANTIDAD)")
+_rango_grande = None
+for _r in _wsp.merged_cells.ranges:
+    if _r.min_col == 5 and _r.max_col == 8 and (_r.max_row - _r.min_row) >= 3:
+        _rango_grande = _r
+check(_rango_grande is not None,
+      "rendición A4: el TOTAL DE BILLETES ocupa todo el espacio de la tabla")
+_celda_grande = (_wsp.cell(_rango_grande.min_row, _rango_grande.min_col)
+                 if _rango_grande else None)
+check(_celda_grande is not None
+      and abs((_celda_grande.value or 0) - 42300) < 0.01,
+      f"rendición A4: en ese bloque está el total de la calculadora "
+      f"(obtuvo {_celda_grande.value if _celda_grande else None})")
+check(_celda_grande is not None and (_celda_grande.font.size or 0) >= 40,
+      f"rendición A4: el TOTAL DE BILLETES va con letra gigante "
+      f"(obtuvo {_celda_grande.font.size if _celda_grande else None})")
+check(_celda_grande is not None and all(
+    _lado is None or getattr(_lado, "style", None) is None
+    for _lado in (_celda_grande.border.left,
+                  _celda_grande.border.right,
+                  _celda_grande.border.top,
+                  _celda_grande.border.bottom)),
+      "rendición A4: el TOTAL DE BILLETES va sin bordes")
 
 # El soporte también explica la pantalla nueva
 for _pregunta_r in ("planilla de rendicion", "calculadora de billetes",
