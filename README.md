@@ -667,24 +667,66 @@ la marca). Para regenerarlo o usar otra imagen:
 En el código se aplica solo si `icono.ico` existe (si no, se abre con el ícono
 por defecto de Windows).
 
+## Actualizaciones automáticas (PC en distintos lugares)
+
+El programa puede **actualizarse solo** en todas las PC, desde cualquier lugar,
+sin perder nunca la base de datos.
+
+### Cómo funciona
+
+* Las versiones se publican en el repositorio **público** de GitHub
+  `briaangtz/mostrador-releases` (solo ejecutables; el código sigue privado).
+* En cada PC van **tres archivos** juntos, en la misma carpeta:
+  `MOSTRADOR.exe`, `Actualizador.exe` y `version.txt`.
+* El acceso directo del escritorio apunta al **`Actualizador.exe`** (no al
+  programa directo). Al abrirlo:
+  1. Consulta cuál es la última versión publicada.
+  2. Si hay una nueva, descarga **solo** el `MOSTRADOR.exe`.
+  3. **Respalda `garrafas.db`** en `respaldos\` (por las dudas).
+  4. Reemplaza `MOSTRADOR.exe` y actualiza `version.txt`.
+  5. Abre el programa.
+* La base de datos, los respaldos y las fotos **nunca** forman parte de la
+  actualización: se quedan intactos en cada PC.
+* Si no hay internet o falla la descarga, **no cambia nada** y abre la versión
+  que ya tenía. Todo queda anotado en `actualizaciones.log`.
+
+Como no hay que tocar nada, se puede crear una **tarea programada de Windows**
+que ejecute `Actualizador.exe` todos los días a una hora fija (por ejemplo
+23:00) para que las PC se actualicen solas de noche.
+
+### Publicar una actualización (para el que programa)
+
+1. Guardá los cambios en el código.
+2. Doble clic en **`Publicar actualización.bat`**.
+3. Escribí la versión nueva (Enter acepta la sugerida, que sube el último
+   número: `1.0.0` → `1.0.1`).
+4. El proceso compila `MOSTRADOR.exe` y `Actualizador.exe`, guarda el cambio de
+   versión y crea la release `vX.Y.Z` en el repo público.
+
+Listo: la próxima vez que cada PC abra el `Actualizador.exe`, se pone al día sola.
+
+> La primera vez, en cada PC hay que copiar los tres archivos (o llevar la
+> carpeta) **una vez**; de ahí en adelante se actualizan solos.
+
+---
+
 ## Llevarlo a otra PC
 
 ### Opción A — Archivo `.exe` (la más cómoda)
 
-Se generó **`dist\MOSTRADOR.exe`**. En la otra PC **no hace falta tener
-Python**: se copia únicamente ese archivo y se ejecuta. Los datos se guardan en
-`garrafas.db`, junto al `.exe`.
-
-Para regenerarlo (por ejemplo, después de cambiar algo en el código), **doble
-clic en `Compilar MOSTRADOR.bat`**, o bien manualmente:
-
-```
-python -m PyInstaller --noconfirm --onefile --windowed --name MOSTRADOR --icon "icono.ico" --add-data "icono.ico;." main.py
-```
+Se generan **`dist\MOSTRADOR.exe`**, **`dist\Actualizador.exe`** y
+**`dist\version.txt`**. En la otra PC **no hace falta tener Python**: se copian
+esos tres archivos a una carpeta y se ejecuta **`Actualizador.exe`** (es el que
+se actualiza solo y abre el programa). Los datos se guardan en `garrafas.db`,
+junto a los `.exe`.
 
 > Si querés llevar los datos ya cargados, copiá también `garrafas.db` (y la
-> carpeta `respaldos/`, si querés el histórico) junto al `.exe`. Si la otra PC
-> empieza de cero, basta con el `.exe`.
+> carpeta `respaldos/`, si querés el histórico). Si la otra PC empieza de cero,
+> basta con los tres archivos.
+
+Para actualizar y publicar una versión nueva, **doble clic en `Publicar
+actualización.bat`** (ver *Actualizaciones automáticas*). Si solo querés
+recompilar el ejecutable sin publicar, se usa `Compilar MOSTRADOR.bat`.
 
 ### Opción B — Copiar la carpeta
 
@@ -721,4 +763,11 @@ se abre con `Iniciar.bat` o `python main.py`.
 | `test_sistema.py`     | Pruebas automáticas (`python test_sistema.py`) |
 | `Iniciar.bat`         | Acceso directo para abrir el programa          |
 | `Compilar MOSTRADOR.bat` | Regenera el `.exe` con un doble clic         |
-| `dist\MOSTRADOR.exe`  | Programa compilado para llevar a otra PC       |
+| `version.py`          | Versión actual y repo de actualizaciones       |
+| `actualizador.py`     | Actualizador automático (se compila como       |
+|                       | `Actualizador.exe`; va en cada PC)             |
+| `publicar.py`         | Compila y publica una versión nueva            |
+| `Publicar actualización.bat` | Doble clic para publicar una versión nueva |
+| `dist\MOSTRADOR.exe`  | Programa compilado                             |
+| `dist\Actualizador.exe` | Actualiza y abre el programa (va en cada PC) |
+| `dist\version.txt`    | Versión instalada (va en cada PC)              |

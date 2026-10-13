@@ -14,6 +14,7 @@ from tkinter import messagebox
 import database as db
 import estilos as st
 from util import ruta_recurso
+from version import VERSION
 from ui_login import pedir_login
 from ui_inicio import InicioPanel
 from ui_ventas import VentasPanel
@@ -27,14 +28,14 @@ from ui_ayuda import SoporteVentana
 
 # (clave, etiqueta del botón, permiso requerido o None)
 NAV = [
-    ("inicio", "Inicio\nCaja del día", None),
-    ("ventas", "Ventas\nRegistro del día", "ventas"),
-    ("stats", "Estadísticas\nVentas y reportes", "estadisticas"),
-    ("config", "Configuración\nPrecios y seguridad", None),
-    ("historial", "Historial\nde cierres", "historial"),
-    ("rendicion", "Rendición\nPlanilla por buzón", "rendicion"),
-    ("admin", "Administración\nUsuarios y actividad", "panel_admin"),
-    ("cuenta", "Mi cuenta\nPerfil y seguridad", None),
+    ("inicio", "Inicio", None),
+    ("ventas", "Ventas", "ventas"),
+    ("stats", "Estadísticas y reportes", "estadisticas"),
+    ("config", "Configuración", None),
+    ("historial", "Historial de cierres", "historial"),
+    ("rendicion", "Planilla de rendición", "rendicion"),
+    ("admin", "Panel de control", "panel_admin"),
+    ("cuenta", "Mi cuenta", None),
 ]
 
 
@@ -43,7 +44,7 @@ class App(tk.Tk):
         super().__init__()
         db.init()
 
-        self.title("Control de Ventas de Garrafas — Caja Diaria")
+        self.title(f"Control de Ventas de Garrafas — Caja Diaria  ·  v{VERSION}")
         # Ventana adaptada al tamaño de pantalla (chica o grande), centrada
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
@@ -79,7 +80,7 @@ class App(tk.Tk):
                 return
         self.deiconify()
         self.title(f"Control de Ventas de Garrafas — {usuario['usuario']} "
-                   f"({usuario['rango']})")
+                   f"({usuario['rango']})  ·  v{VERSION}")
 
         # Respaldo automático: uno por día al abrir el programa
         if db.respaldo_automatico_activo():
@@ -285,7 +286,7 @@ class App(tk.Tk):
             break
         # El rango puede haber cambiado: se actualiza la navegación
         self.title(f"Control de Ventas de Garrafas — {usuario['usuario']} "
-                   f"({usuario['rango']})")
+                   f"({usuario['rango']})  ·  v{VERSION}")
         self._actualizar_nav()
         if self.panel_actual and not self.botones_nav[self.panel_actual].winfo_ismapped():
             self.panel_actual = None

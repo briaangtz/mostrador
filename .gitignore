@@ -9,6 +9,7 @@ respaldos/
 # ---------------- Compilación / PyInstaller ----------------
 build/
 dist/
+Actualizador.spec
 *.spec.bak
 
 # ---------------- Python ----------------

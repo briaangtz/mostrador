@@ -423,7 +423,7 @@ TEMAS = [
                 "asignar permisos", "panel de administracion",
                 "activar usuario", "desactivar usuario"],
         parrafos=[
-            "El panel **Administración → Usuarios y actividad** (solo "
+            "El panel **Panel de control** (solo "
             "DESARROLLADOR) sirve para crear, modificar, activar/desactivar "
             "y eliminar usuarios, asignar rangos y contraseñas y ver el "
             "registro de actividad.",

@@ -6,7 +6,7 @@ actualización.bat"). El repositorio de ``RELEASES_REPO`` es PÚBLICO y guarda
 solamente los ejecutables de cada versión: el código sigue privado.
 """
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 # Repositorio público de GitHub donde se publican las versiones.
 RELEASES_REPO = "briaangtz/mostrador-releases"

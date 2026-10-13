@@ -1663,7 +1663,7 @@ check(_wsp.print_area == f"'{_wsp.title}'!$A$1:$H${_ult}",
 
 _txt_r = [str(c.value) for f in _wsp.iter_rows() for c in f
           if c.value is not None]
-for _campo in ("PLANILLA DE RENDICIÓN POR BUZÓN", "FECHA", "CHOFER",
+for _campo in ("PLANILLA DE RENDICIÓN", "FECHA", "CHOFER",
                "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA",
                "TARJETAS", "TRANSFERENCIAS", "RECIBOS", "CLIENTE",
                "N.º CHEQUE", "BANCO", "BILLETE", "TOTAL DE BILLETES",

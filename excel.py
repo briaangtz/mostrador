@@ -23,8 +23,8 @@ from openpyxl.worksheet.properties import PageSetupProperties
 import database as db
 from util import fecha_corta, money
 
-AZUL = "01ADEF"                      # color de marca
-GRIS_CLARO = "F2F4F7"
+AZUL = "000000"                      # sin color: todo en blanco y negro
+GRIS_CLARO = "FFFFFF"
 FORMATO_MONEDA = '"$"#,##0'
 FORMATO_ENTERO = "#,##0"
 
@@ -43,7 +43,7 @@ SECCIONES = [
 ENCABEZADOS = ["Nombre", "Carga", "N° Comprobante / Tarjeta", "Total"]
 PARES_DETALLE = [(1, 2), (3, 4), (5, 6), (7, 8)]
 N_COL = 8
-ANCHOS = [20, 14, 14, 14, 14, 14, 13, 18]
+ANCHOS = [24, 17, 17, 17, 17, 17, 16, 21]
 
 # Secciones del resumen de unidades: (rótulo corto, medios que agrupa)
 RESUMEN_SECCIONES = [
@@ -232,16 +232,16 @@ def exportar_movimientos(desde, hasta, destino):
     fila = 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=4)
     celda = ws.cell(row=fila, column=1, value="MOVIMIENTOS DE CAJA")
-    celda.font = Font(bold=True, size=16, color=AZUL)
+    celda.font = Font(bold=True, size=18, color=AZUL)
     celda.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[fila].height = 24
+    ws.row_dimensions[fila].height = 30
     fila += 1
 
     rango_txt = (("Del " + fecha_corta(desde)) if desde else "") + \
                 ((" al " + fecha_corta(hasta)) if hasta else "")
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=4)
     celda = ws.cell(row=fila, column=1, value=rango_txt.strip())
-    celda.font = Font(italic=True, color="666666")
+    celda.font = Font(italic=True, size=12, color="000000")
     celda.alignment = Alignment(horizontal="center")
     fila += 1
 
@@ -250,16 +250,16 @@ def exportar_movimientos(desde, hasta, destino):
                (f"  —  Exportado por: {u.get('usuario', '—')}" if u else "")
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=4)
     celda = ws.cell(row=fila, column=1, value=generado)
-    celda.font = Font(italic=True, size=9, color="999999")
+    celda.font = Font(italic=True, size=10, color="000000")
     celda.alignment = Alignment(horizontal="center")
     fila += 2
 
     # ---------------- Estilos reutilizables ----------------
-    lado = Side(style="thin", color="BFBFBF")
+    lado = Side(style="thin", color="000000")
     borde = Border(left=lado, right=lado, top=lado, bottom=lado)
     relleno_enc = PatternFill(patternType="solid", fgColor=AZUL)
-    relleno_seccion = PatternFill(patternType="solid", fgColor="1F2937")
-    relleno_bloque = PatternFill(patternType="solid", fgColor="3B4A5E")
+    relleno_seccion = PatternFill(patternType="solid", fgColor="000000")
+    relleno_bloque = PatternFill(patternType="solid", fgColor="000000")
     relleno_total = PatternFill(patternType="solid", fgColor=GRIS_CLARO)
     centro = Alignment(horizontal="center", vertical="center", wrap_text=True)
     texto = Alignment(horizontal="left", vertical="center")
@@ -269,7 +269,7 @@ def exportar_movimientos(desde, hasta, destino):
     cantidad_total = 0
     tickets_vistos = set()          # tickets distintos que aparecen abajo
 
-    def _fila_titulo(texto, fuente, relleno, alto=22, ancho=N_COL):
+    def _fila_titulo(texto, fuente, relleno, alto=26, ancho=N_COL):
         """Fila de título (sección o bloque) que ocupa todo el ancho."""
         nonlocal fila
         ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
@@ -289,13 +289,13 @@ def exportar_movimientos(desde, hasta, destino):
             ws.merge_cells(start_row=fila, start_column=col_ini,
                            end_row=fila, end_column=col_fin)
             celda = ws.cell(row=fila, column=col_ini, value=texto_enc)
-            celda.font = Font(bold=True, color="FFFFFF")
+            celda.font = Font(bold=True, size=12, color="FFFFFF")
             celda.alignment = centro
             for col in range(col_ini, col_fin + 1):
                 celda = ws.cell(row=fila, column=col)
                 celda.fill = relleno_enc
                 celda.border = borde
-        ws.row_dimensions[fila].height = 26
+        ws.row_dimensions[fila].height = 30
         fila += 1
 
     def _fila_detalle(valores, vacia=False):
@@ -315,9 +315,12 @@ def exportar_movimientos(desde, hasta, destino):
             else:
                 celda.alignment = texto
             if vacia:
-                celda.font = Font(italic=True, color="999999")
+                celda.font = Font(italic=True, size=12, color="000000")
+            else:
+                celda.font = Font(size=12)
             for col in range(col_ini, col_fin + 1):
                 ws.cell(row=fila, column=col).border = borde
+        ws.row_dimensions[fila].height = 20
         fila += 1
 
     def _detalle(items, vacio_txt):
@@ -340,18 +343,19 @@ def exportar_movimientos(desde, hasta, destino):
         ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
                        end_column=6)
         celda_t = ws.cell(row=fila, column=1, value=texto)
-        celda_t.font = Font(bold=True, size=11)
+        celda_t.font = Font(bold=True, size=13)
         celda_t.alignment = texto_der
         ws.merge_cells(start_row=fila, start_column=7, end_row=fila,
                        end_column=8)
         celda_v = ws.cell(row=fila, column=7, value=monto)
-        celda_v.font = Font(bold=True, size=11)
+        celda_v.font = Font(bold=True, size=13)
         celda_v.number_format = FORMATO_MONEDA
         celda_v.alignment = texto_der
         for col in range(1, N_COL + 1):
             celda = ws.cell(row=fila, column=col)
             celda.fill = relleno_total
             celda.border = borde
+        ws.row_dimensions[fila].height = 20
         fila += 1
 
     # ---------------- Recuadros por sección de pago ----------------
@@ -360,12 +364,12 @@ def exportar_movimientos(desde, hasta, destino):
         nonlocal fila
         for texto_enc, col in rotulos:
             celda = ws.cell(row=fila, column=col, value=texto_enc)
-            celda.font = Font(bold=True, color="FFFFFF")
+            celda.font = Font(bold=True, size=12, color="FFFFFF")
             celda.alignment = centro
         for col in range(1, rotulos[-1][1] + 1):
             ws.cell(row=fila, column=col).fill = relleno_enc
             ws.cell(row=fila, column=col).border = borde
-        ws.row_dimensions[fila].height = 26
+        ws.row_dimensions[fila].height = 30
         fila += 1
 
     def _recuadro_fila(rotulo, productos, mapa, dinero=0.0, *,
@@ -377,7 +381,7 @@ def exportar_movimientos(desde, hasta, destino):
         pagos y por eso siempre cierra exacto.
         """
         nonlocal fila
-        fuente = fuente or Font(size=10)
+        fuente = fuente or Font(size=11)
         col_uni = 2 + len(productos)
         col_din = col_uni + 1
 
@@ -396,19 +400,19 @@ def exportar_movimientos(desde, hasta, destino):
         celda_u = ws.cell(row=fila, column=col_uni, value=int(unidades))
         celda_u.number_format = FORMATO_ENTERO
         celda_u.alignment = centro
-        celda_u.font = Font(bold=True, size=11, color=AZUL)
+        celda_u.font = Font(bold=True, size=12, color=AZUL)
 
         celda_d = ws.cell(row=fila, column=col_din, value=float(dinero))
         celda_d.number_format = FORMATO_MONEDA
         celda_d.alignment = texto_der
-        celda_d.font = Font(bold=True, size=11)
+        celda_d.font = Font(bold=True, size=12)
 
         for col in range(1, col_din + 1):
             celda = ws.cell(row=fila, column=col)
             celda.border = borde
             if relleno is not None:
                 celda.fill = relleno
-        ws.row_dimensions[fila].height = 17
+        ws.row_dimensions[fila].height = 21
         fila += 1
 
     def _recuadro(titulo, productos, familia, aclaracion=None):
@@ -433,18 +437,18 @@ def exportar_movimientos(desde, hasta, destino):
         mapa_total = _sumar_unidades(datos_medio, medios_periodo)
         dinero_total = _dinero_seccion(medios_periodo, familia)
 
-        _fila_titulo(titulo, Font(bold=True, size=12, color="FFFFFF"),
+        _fila_titulo(titulo, Font(bold=True, size=14, color="FFFFFF"),
                      relleno_seccion, ancho=col_din)
         if aclaracion:
             ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
                            end_column=col_din)
             celda = ws.cell(row=fila, column=1, value=aclaracion)
-            celda.font = Font(italic=True, size=9, color="555555")
+            celda.font = Font(italic=True, size=10, color="000000")
             celda.alignment = texto
             for col in range(1, col_din + 1):
                 ws.cell(row=fila, column=col).fill = relleno_total
                 ws.cell(row=fila, column=col).border = borde
-            ws.row_dimensions[fila].height = 16
+            ws.row_dimensions[fila].height = 19
             fila += 1
 
         _recuadro_enc([("Sección", 1)]
@@ -461,7 +465,7 @@ def exportar_movimientos(desde, hasta, destino):
             dinero_seccion.append(dinero)
 
         _recuadro_fila("TOTAL GENERAL", productos, mapa_total, dinero_total,
-                       fuente=Font(bold=True, size=11),
+                       fuente=Font(bold=True, size=13),
                        relleno=relleno_total)
         total_unidades = sum(int(mapa_total.get(pid, 0))
                              for pid, _ in productos)
@@ -489,17 +493,20 @@ def exportar_movimientos(desde, hasta, destino):
         ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
                        end_column=ancho - 1)
         celda = ws.cell(row=fila, column=1, value=f"{rotulo}: {expr}")
-        celda.font = Font(bold=True, size=10)
+        celda.font = Font(bold=True, size=11)
         celda.alignment = texto
         estado = ws.cell(row=fila, column=ancho,
                          value="COINCIDE" if coincide else "REVISAR")
-        estado.font = Font(bold=True, size=10,
-                           color="1B7F3B" if coincide else "C0392B")
+        estado.font = Font(bold=True, size=11, color="000000")
         estado.alignment = centro
         for col in range(1, ancho + 1):
             ws.cell(row=fila, column=col).fill = relleno_total
             ws.cell(row=fila, column=col).border = borde
-        ws.row_dimensions[fila].height = 18
+        if not coincide:
+            # Sin color: REVISAR se marca en negativo (texto blanco sobre negro)
+            estado.font = Font(bold=True, size=11, color="FFFFFF")
+            estado.fill = relleno_seccion
+        ws.row_dimensions[fila].height = 21
         fila += 1
 
     datos_medio = _unidades_por_medio(movimientos)
@@ -521,14 +528,14 @@ def exportar_movimientos(desde, hasta, destino):
                               if _vendidos(p[0], datos_medio)])
 
     _fila_titulo("RESUMEN DE VENTAS POR SECCIÓN DE PAGO",
-                 Font(bold=True, size=13, color="FFFFFF"), relleno_enc,
-                 alto=24)
+                 Font(bold=True, size=15, color="FFFFFF"), relleno_enc,
+                 alto=28)
 
     if not (garrafas or envases):
         ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
                        end_column=N_COL)
         celda = ws.cell(row=fila, column=1, value="Sin ventas en el período.")
-        celda.font = Font(italic=True, size=11, color="999999")
+        celda.font = Font(italic=True, size=12, color="000000")
         celda.alignment = texto
         fila += 2
     else:
@@ -547,7 +554,7 @@ def exportar_movimientos(desde, hasta, destino):
     # ---------------- Una sección por medio de pago ----------------
     for titulo, bloques in SECCIONES:
         # Título de la sección (p. ej. TARJETAS)
-        _fila_titulo(titulo, Font(bold=True, size=12, color="FFFFFF"),
+        _fila_titulo(titulo, Font(bold=True, size=14, color="FFFFFF"),
                      relleno_seccion)
 
         subtotal_seccion = 0.0
@@ -560,8 +567,8 @@ def exportar_movimientos(desde, hasta, destino):
 
             # Dentro de la sección, cada medio con su propio bloque
             if len(bloques) > 1:
-                _fila_titulo(subtitulo, Font(bold=True, size=11, color="FFFFFF"),
-                             relleno_bloque, alto=18)
+                _fila_titulo(subtitulo, Font(bold=True, size=12, color="FFFFFF"),
+                             relleno_bloque, alto=22)
             _encabezados()
             _detalle(items, f"Sin movimientos de {subtitulo.lower()} "
                             f"en el período.")
@@ -579,8 +586,8 @@ def exportar_movimientos(desde, hasta, destino):
         total_general += subtotal_seccion
         if len(bloques) > 1:
             _subtotal(f"TOTAL {titulo}", subtotal_seccion)
-            ws.cell(row=fila - 1, column=1).font = Font(bold=True, size=12)
-            ws.cell(row=fila - 1, column=7).font = Font(bold=True, size=12)
+            ws.cell(row=fila - 1, column=1).font = Font(bold=True, size=14)
+            ws.cell(row=fila - 1, column=7).font = Font(bold=True, size=14)
         fila += 1
 
     # Una venta = una operación: se cuentan tickets, no filas de cobro.
@@ -589,28 +596,28 @@ def exportar_movimientos(desde, hasta, destino):
     # ---------------- Total general ----------------
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=6)
     celda_t = ws.cell(row=fila, column=1, value="TOTAL GENERAL")
-    celda_t.font = Font(bold=True, size=13)
+    celda_t.font = Font(bold=True, size=15, color="FFFFFF")
     celda_t.alignment = texto_der
     for col in range(1, 7):
         ws.cell(row=fila, column=col).fill = relleno_enc
     ws.merge_cells(start_row=fila, start_column=7, end_row=fila, end_column=8)
     celda_v = ws.cell(row=fila, column=7, value=total_general)
-    celda_v.font = Font(bold=True, size=13, color=AZUL)
+    celda_v.font = Font(bold=True, size=15, color="FFFFFF")
     celda_v.number_format = FORMATO_MONEDA
     celda_v.alignment = texto_der
     celda_v.fill = relleno_enc
     for col in range(7, N_COL + 1):
         ws.cell(row=fila, column=col).fill = relleno_enc
-    ws.row_dimensions[fila].height = 22
+    ws.row_dimensions[fila].height = 26
     fila += 1
 
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=6)
     celda_t = ws.cell(row=fila, column=1, value="Cantidad de operaciones:")
-    celda_t.font = Font(bold=True, size=10)
+    celda_t.font = Font(bold=True, size=11)
     celda_t.alignment = texto_der
     ws.merge_cells(start_row=fila, start_column=7, end_row=fila, end_column=8)
     celda_v = ws.cell(row=fila, column=7, value=cantidad_total)
-    celda_v.font = Font(bold=True, size=10, color=AZUL)
+    celda_v.font = Font(bold=True, size=11, color=AZUL)
     celda_v.number_format = FORMATO_ENTERO
     celda_v.alignment = texto_der
     ultima_fila = fila
@@ -716,21 +723,22 @@ def exportar_rendicion(datos, destino):
     ws = wb.active
     ws.title = "Rendición"
 
-    trazo = Side(style="thin", color="B7C0CC")
+    trazo = Side(style="thin", color="000000")
     borde = Border(left=trazo, right=trazo, top=trazo, bottom=trazo)
     f_titulo = Font(bold=True, size=18, color="FFFFFF")
-    f_seccion = Font(bold=True, size=12, color="111827")
-    f_rotulo = Font(bold=True, size=11, color="111827")
-    f_valor = Font(size=11, color="111827")
-    f_dato = Font(size=11, color="111827")
-    f_total = Font(bold=True, size=13, color="111827")
-    f_efectivo = Font(bold=True, size=16, color="15803d")
-    f_pie = Font(italic=True, size=9, color="999999")
+    f_seccion = Font(bold=True, size=12, color="000000")
+    f_rotulo = Font(bold=True, size=11, color="000000")
+    f_valor = Font(size=11, color="000000")
+    f_dato = Font(size=11, color="000000")
+    f_num = Font(size=13, bold=True, color="000000")
+    f_total = Font(bold=True, size=15, color="000000")
+    f_efectivo = Font(bold=True, size=18, color="000000")
+    f_pie = Font(italic=True, size=9, color="000000")
     fondo_titulo = PatternFill(start_color=AZUL, end_color=AZUL,
                                fill_type="solid")
     fondo_rotulo = PatternFill(start_color=GRIS_CLARO, end_color=GRIS_CLARO,
                                fill_type="solid")
-    fondo_verde = PatternFill(start_color="DCFCE7", end_color="DCFCE7",
+    fondo_verde = PatternFill(start_color="FFFFFF", end_color="FFFFFF",
                               fill_type="solid")
     al_izq = Alignment(horizontal="left", vertical="center", wrap_text=True)
     al_der = Alignment(horizontal="right", vertical="center")
@@ -758,7 +766,7 @@ def exportar_rendicion(datos, destino):
 
     fila = 1
     # ---------------- Título ----------------
-    pintar(fila, 1, 8, "PLANILLA DE RENDICIÓN POR BUZÓN", fuente=f_titulo,
+    pintar(fila, 1, 8, "PLANILLA DE RENDICIÓN", fuente=f_titulo,
            fondo=fondo_titulo, alineacion=al_ctr, bordear=False)
     ws.row_dimensions[fila].height = 34
     fila += 1
@@ -802,7 +810,7 @@ def exportar_rendicion(datos, destino):
             valor = None
         pintar(fila, 1, 4, texto, fuente=f_rotulo, fondo=fondo_rotulo,
                alineacion=al_izq)
-        pintar(fila, 5, 8, valor, fuente=f_dato, alineacion=al_der,
+        pintar(fila, 5, 8, valor, fuente=f_num, alineacion=al_der,
                formato=FORMATO_MONEDA)
         ws.row_dimensions[fila].height = 22
         fila += 1
@@ -851,7 +859,7 @@ def exportar_rendicion(datos, destino):
         pintar(fila, 3, 3, (ch["banco"] or "") if ch else None,
                fuente=f_dato, alineacion=al_izq)
         pintar(fila, 4, 4, float(ch["importe"]) if ch else None,
-               fuente=f_dato, alineacion=al_der, formato=FORMATO_MONEDA)
+               fuente=f_num, alineacion=al_der, formato=FORMATO_MONEDA)
 
         if i < len(db.DENOMINACIONES):
             denom = db.DENOMINACIONES[i]
@@ -859,11 +867,11 @@ def exportar_rendicion(datos, destino):
                 cant = int(billetes.get(str(denom), 0) or 0)
             except (TypeError, ValueError):
                 cant = 0
-            pintar(fila, 5, 6, float(denom), fuente=f_dato,
+            pintar(fila, 5, 6, float(denom), fuente=f_num,
                    alineacion=al_izq, formato=FORMATO_MONEDA)
-            pintar(fila, 7, 7, cant, fuente=f_dato, alineacion=al_der,
+            pintar(fila, 7, 7, cant, fuente=f_num, alineacion=al_der,
                    formato=FORMATO_ENTERO)
-            pintar(fila, 8, 8, float(denom) * cant, fuente=f_dato,
+            pintar(fila, 8, 8, float(denom) * cant, fuente=f_num,
                    alineacion=al_der, formato=FORMATO_MONEDA)
         else:
             pintar(fila, 5, 6, None, alineacion=al_izq)
