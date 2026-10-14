@@ -880,12 +880,12 @@ def exportar_rendicion(datos, destino):
         ws.row_dimensions[fila].height = 20
         fila += 1
 
-    pintar(fila, 1, 3, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
-    pintar(fila, 4, 4, total_cheques, fuente=f_total, alineacion=al_der,
+    pintar(fila, 1, 2, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
+    pintar(fila, 3, 4, total_cheques, fuente=f_total, alineacion=al_der,
            formato=FORMATO_MONEDA)
-    pintar(fila, 5, 7, "TOTAL EFECTIVO", fuente=f_total, fondo=fondo_verde,
+    pintar(fila, 5, 6, "TOTAL", fuente=f_total, fondo=fondo_verde,
            alineacion=al_der)
-    pintar(fila, 8, 8, total_billetes_de(datos), fuente=f_efectivo,
+    pintar(fila, 7, 8, total_billetes_de(datos), fuente=f_efectivo,
            fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
     ws.row_dimensions[fila].height = 30
     fila += 1
