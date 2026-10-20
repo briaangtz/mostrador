@@ -34,6 +34,7 @@ SECCIONES = [
     ("TRANSFERENCIAS", [("Transferencia", "Transferencia")]),
     ("TARJETAS", [("TARJETA DE DÉBITO", "Tarjeta de débito"),
                   ("TARJETA DE CRÉDITO", "Tarjeta de crédito")]),
+    ("BONOS", [("BONO", "BONO")]),
     ("DINERO / EFECTIVO", [("Efectivo", "Efectivo")]),
 ]
 
@@ -50,6 +51,7 @@ RESUMEN_SECCIONES = [
     ("EFEC", ["Efectivo"]),
     ("TARJETA", ["Tarjeta de débito", "Tarjeta de crédito"]),
     ("TRANS", ["Transferencia"]),
+    ("BONO", ["BONO"]),
 ]
 
 # Orden en que se muestran las columnas del recuadro
@@ -78,13 +80,24 @@ def _filas_pago(movimientos, medio):
         for i, pg in enumerate(pagos):
             cliente = (v.get("cliente") or "").strip()
             numero = f"#{v['id']}"
+            comprobante = pg.get("comprobante")
+            if medio == "BONO":
+                mutual = pg.get("mutual")
+                bono_nombre = pg.get("bono_nombre")
+                partes = []
+                if mutual:
+                    partes.append(f"Mutual: {mutual}")
+                if bono_nombre:
+                    partes.append(f"Nombre: {bono_nombre}")
+                if partes:
+                    comprobante = " | ".join(partes)
             filas.append({
                 "ticket": v["id"],
                 "nombre": f"{numero} · {cliente}" if i == 0 and cliente
                           else numero,
                 "cliente": cliente if i == 0 else "",
                 "carga": _carga(v),
-                "comprobante": pg.get("comprobante"),
+                "comprobante": comprobante,
                 "total": float(pg["importe"]),
             })
     return filas

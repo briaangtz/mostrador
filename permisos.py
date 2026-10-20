@@ -23,6 +23,7 @@ PERMISOS = {
     "pago_transferencia": ["DESARROLLADOR", "USUARIO"],
     "pago_debito":        ["DESARROLLADOR", "USUARIO"],
     "pago_credito":       ["DESARROLLADOR", "USUARIO"],
+    "pago_bono":          ["DESARROLLADOR", "USUARIO"],
     # --- Secciones del sistema ---
     "historial":          ["DESARROLLADOR", "USUARIO"],
     "rendicion":          ["DESARROLLADOR", "USUARIO"],
@@ -47,6 +48,7 @@ DESCRIPCIONES = {
                           "(con comprobante obligatorio)",
     "pago_debito": "Registrar pagos con tarjeta de débito",
     "pago_credito": "Registrar pagos con tarjeta de crédito",
+    "pago_bono": "Registrar pagos con BONO (código de mutual y nombre obligatorios)",
     "historial": "Consultar el historial y el detalle de los cierres de caja",
     "rendicion": "Cargar la planilla de rendición por buzón y usar la "
                  "calculadora de billetes",
@@ -71,6 +73,7 @@ ETIQUETAS = {
     "pago_transferencia": "Registrar Transferencias",
     "pago_debito": "Cobrar con Débito",
     "pago_credito": "Cobrar con Crédito",
+    "pago_bono": "Cobrar con BONO",
     "historial": "Ver Historial de cierres",
     "rendicion": "Cargar planilla de rendición",
     "estadisticas": "Ver Estadísticas",
@@ -86,7 +89,7 @@ ETIQUETAS = {
 GRUPOS = [
     ("CAJAS", ["abrir_caja", "cerrar_caja", "reabrir_caja"]),
     ("VENTAS Y COBROS", ["ventas", "pago_efectivo", "pago_transferencia",
-                         "pago_debito", "pago_credito"]),
+                         "pago_debito", "pago_credito", "pago_bono"]),
     ("SECCIONES", ["historial", "rendicion", "estadisticas", "configuracion",
                    "panel_admin", "admin_usuarios", "ver_actividad"]),
     ("REPORTES Y PERFIL", ["exportar_excel", "cambiar_mia_clave"]),

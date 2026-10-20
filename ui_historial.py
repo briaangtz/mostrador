@@ -253,6 +253,7 @@ class DetalleCierre(tk.Toplevel):
             ("Total tarjetas", money(cierre["debito"] + cierre["credito"])),
             ("   · Tarjeta de débito", money(cierre["debito"])),
             ("   · Tarjeta de crédito", money(cierre["credito"])),
+            ("Total BONOS", money(cierre.get("bono", 0))),
             ("Total general", money(cierre["total_general"])),
             ("Diferencia de caja", money(cierre["diferencia"])),
             ("Estado", cierre["estado"]),

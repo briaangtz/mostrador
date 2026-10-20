@@ -136,6 +136,23 @@ class VentasPanel(tk.Frame):
                                         relief="solid", bd=1)
         self.ent_comprobante.pack(fill="x", pady=(3, 0), ipady=4)
 
+        # CÓDIGO DE MUTUAL y NOMBRE: obligatorios para BONO
+        c_mutual, self.lbl_mutual = campo(2, "CÓDIGO DE MUTUAL", 1)
+        self.var_mutual = tk.StringVar(value="")
+        self.ent_mutual = tk.Entry(c_mutual,
+                                    textvariable=self.var_mutual,
+                                    font=(st.FUENTE, 11), justify="left",
+                                    relief="solid", bd=1)
+        self.ent_mutual.pack(fill="x", pady=(3, 0), ipady=4)
+
+        c_bono_nombre, self.lbl_bono_nombre = campo(3, "NOMBRE (BONO)", 1)
+        self.var_bono_nombre = tk.StringVar(value="")
+        self.ent_bono_nombre = tk.Entry(c_bono_nombre,
+                                         textvariable=self.var_bono_nombre,
+                                         font=(st.FUENTE, 11), justify="left",
+                                         relief="solid", bd=1)
+        self.ent_bono_nombre.pack(fill="x", pady=(3, 0), ipady=4)
+
         c_total, _ = campo(3, "TOTAL DEL TICKET", 1)
         self.lbl_total = tk.Label(c_total, text="$0", bg=st.TARJETA,
                                   fg=st.VERDE_OSCURO,
@@ -387,8 +404,12 @@ class VentasPanel(tk.Frame):
             self._recalcular()
 
     def _medio_cambiado(self, _=None):
-        """Actualiza el aviso del N° de comprobante según el medio de pago."""
-        es_transferencia = self.combo_medio.get() == "Transferencia"
+        """Actualiza el aviso del N° de comprobante y campos BONO según el medio."""
+        medio = self.combo_medio.get()
+        es_transferencia = medio == "Transferencia"
+        es_bono = medio == "BONO"
+
+        # N° de comprobante
         if es_transferencia:
             self.lbl_comprobante.config(
                 text="N° DE COMPROBANTE (OBLIGATORIO)", fg=st.ROJO,
@@ -401,6 +422,30 @@ class VentasPanel(tk.Frame):
                 font=(st.FUENTE, 9, "bold"),
             )
             self.ent_comprobante.config(bg="#ffffff")
+
+        # CÓDIGO DE MUTUAL y NOMBRE (BONO)
+        if es_bono:
+            self.lbl_mutual.config(
+                text="CÓDIGO DE MUTUAL (OBLIGATORIO)", fg=st.ROJO,
+                font=(st.FUENTE, 9, "bold"),
+            )
+            self.ent_mutual.config(bg="#fff7f7")
+            self.lbl_bono_nombre.config(
+                text="NOMBRE (OBLIGATORIO)", fg=st.ROJO,
+                font=(st.FUENTE, 9, "bold"),
+            )
+            self.ent_bono_nombre.config(bg="#fff7f7")
+        else:
+            self.lbl_mutual.config(
+                text="CÓDIGO DE MUTUAL (opcional)", fg=st.TEXTO_SUAVE,
+                font=(st.FUENTE, 9, "bold"),
+            )
+            self.ent_mutual.config(bg="#ffffff")
+            self.lbl_bono_nombre.config(
+                text="NOMBRE (opcional)", fg=st.TEXTO_SUAVE,
+                font=(st.FUENTE, 9, "bold"),
+            )
+            self.ent_bono_nombre.config(bg="#ffffff")
 
     def _linea_modificada(self, *_):
         """El usuario tocó la fila de producto: entra al ticket al registrar."""
@@ -574,16 +619,49 @@ class VentasPanel(tk.Frame):
                 )
                 self.ent_comprobante.focus_set()
             return None
+        if medio == "BONO":
+            mutual = self.var_mutual.get().strip()
+            if not mutual:
+                if avisos:
+                    messagebox.showerror(
+                        "Falta el código de mutual",
+                        "Para registrar una venta paga con BONO es "
+                        "obligatorio ingresar el CÓDIGO DE MUTUAL.\n\n"
+                        "Ingresá el código y volvé a presionar el botón.",
+                        parent=self,
+                    )
+                    self.ent_mutual.focus_set()
+                return None
+            bono_nombre = self.var_bono_nombre.get().strip()
+            if not bono_nombre:
+                if avisos:
+                    messagebox.showerror(
+                        "Falta el nombre",
+                        "Para registrar una venta paga con BONO es "
+                        "obligatorio ingresar el NOMBRE.\n\n"
+                        "Ingresá el nombre y volvé a presionar el botón.",
+                        parent=self,
+                    )
+                    self.ent_bono_nombre.focus_set()
+                return None
+            return {"medio": medio, "importe": float(importe),
+                    "comprobante": comprobante,
+                    "mutual": mutual,
+                    "bono_nombre": bono_nombre}
         return {"medio": medio, "importe": float(importe),
                 "comprobante": comprobante}
 
     def _pintar_pagos(self):
         self.tree_pagos.delete(*self.tree_pagos.get_children())
         for i, p in enumerate(self._pagos):
+            medio = p["medio"]
+            comprobante = p.get("comprobante") or "—"
+            if medio == "BONO":
+                comprobante = f"Mutual: {p.get('mutual','—')} | Nombre: {p.get('bono_nombre','—')}"
             self.tree_pagos.insert("", "end", iid=str(i), values=(
-                p["medio"],
+                medio,
                 money(p["importe"]),
-                p.get("comprobante") or "—",
+                comprobante,
             ))
 
     def _agregar_pago(self):
@@ -609,6 +687,8 @@ class VentasPanel(tk.Frame):
         try:
             self.var_importe.set("")
             self.var_comprobante.set("")
+            self.var_mutual.set("")
+            self.var_bono_nombre.set("")
         finally:
             self._cargando = False
         self._pintar_pagos()
@@ -644,6 +724,8 @@ class VentasPanel(tk.Frame):
             self.combo_medio.set(pago["medio"])
             self.var_importe.set(money(pago["importe"]).replace("$", ""))
             self.var_comprobante.set(pago.get("comprobante") or "")
+            self.var_mutual.set(pago.get("mutual") or "")
+            self.var_bono_nombre.set(pago.get("bono_nombre") or "")
         finally:
             self._cargando = False
         self._pagos_fijos = False

@@ -134,6 +134,7 @@ class CierreDialog(tk.Toplevel):
             ("Tarjetas", "tarjetas"),
             ("   · Tarjeta de débito", "debito"),
             ("   · Tarjeta de crédito", "credito"),
+            ("BONOS", "bono"),
             ("Total general cobrado", "total_general"),
         ]
         self.valores_medio = {}
@@ -432,6 +433,7 @@ class CierreDialog(tk.Toplevel):
             transferencias=self.resumen["transferencias"],
             debito=self.resumen["debito"],
             credito=self.resumen["credito"],
+            bono=self.resumen.get("bono", 0),
             total_general=self.resumen["total_general"],
             diferencia=self._diferencia_actual,
             estado=self._estado_actual,

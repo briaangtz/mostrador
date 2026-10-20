@@ -33,7 +33,7 @@ DB_PATH = os.path.join(BASE_DIR, "garrafas.db")
 DENOMINACIONES = [100, 200, 500, 1000, 2000, 10000, 20000]
 
 # Medios de pago
-MEDIOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta de débito", "Tarjeta de crédito"]
+MEDIOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta de débito", "Tarjeta de crédito", "BONO"]
 
 # Columna del resumen asociada a cada medio de pago
 CLAVE_MEDIO = {
@@ -41,6 +41,7 @@ CLAVE_MEDIO = {
     "Transferencia": "transferencias",
     "Tarjeta de débito": "debito",
     "Tarjeta de crédito": "credito",
+    "BONO": "bono",
 }
 
 # Permiso que se necesita para registrar un cobro con cada medio de pago
@@ -49,6 +50,7 @@ MEDIO_PERMISO = {
     "Transferencia": "pago_transferencia",
     "Tarjeta de débito": "pago_debito",
     "Tarjeta de crédito": "pago_credito",
+    "BONO": "pago_bono",
 }
 
 # Productos iniciales (precios de ejemplo, se pueden cambiar en Configuración).
@@ -769,6 +771,8 @@ def init():
             con.execute("ALTER TABLE cierres ADD COLUMN n_operaciones INTEGER DEFAULT 0")
         if "comprobantes" not in columnas_cierres:
             con.execute("ALTER TABLE cierres ADD COLUMN comprobantes TEXT")
+        if "bono" not in columnas_cierres:
+            con.execute("ALTER TABLE cierres ADD COLUMN bono REAL DEFAULT 0")
 
         # Foto propia de cada usuario y permisos asignados uno por uno
         # (NULL en "permisos" = el usuario usa los permisos de su rango)
@@ -1504,6 +1508,7 @@ def resumen(caja_id):
         "transferencias": medios["transferencias"],
         "debito": medios["debito"],
         "credito": medios["credito"],
+        "bono": medios["bono"],
         "efectivo_esperado": efectivo_esperado,
         "fondo": fondo,
         "total_general": total_general,
@@ -1661,7 +1666,7 @@ def clasificar_diferencia(diferencia):
 # ---------------------------------------------------------------------------
 
 def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
-                   efectivo_contado, transferencias, debito, credito,
+                   efectivo_contado, transferencias, debito, credito, bono,
                    total_general, diferencia, estado, billetes,
                    n_transferencias=0, cerrado_por=None):
     caja = get_caja_por_id(caja_id)
@@ -1699,10 +1704,10 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
             """
             INSERT INTO cierres (caja_id, fecha, hora_cierre, total_garrafas,
                 total_vendido, efectivo_esperado, efectivo_contado, transferencias,
-                debito, credito, total_general, diferencia, estado, billetes,
+                debito, credito, bono, total_general, diferencia, estado, billetes,
                 activo, reabierta, n_transferencias, cerrado_por, n_operaciones,
                 comprobantes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
             """,
             (
                 caja_id,
@@ -1715,6 +1720,7 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
                 float(transferencias),
                 float(debito),
                 float(credito),
+                float(bono),
                 float(total_general),
                 float(diferencia),
                 estado,
