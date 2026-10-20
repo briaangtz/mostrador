@@ -136,7 +136,7 @@ class VentasPanel(tk.Frame):
                                         relief="solid", bd=1)
         self.ent_comprobante.pack(fill="x", pady=(3, 0), ipady=4)
 
-        # CÓDIGO DE MUTUAL y NOMBRE: obligatorios para BONO
+        # CÓDIGO DE MUTUAL: obligatorio para BONO (mínimo 3 números)
         c_mutual, self.lbl_mutual = campo(2, "CÓDIGO DE MUTUAL", 1)
         self.var_mutual = tk.StringVar(value="")
         self.ent_mutual = tk.Entry(c_mutual,
@@ -144,14 +144,6 @@ class VentasPanel(tk.Frame):
                                     font=(st.FUENTE, 11), justify="left",
                                     relief="solid", bd=1)
         self.ent_mutual.pack(fill="x", pady=(3, 0), ipady=4)
-
-        c_bono_nombre, self.lbl_bono_nombre = campo(3, "NOMBRE (BONO)", 1)
-        self.var_bono_nombre = tk.StringVar(value="")
-        self.ent_bono_nombre = tk.Entry(c_bono_nombre,
-                                         textvariable=self.var_bono_nombre,
-                                         font=(st.FUENTE, 11), justify="left",
-                                         relief="solid", bd=1)
-        self.ent_bono_nombre.pack(fill="x", pady=(3, 0), ipady=4)
 
         c_total, _ = campo(3, "TOTAL DEL TICKET", 1)
         self.lbl_total = tk.Label(c_total, text="$0", bg=st.TARJETA,
@@ -423,29 +415,19 @@ class VentasPanel(tk.Frame):
             )
             self.ent_comprobante.config(bg="#ffffff")
 
-        # CÓDIGO DE MUTUAL y NOMBRE (BONO)
+        # CÓDIGO DE MUTUAL (BONO)
         if es_bono:
             self.lbl_mutual.config(
-                text="CÓDIGO DE MUTUAL (OBLIGATORIO)", fg=st.ROJO,
+                text="CÓDIGO DE MUTUAL (OBLIGATORIO, mín. 3 números)", fg=st.ROJO,
                 font=(st.FUENTE, 9, "bold"),
             )
             self.ent_mutual.config(bg="#fff7f7")
-            self.lbl_bono_nombre.config(
-                text="NOMBRE (OBLIGATORIO)", fg=st.ROJO,
-                font=(st.FUENTE, 9, "bold"),
-            )
-            self.ent_bono_nombre.config(bg="#fff7f7")
         else:
             self.lbl_mutual.config(
                 text="CÓDIGO DE MUTUAL (opcional)", fg=st.TEXTO_SUAVE,
                 font=(st.FUENTE, 9, "bold"),
             )
             self.ent_mutual.config(bg="#ffffff")
-            self.lbl_bono_nombre.config(
-                text="NOMBRE (opcional)", fg=st.TEXTO_SUAVE,
-                font=(st.FUENTE, 9, "bold"),
-            )
-            self.ent_bono_nombre.config(bg="#ffffff")
 
     def _linea_modificada(self, *_):
         """El usuario tocó la fila de producto: entra al ticket al registrar."""
@@ -632,22 +614,21 @@ class VentasPanel(tk.Frame):
                     )
                     self.ent_mutual.focus_set()
                 return None
-            bono_nombre = self.var_bono_nombre.get().strip()
-            if not bono_nombre:
+            # Validar mínimo 3 números
+            digitos = "".join(ch for ch in mutual if ch.isdigit())
+            if len(digitos) < 3:
                 if avisos:
                     messagebox.showerror(
-                        "Falta el nombre",
-                        "Para registrar una venta paga con BONO es "
-                        "obligatorio ingresar el NOMBRE.\n\n"
-                        "Ingresá el nombre y volvé a presionar el botón.",
+                        "Código de mutual inválido",
+                        "El CÓDIGO DE MUTUAL debe contener al menos 3 números.\n\n"
+                        f"Tenés: {len(digitos)} número(s). Ingresá al menos 3.",
                         parent=self,
                     )
-                    self.ent_bono_nombre.focus_set()
+                    self.ent_mutual.focus_set()
                 return None
             return {"medio": medio, "importe": float(importe),
                     "comprobante": comprobante,
-                    "mutual": mutual,
-                    "bono_nombre": bono_nombre}
+                    "mutual": mutual}
         return {"medio": medio, "importe": float(importe),
                 "comprobante": comprobante}
 
@@ -657,7 +638,7 @@ class VentasPanel(tk.Frame):
             medio = p["medio"]
             comprobante = p.get("comprobante") or "—"
             if medio == "BONO":
-                comprobante = f"Mutual: {p.get('mutual','—')} | Nombre: {p.get('bono_nombre','—')}"
+                comprobante = f"Mutual: {p.get('mutual','—')}"
             self.tree_pagos.insert("", "end", iid=str(i), values=(
                 medio,
                 money(p["importe"]),
@@ -688,7 +669,6 @@ class VentasPanel(tk.Frame):
             self.var_importe.set("")
             self.var_comprobante.set("")
             self.var_mutual.set("")
-            self.var_bono_nombre.set("")
         finally:
             self._cargando = False
         self._pintar_pagos()
@@ -725,7 +705,6 @@ class VentasPanel(tk.Frame):
             self.var_importe.set(money(pago["importe"]).replace("$", ""))
             self.var_comprobante.set(pago.get("comprobante") or "")
             self.var_mutual.set(pago.get("mutual") or "")
-            self.var_bono_nombre.set(pago.get("bono_nombre") or "")
         finally:
             self._cargando = False
         self._pagos_fijos = False

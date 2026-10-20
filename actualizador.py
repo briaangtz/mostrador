@@ -32,6 +32,7 @@ from datetime import datetime
 RELEASES_REPO = "briaangtz/mostrador-releases"
 EXE_NAME = "MOSTRADOR.exe"
 VERSION_FILE = "version.txt"
+LAST_INSTALLED_FILE = "last_installed.txt"
 LOG_FILE = "actualizaciones.log"
 
 API_URL = "https://api.github.com/repos/" + RELEASES_REPO + "/releases/latest"
@@ -75,12 +76,29 @@ def leer_version_local():
         return "0.0.0"
 
 
+def leer_last_installed():
+    """Lee la última versión que se instaló realmente (para forzar actualizaciones)."""
+    try:
+        with open(os.path.join(BASE, LAST_INSTALLED_FILE), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return "0.0.0"
+
+
 def guardar_version_local(v):
     try:
         with open(os.path.join(BASE, VERSION_FILE), "w", encoding="utf-8") as f:
             f.write(v + "\n")
     except OSError as e:
         log("No se pudo escribir %s: %s" % (VERSION_FILE, e))
+
+
+def guardar_last_installed(v):
+    try:
+        with open(os.path.join(BASE, LAST_INSTALLED_FILE), "w", encoding="utf-8") as f:
+            f.write(v + "\n")
+    except OSError as e:
+        log("No se pudo escribir %s: %s" % (LAST_INSTALLED_FILE, e))
 
 
 def tupla_version(v):
@@ -160,8 +178,11 @@ def abrir_programa():
 
 
 def actualizar():
-    """Devuelve True si se instaló una versión nueva."""
+    """Devuelve True si se instaló una versión nueva.
+    Compara contra last_installed (no contra version.txt) para permitir
+    actualizaciones forzadas aunque version.txt diga una versión mayor (ej. 1.1)."""
     local = leer_version_local()
+    last_installed = leer_last_installed()
     try:
         rel = pedir_json(API_URL)
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -169,8 +190,8 @@ def actualizar():
         return False
 
     remota = (rel.get("tag_name") or "").lstrip("vV")
-    if not remota or not es_mas_nueva(remota, local):
-        log("Sin novedades (local %s, remota %s)." % (local, remota))
+    if not remota or remota == last_installed:
+        log("Sin novedades (instalada %s, remota %s)." % (last_installed, remota))
         return False
 
     asset = buscar_asset(rel.get("assets") or [])
@@ -213,6 +234,7 @@ def actualizar():
         return False
 
     guardar_version_local(remota)
+    guardar_last_installed(remota)
     log("Actualizado a %s." % remota)
     return True
 

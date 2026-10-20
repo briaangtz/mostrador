@@ -83,12 +83,9 @@ def _filas_pago(movimientos, medio):
             comprobante = pg.get("comprobante")
             if medio == "BONO":
                 mutual = pg.get("mutual")
-                bono_nombre = pg.get("bono_nombre")
                 partes = []
                 if mutual:
                     partes.append(f"Mutual: {mutual}")
-                if bono_nombre:
-                    partes.append(f"Nombre: {bono_nombre}")
                 if partes:
                     comprobante = " | ".join(partes)
             filas.append({
