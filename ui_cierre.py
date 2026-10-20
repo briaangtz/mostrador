@@ -387,9 +387,15 @@ class CierreDialog(tk.Toplevel):
 
         # -------- Autenticación: usuario + contraseña del responsable --------
         u = db.usuario_sesion()
+        if not u:
+            messagebox.showerror(
+                "Sin sesión",
+                "No hay usuario conectado. Iniciá sesión e intentá de nuevo.",
+                parent=self)
+            return
         password = simpledialog.askstring(
             "Autenticación de cierre",
-            f"Usuario: {u['usuario'] if u else '—'}\n\n"
+            f"Usuario: {u['usuario']}\n\n"
             "Para cerrar la caja ingresá TU contraseña:",
             parent=self,
             show="*",
@@ -405,7 +411,7 @@ class CierreDialog(tk.Toplevel):
 
         resumen_txt = (
             f"Fecha: {db.fecha_larga(self.caja['fecha'])}\n"
-            f"Responsable: {u['usuario'] if u else '—'}\n"
+            f"Responsable: {u['usuario']}\n"
             f"Garrafas vendidas: {self.resumen['total_garrafas']}\n"
             f"Total vendido: {money(self.resumen['total_vendido'])}\n"
             f"Operaciones: {self.resumen['cantidad_ventas']}\n"
@@ -414,6 +420,7 @@ class CierreDialog(tk.Toplevel):
             f"Tarjetas: {money(self.resumen['debito'] + self.resumen['credito'])} "
             f"(Débito {money(self.resumen['debito'])} / "
             f"Crédito {money(self.resumen['credito'])})\n"
+            f"BONOS: {money(self.resumen.get('bono', 0))}\n"
             f"Efectivo esperado: {money(self._esperado_actual)}\n"
             f"Efectivo contado: {money(self._contado_actual)}\n"
             f"Diferencia: {money(self._diferencia_actual)}\n"
@@ -424,22 +431,29 @@ class CierreDialog(tk.Toplevel):
         if not messagebox.askyesno("CONFIRMAR CIERRE", resumen_txt, parent=self):
             return
 
-        db.guardar_cierre(
-            self.caja["id"],
-            total_garrafas=self.resumen["total_garrafas"],
-            total_vendido=self.resumen["total_vendido"],
-            efectivo_esperado=self._esperado_actual,
-            efectivo_contado=self._contado_actual,
-            transferencias=self.resumen["transferencias"],
-            debito=self.resumen["debito"],
-            credito=self.resumen["credito"],
-            bono=self.resumen.get("bono", 0),
-            total_general=self.resumen["total_general"],
-            diferencia=self._diferencia_actual,
-            estado=self._estado_actual,
-            billetes={str(d): c for d, c in self.conteo.items()},
-            n_transferencias=self.resumen["n_transferencias"],
-        )
+        try:
+            db.guardar_cierre(
+                self.caja["id"],
+                total_garrafas=self.resumen["total_garrafas"],
+                total_vendido=self.resumen["total_vendido"],
+                efectivo_esperado=self._esperado_actual,
+                efectivo_contado=self._contado_actual,
+                transferencias=self.resumen["transferencias"],
+                debito=self.resumen["debito"],
+                credito=self.resumen["credito"],
+                bono=self.resumen.get("bono", 0),
+                total_general=self.resumen["total_general"],
+                diferencia=self._diferencia_actual,
+                estado=self._estado_actual,
+                billetes={str(d): c for d, c in self.conteo.items()},
+                n_transferencias=self.resumen["n_transferencias"],
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "Error al cerrar",
+                f"No se pudo guardar el cierre:\n\n{e}",
+                parent=self)
+            return
 
         # Respaldo automático en el momento crítico: cierre de caja
         try:
@@ -453,5 +467,8 @@ class CierreDialog(tk.Toplevel):
         if self.on_cerrado:
             try:
                 self.on_cerrado()
-            except Exception:
-                pass
+            except Exception as e:
+                messagebox.showerror(
+                    "Error al actualizar",
+                    f"El cierre se guardó, pero falló la actualización de la pantalla:\n\n{e}",
+                    parent=self)

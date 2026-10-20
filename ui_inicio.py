@@ -241,12 +241,12 @@ class InicioPanel(tk.Frame):
                     caja["id"],
                     total_garrafas=0, total_vendido=0,
                     efectivo_esperado=fondo, efectivo_contado=fondo,
-                    transferencias=0, debito=0, credito=0, total_general=0,
+                    transferencias=0, debito=0, credito=0, bono=0, total_general=0,
                     diferencia=0, estado="Cuadrada",
                     billetes={}, n_transferencias=0,
                 )
-            except ValueError as exc:
-                messagebox.showerror("No se pudo cerrar", str(exc), parent=self)
+            except Exception as e:
+                messagebox.showerror("No se pudo cerrar", str(e), parent=self)
                 return
             try:
                 db.respaldar("cierre de caja")
