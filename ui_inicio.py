@@ -138,13 +138,7 @@ class InicioPanel(tk.Frame):
         self.contenedor_producto.pack(fill="both", expand=True)
 
         self.filas_producto = {}
-        self.lbl_sin_ventas = tk.Label(
-            self.contenedor_producto,
-            text="Todavía no se vendió nada en esta caja.",
-            bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 11))
-        self.lbl_sin_ventas.pack(anchor="w")
 
-    # ------------------------------------------------------------- acciones
     def _sin_permiso_ventas(self):
         if db.puede("ventas"):
             return False
@@ -343,7 +337,10 @@ class InicioPanel(tk.Frame):
         vendidos = [(pid, info) for pid, info in r["por_producto"].items()
                     if int(info["cantidad"]) > 0]
         if not vendidos:
-            self.lbl_sin_ventas.pack(anchor="w")
+            tk.Label(self.contenedor_producto,
+                     text="Todavía no se vendió nada en esta caja.",
+                     bg=st.FONDO, fg=st.TEXTO_SUAVE,
+                     font=(st.FUENTE, 11)).pack(anchor="w")
         else:
             self.lbl_sin_ventas.pack_forget()
             for pid, info in vendidos:
