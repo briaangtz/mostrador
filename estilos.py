@@ -1,26 +1,41 @@
 # -*- coding: utf-8 -*-
-"""Estilos y widgets reutilizables de la interfaz."""
+"""Estilos y widgets reutilizables de la interfaz.
+
+Paleta inspirada en el diseño moderno: sidebar oscuro, fondo claro,
+tarjetas blancas con sombra sutil y colores de marca por medio de pago.
+"""
 
 import tkinter as tk
 from tkinter import ttk
 
-# Paleta de colores
-FONDO = "#eef2f7"
-TARJETA = "#ffffff"
-BORDE = "#dde3ea"
-BARRA = "#16213e"
+# ---------------------------------------------------------------------------
+# Paleta de colores (acercada al diseño de referencia)
+# ---------------------------------------------------------------------------
+FONDO = "#f1f5f9"          # fondo claro general
+TARJETA = "#ffffff"        # tarjetas blancas
+BORDE = "#e2e8f0"          # borde sutil de tarjetas
+BARRA = "#0f172a"          # sidebar / cabecera de login (azul muy oscuro)
 BARRA_TEXTO = "#ffffff"
-ACENTO = "#2563eb"
+ACENTO = "#2563eb"         # azul principal (botones, íconos activos)
 ACENTO_OSCURO = "#1d4ed8"
-TEXTO = "#111827"
-TEXTO_SUAVE = "#6b7280"
-VERDE = "#16a34a"
+TEXTO = "#0f172a"          # texto principal casi negro
+TEXTO_SUAVE = "#64748b"    # texto secundario gris azulado
+VERDE = "#16a34a"          # verde éxito / caja abierta
 VERDE_OSCURO = "#15803d"
-ROJO = "#dc2626"
+ROJO = "#dc2626"           # rojo peligro / cerrado
 AMBAR = "#d97706"
 ROJO_CLARO = "#fee2e2"
 VERDE_CLARO = "#dcfce7"
 AMBAR_CLARO = "#fef3c7"
+
+# Colores de íconos por medio de pago
+COLOR_GARRAFA = "#2563eb"   # azul
+COLOR_TOTAL   = "#059669"   # verde esmeralda
+COLOR_EFECTIVO= "#7c3aed"   # púrpura
+COLOR_TRANS   = "#0284c7"   # cielo
+COLOR_TARJETA = "#ea580c"   # naranja
+COLOR_BONO    = "#be185d"   # rosa
+COLOR_VENTAS  = "#8b5cf6"   # violeta
 
 FUENTE = "Segoe UI"
 
@@ -38,7 +53,7 @@ def aplicar_estilo(root):
     style.configure("TLabel", background=FONDO, foreground=TEXTO)
     style.configure("Card.TLabel", background=TARJETA, foreground=TEXTO)
     style.configure("Titulo.TLabel", background=FONDO, foreground=TEXTO,
-                    font=(FUENTE, 20, "bold"))
+                    font=(FUENTE, 22, "bold"))
     style.configure("Subtitulo.TLabel", background=FONDO, foreground=TEXTO_SUAVE,
                     font=(FUENTE, 11))
     style.configure("Encabezado.TLabelframe", background=FONDO, foreground=TEXTO,
@@ -46,11 +61,11 @@ def aplicar_estilo(root):
     style.configure("Encabezado.TLabelframe.Label", background=FONDO,
                     foreground=TEXTO, font=(FUENTE, 11, "bold"))
     style.configure("CardEncabezado.TLabel", background=TARJETA,
-                    foreground=TEXTO_SUAVE, font=(FUENTE, 9))
+                    foreground=TEXTO_SUAVE, font=(FUENTE, 9, "bold"))
     style.configure("CardValor.TLabel", background=TARJETA, foreground=TEXTO,
-                    font=(FUENTE, 16, "bold"))
-    style.configure("CardValorChico.TLabel", background=TARJETA, foreground=TEXTO,
-                    font=(FUENTE, 13, "bold"))
+                    font=(FUENTE, 18, "bold"))
+    style.configure("CardValorChico.TLabel", background=TARJETA,
+                    foreground=TEXTO, font=(FUENTE, 14, "bold"))
     style.configure("TButton", font=(FUENTE, 10), padding=(10, 6))
 
     style.configure("Acento.TButton", background=ACENTO, foreground="#ffffff",
@@ -75,10 +90,12 @@ def aplicar_estilo(root):
                     font=(FUENTE, 10), padding=(12, 8))
     style.map("Secundario.TButton", background=[("active", "#d5dce6")])
 
-    style.configure("Treeview", font=(FUENTE, 10), rowheight=26,
-                    background="#ffffff", fieldbackground="#ffffff", foreground=TEXTO)
+    style.configure("Treeview", font=(FUENTE, 10), rowheight=28,
+                    background="#ffffff", fieldbackground="#ffffff", foreground=TEXTO,
+                    bordercolor=BORDE, lightcolor=BORDE, darkcolor=BORDE)
     style.configure("Treeview.Heading", font=(FUENTE, 10, "bold"),
-                    background="#e5eaf1", foreground=TEXTO)
+                    background="#f1f5f9", foreground=TEXTO,
+                    bordercolor=BORDE)
     style.map("Treeview", background=[("selected", ACENTO)],
               foreground=[("selected", "#ffffff")])
 
@@ -88,24 +105,31 @@ def aplicar_estilo(root):
     return style
 
 
-def tarjeta(parent, titulo, valor_inicial="—", ancho_chico=False, detalle=""):
-    """Crea una tarjeta de resumen. Devuelve (frame, etiqueta_valor).
+def tarjeta(parent, titulo, valor_inicial="—", color=ACENTO, detalle="",
+            ancho_chico=False, fuente_valor=18):
+    """Crea una tarjeta de resumen moderna con ícono de color.
 
-    La etiqueta de detalle (texto chico debajo del valor, por ejemplo el
-    desglose de Tarjetas) queda en frame.lbl_detalle.
+    Devuelve (frame, etiqueta_valor). El detalle queda en frame.lbl_detalle.
     """
-    frame = tk.Frame(parent, bg=TARJETA, bd=0, highlightbackground=BORDE,
-                     highlightthickness=1)
+    frame = tk.Frame(parent, bg=TARJETA, bd=0,
+                     highlightbackground=BORDE, highlightthickness=1)
+    # Ícono circular de color
+    icono = tk.Label(frame, text="●", bg=TARJETA, fg=color,
+                     font=(FUENTE, 14 if ancho_chico else 16, "bold"))
+    icono.pack(fill="x", padx=14, pady=(10, 0))
     lbl_t = tk.Label(frame, text=titulo.upper(), bg=TARJETA, fg=TEXTO_SUAVE,
-                     font=(FUENTE, 8, "bold"), anchor="w")
-    lbl_t.pack(fill="x", padx=12, pady=(8, 0))
+                     font=(FUENTE, 9, "bold"), anchor="w")
+    lbl_t.pack(fill="x", padx=14, pady=(4, 0))
     lbl_v = tk.Label(frame, text=valor_inicial, bg=TARJETA, fg=TEXTO,
-                     font=(FUENTE, 14 if ancho_chico else 17, "bold"), anchor="w")
-    lbl_v.pack(fill="x", padx=12, pady=(2, 0))
+                     font=(FUENTE, fuente_valor if not ancho_chico else 15,
+                           "bold"), anchor="w")
+    lbl_v.pack(fill="x", padx=14, pady=(2, 0))
     lbl_d = tk.Label(frame, text=detalle, bg=TARJETA, fg=TEXTO_SUAVE,
                      font=(FUENTE, 8), anchor="w")
-    lbl_d.pack(fill="x", padx=12, pady=(0, 8))
+    lbl_d.pack(fill="x", padx=14, pady=(0, 10))
     frame.lbl_detalle = lbl_d
+    frame.lbl_titulo = lbl_t
+    frame.lbl_valor = lbl_v
     return frame, lbl_v
 
 
@@ -125,12 +149,7 @@ def labelframe(parent, texto, **kw):
 
 def contenido_scrollable(panel):
     """
-    Convierte un panel en contenedor con scroll vertical: devuelve el frame
-    donde hay que empacar el contenido (en vez de empacar en el panel).
-
-    Así ningún contenido queda cortado ni oculto en pantallas chicas, y en
-    pantallas grandes se aprovecha todo el espacio. La rueda del mouse la
-    maneja main.App._rueda_global (mira panel.canvas_scroll).
+    Convierte un panel en contenedor con scroll vertical.
     """
     fondo = panel.cget("bg")
     exterior = tk.Frame(panel, bg=fondo)
