@@ -29,7 +29,7 @@ class InicioPanel(tk.Frame):
 
         izq = tk.Frame(cab, bg=st.FONDO)
         izq.pack(side="left")
-        tk.Label(izq, text="CAJA DEL DÍA", bg=st.FONDO, fg=st.TEXTO,
+        tk.Label(izq, text="MOSTRADOR", bg=st.FONDO, fg=st.TEXTO,
                  font=(st.FUENTE, 22, "bold")).pack(anchor="w")
         self.lbl_fecha_larga = tk.Label(izq, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
                                         font=(st.FUENTE, 11))

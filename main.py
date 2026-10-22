@@ -44,7 +44,7 @@ class App(tk.Tk):
         super().__init__()
         db.init()
 
-        self.title(f"Control de Ventas de Garrafas — Caja Diaria  ·  v{VERSION}")
+        self.title(f"MOSTRADOR  ·  v{VERSION}")
         # Ventana adaptada al tamaño de pantalla (chica o grande), centrada
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
@@ -79,7 +79,7 @@ class App(tk.Tk):
                 self.destroy()
                 return
         self.deiconify()
-        self.title(f"Control de Ventas de Garrafas — {usuario['usuario']} "
+        self.title(f"MOSTRADOR — {usuario['usuario']} "
                    f"({usuario['rango']})  ·  v{VERSION}")
 
         # Respaldo automático: uno por día al abrir el programa
@@ -133,9 +133,9 @@ class App(tk.Tk):
             command=self.abrir_soporte)
         self.btn_soporte.pack(side="right", padx=(8, 0), ipadx=4, ipady=4)
 
-        tk.Label(marca, text="GARRAFAS", bg=st.BARRA, fg="#ffffff",
+        tk.Label(marca, text="MOSTRADOR", bg=st.BARRA, fg="#ffffff",
                  font=(st.FUENTE, 18, "bold")).pack(anchor="w")
-        tk.Label(marca, text="Control de caja diaria", bg=st.BARRA,
+        tk.Label(marca, text="DOBLE G SRL", bg=st.BARRA,
                  fg="#9fb0cc", font=(st.FUENTE, 9)).pack(anchor="w")
         self.ventana_soporte = None
 

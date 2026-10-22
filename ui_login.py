@@ -34,9 +34,9 @@ class LoginDialog(tk.Toplevel):
         cont = tk.Frame(self, bg=st.BARRA)
         cont.pack(fill="both", expand=True, padx=36, pady=(34, 26))
 
-        tk.Label(cont, text="GARRAFAS", bg=st.BARRA, fg="#ffffff",
+        tk.Label(cont, text="MOSTRADOR", bg=st.BARRA, fg="#ffffff",
                  font=(st.FUENTE, 26, "bold")).pack(anchor="w")
-        tk.Label(cont, text="Control de caja diaria — inicio de sesión",
+        tk.Label(cont, text="DOBLE G SRL — inicio de sesión",
                  bg=st.BARRA, fg="#9fb0cc", font=(st.FUENTE, 10)).pack(
             anchor="w", pady=(0, 24))
 
