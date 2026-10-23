@@ -136,7 +136,7 @@ class EstadisticasPanel(tk.Frame):
             celda = tk.Frame(marco_cards, bg=st.FONDO)
             celda.grid(row=fila, column=col, columnspan=span,
                        sticky="nsew", padx=6, pady=6)
-            frame, lbl = st.tarjeta(celda, titulo, ancho_chico=True)
+            frame, lbl = st.tarjeta_simple(celda, titulo)
             frame.pack(fill="both", expand=True)
             self.cards[clave] = lbl
             self.cards_detalle[clave] = frame.lbl_detalle
