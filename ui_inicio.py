@@ -3,7 +3,7 @@
 
 import re
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 
 import database as db
 import estilos as st
@@ -134,6 +134,13 @@ class InicioPanel(tk.Frame):
                                exterior=ABIERTA_BG, tam=11)
         self.btn_abrir.grid(row=0, column=2, rowspan=2, sticky="e")
         self.btn_abrir.grid_remove()
+        # Botón de reapertura: aparece cuando la caja del día está CERRADA,
+        # para poder reabrirla directamente desde acá (antes solo desde Historial).
+        self.btn_reabrir = Boton(ec, "Reabrir caja", st.ROJO, self._reabrir_caja,
+                                 icono="unlock", alto=42, ancho=210,
+                                 exterior=CERRADA_BG, tam=11)
+        self.btn_reabrir.grid(row=0, column=2, rowspan=2, sticky="e")
+        self.btn_reabrir.grid_remove()
         self._estado_widgets = [ec, self.ico_estado, self.lbl_estado_titulo,
                                 self.lbl_estado_sub, self.f_monto,
                                 self.lbl_monto_t, self.lbl_monto]
@@ -276,6 +283,7 @@ class InicioPanel(tk.Frame):
         for w in self._estado_widgets:
             w.configure(bg=bg)
         self.btn_abrir.pintar(exterior=bg)
+        self.btn_reabrir.pintar(exterior=bg)
         color = st.VERDE_OSCURO if abierta else st.ROJO
         self.lbl_estado_titulo.configure(
             text="Caja abierta" if abierta else "Caja cerrada", fg=color)
@@ -309,6 +317,60 @@ class InicioPanel(tk.Frame):
                             on_abierto=lambda: self.app.refrescar_todo())
         except Exception as e:
             messagebox.showerror("No se pudo abrir la caja", str(e),
+                                 parent=self)
+
+    def _reabrir_caja(self):
+        """Reabre la caja del día si está cerrada (solo DESARROLLADOR,
+        con contraseña). Mismo flujo que Historial de cierres."""
+        if not db.puede("reabrir_caja"):
+            messagebox.showerror(
+                "Sin permisos",
+                "Solo un usuario con rango DESARROLLADOR puede reabrir cajas.",
+                parent=self)
+            return
+        try:
+            caja = self.app.caja_actual()
+            if not caja:
+                return
+            if caja["estado"] == "abierta":
+                messagebox.showinfo("Caja abierta",
+                                    "Esta caja ya está abierta.",
+                                    parent=self)
+                return
+
+            u = db.usuario_sesion() or {}
+            password = simpledialog.askstring(
+                "Reapertura de caja",
+                f"Caja del {fecha_corta(caja['fecha'])}\n\n"
+                f"Usuario: {u.get('usuario', '—')}\n"
+                "Ingresá TU contraseña para autorizar la reapertura:",
+                parent=self, show="*")
+            if password is None:
+                return
+            if not db.validar_password_sesion(password):
+                messagebox.showerror(
+                    "Reapertura denegada",
+                    "Contraseña incorrecta. La caja permanece cerrada.",
+                    parent=self)
+                return
+
+            if not messagebox.askyesno(
+                "Reabrir caja",
+                f"Se anulará el cierre del {fecha_corta(caja['fecha'])} y la "
+                "caja volverá a quedar abierta para modificaciones.\n\n"
+                "¿Continuar?",
+                parent=self):
+                return
+
+            db.reabrir_caja(caja["id"])
+            messagebox.showinfo(
+                "Caja reabierta",
+                "La caja fue reabierta. Ya podés cargar ventas y volver a "
+                "cerrarla.",
+                parent=self)
+            self.app.refrescar_todo()
+        except Exception as e:
+            messagebox.showerror("No se pudo reabrir la caja", str(e),
                                  parent=self)
 
     def _abrir_cierre(self):
@@ -419,6 +481,7 @@ class InicioPanel(tk.Frame):
         self._pintar_estado(abierta)
 
         if abierta:
+            self.btn_reabrir.grid_remove()
             apertura = db.apertura_de(caja["id"])
             if apertura:
                 hora = (apertura["hora"] or "")[:5]
@@ -450,8 +513,18 @@ class InicioPanel(tk.Frame):
         else:
             self.btn_abrir.grid_remove()
             self.f_monto.grid_remove()
-            self.lbl_estado_sub.config(
-                text="Esta caja ya fue cerrada y está bloqueada")
+            # Caja cerrada: ofrecer reabrirla directamente desde acá.
+            if db.puede("reabrir_caja"):
+                self.btn_reabrir.grid()
+                self.btn_reabrir.configurar_estado(
+                    True, texto=f"Reabrir caja — {usuario}", color=st.ROJO)
+                self.lbl_estado_sub.config(
+                    text="Esta caja está cerrada. Reabrirla si necesitás "
+                         "modificarla.")
+            else:
+                self.btn_reabrir.grid_remove()
+                self.lbl_estado_sub.config(
+                    text="Esta caja ya fue cerrada y está bloqueada")
             self.btn_cierre.configurar_estado(
                 False, texto="Caja cerrada — bloqueada")
             self.lbl_responsable.config(text=usuario)
