@@ -33,6 +33,13 @@ VIOLETA = "#7C3AED"         # Violeta
 ROJO_CLARO = "#FEE2E2"
 VERDE_CLARO = "#DCFCE7"
 
+# Colores del diseño Figma (barra lateral y barra superior)
+SIDEBAR = "#101E35"          # Fondo de la barra lateral
+SIDEBAR_ACTIVO = "#213D66"   # Ítem activo del menú
+SIDEBAR_HOVER = "#182B4A"    # Ítem con el mouse encima
+SIDEBAR_TARJETA = "#0C1729"  # Tarjeta de datos de caja (abajo)
+BARRA_BORDE = "#E2E7EF"      # Línea bajo la barra superior blanca
+
 TEXTO = "#0F1F3D"           # Texto principal oscuro
 TEXTO_SUAVE = "#64748B"     # Texto secundario gris azulado
 BLANCO = "#FFFFFF"
@@ -288,6 +295,16 @@ def aplicar_estilo(root):
     except tk.TclError:
         pass
     style.configure(".", font=(FUENTE, 10), background=FONDO, foreground=TEXTO)
+    # Barra de scroll fina, sin flechas (estilo del diseño)
+    style.layout("Fino.Vertical.TScrollbar", [
+        ("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [
+            ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+    style.configure("Fino.Vertical.TScrollbar", troughcolor=FONDO,
+                    background="#C5CEDD", bordercolor=FONDO,
+                    lightcolor="#C5CEDD", darkcolor="#C5CEDD",
+                    relief="flat", width=9, arrowsize=9)
+    style.map("Fino.Vertical.TScrollbar",
+              background=[("pressed", "#8794AD"), ("active", "#9AA8BF")])
     return style
 
 
@@ -297,7 +314,8 @@ def contenido_scrollable(panel):
     exterior = tk.Frame(panel, bg=fondo)
     exterior.pack(fill="both", expand=True)
     canvas = tk.Canvas(exterior, bg=fondo, highlightthickness=0)
-    barra = ttk.Scrollbar(exterior, orient="vertical", command=canvas.yview)
+    barra = ttk.Scrollbar(exterior, orient="vertical", command=canvas.yview,
+                          style="Fino.Vertical.TScrollbar")
     contenido = tk.Frame(canvas, bg=fondo)
     contenido.bind(
         "<Configure>",

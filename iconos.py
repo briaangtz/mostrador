@@ -226,3 +226,34 @@ def esquinas(r, fondo, borde=None):
                   im.crop((0, r, r, 2 * r)), im.crop((r, r, 2 * r, 2 * r)))
         _cache[clave] = [ImageTk.PhotoImage(t) for t in trozos]
     return _cache[clave]
+
+
+def avatar(texto, px=44, fondo="#2B4A7A", color="#FFFFFF", tam=0.42):
+    """Círculo de color con una letra o símbolo centrado (inicial, "?")."""
+    clave = ("a", texto, px, fondo, color, tam)
+    if clave not in _cache:
+        S = 4
+        N = px * S
+        im = Image.new("RGBA", (N, N), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        d.ellipse([0, 0, N - 1, N - 1], fill=fondo)
+        d.text((N / 2, N / 2), texto, fill=color, font=_fuente(int(N * tam)),
+               anchor="mm")
+        _cache[clave] = ImageTk.PhotoImage(im.resize((px, px), Image.LANCZOS))
+    return _cache[clave]
+
+
+def foto_circular(ruta, px=44):
+    """Foto de perfil recortada en círculo (PhotoImage; el que llama la guarda)."""
+    S = 4
+    N = px * S
+    img = Image.open(ruta).convert("RGB")
+    w, h = img.size
+    lado = min(w, h)
+    img = img.crop(((w - lado) // 2, (h - lado) // 2,
+                    (w + lado) // 2, (h + lado) // 2)).resize((N, N), Image.LANCZOS)
+    mascara = Image.new("L", (N, N), 0)
+    ImageDraw.Draw(mascara).ellipse([0, 0, N - 1, N - 1], fill=255)
+    img = img.convert("RGBA")
+    img.putalpha(mascara)
+    return ImageTk.PhotoImage(img.resize((px, px), Image.LANCZOS))
