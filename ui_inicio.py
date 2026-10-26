@@ -8,7 +8,7 @@ from tkinter import messagebox
 import database as db
 import estilos as st
 import iconos as ic
-from util import money, fecha_larga, fecha_corta
+from util import money, parse_numero, fecha_larga, fecha_corta
 from ui_cierre import CierreDialog
 from widgets_figma import Tarjeta, Boton
 
@@ -298,9 +298,18 @@ class InicioPanel(tk.Frame):
                                  "Tu usuario no tiene permiso para abrir cajas.",
                                  parent=self)
             return
-        caja = self.app.caja_actual()
-        AbrirCajaDialog(self.app, caja,
-                        on_abierto=lambda: self.app.refrescar_todo())
+        try:
+            caja = self.app.caja_actual()
+            if not caja:
+                messagebox.showerror("Sin caja",
+                                     "No se encontró la caja del día.",
+                                     parent=self)
+                return
+            AbrirCajaDialog(self.app, caja,
+                            on_abierto=lambda: self.app.refrescar_todo())
+        except Exception as e:
+            messagebox.showerror("No se pudo abrir la caja", str(e),
+                                 parent=self)
 
     def _abrir_cierre(self):
         if not db.puede("cerrar_caja"):
@@ -545,6 +554,10 @@ class AbrirCajaDialog(tk.Toplevel):
         self.title("Abrir caja")
         self.configure(bg=st.BARRA)
         self.resizable(False, False)
+        # Modal: queda siempre encima de la ventana principal y toma el foco.
+        # Sin esto, en el .exe compilado el diálogo podía abrirse DETRÁS de la
+        # ventana principal y el usuario creía que el botón no hacía nada.
+        self.transient(master)
         self.protocol("WM_DELETE_WINDOW", self._cancelar)
 
         ancho, alto = 460, 380
@@ -592,19 +605,31 @@ class AbrirCajaDialog(tk.Toplevel):
                       lambda e: btnAbrir.config(bg=st.VERDE))
 
         ent.focus_set()
+        # Toma el input (modal real) y se asegura de quedar visible arriba.
+        try:
+            self.grab_set()
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
 
     def _cancelar(self):
         self.destroy()
 
     def _abrir(self):
-        try:
-            monto = float(self.var.get().replace("$", "").replace(".", "").strip() or 0)
-        except ValueError:
+        # parse_numero entiende el formato argentino: "15.500,75", "$20.000", "1000"
+        monto = parse_numero(self.var.get())
+        if monto is None or monto < 0:
             messagebox.showerror("Monto inválido",
                                  "Ingresá un monto inicial válido.",
                                  parent=self)
             return
-        db.registrar_apertura(self.caja["id"], monto)
+        try:
+            db.registrar_apertura(self.caja["id"], monto)
+        except Exception as e:
+            messagebox.showerror("No se pudo abrir la caja", str(e),
+                                 parent=self)
+            return
         if self.on_abierto:
             self.on_abierto()
         self.destroy()
