@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('icono.ico', '.')],
+    datas=[('icono.ico', '.'), ('iconos.py', '.'), ('widgets_figma.py', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
