@@ -468,9 +468,7 @@ class InicioPanel(tk.Frame):
         fecha = caja["fecha"]
         txt = fecha_larga(fecha)
         self.lbl_fecha_larga.config(text=txt[:1].upper() + txt[1:])
-        self.lbl_pie_caja.config(
-            text=(f"Caja N° {_num_caja(caja)} · " if _num_caja(caja) else "Caja ")
-                 + fecha_corta(fecha))
+        self.lbl_pie_caja.config(text=fecha_corta(fecha))
         if not self.lbl_selector_fecha.cget("text"):
             self.actualizar_selector_caja(
                 f"{fecha_corta(fecha)} "

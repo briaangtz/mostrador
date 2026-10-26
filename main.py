@@ -276,22 +276,6 @@ class App(tk.Tk):
                                     exterior=BLANCO)
         self.pill_abierta.pack(side="right", padx=(0, 12))
 
-        # Selector "Caja N° 001"
-        self.lbl_caja_selector = Tarjeta(barra, radio=8, padx=12, pady=7,
-                                         borde="#D9E0EC", ancho=150,
-                                         exterior=BLANCO)
-        self.lbl_caja_selector.pack(side="right", padx=(0, 12))
-        cs = self.lbl_caja_selector.cuerpo
-        flecha = tk.Label(cs, bg=st.TARJETA,
-                          image=ic.icono("chevron", 16, st.TEXTO_SUAVE))
-        flecha.pack(side="right")
-        self.lbl_caja_texto = tk.Label(cs, text="Caja N° 001", bg=st.TARJETA,
-                                       fg=st.TEXTO, font=(st.FUENTE, 10, "bold"))
-        self.lbl_caja_texto.pack(side="left")
-        for w in (self.lbl_caja_selector, cs, flecha, self.lbl_caja_texto):
-            w.configure(cursor="hand2")
-            w.bind("<Button-1>", lambda e: self._abrir_selector_caja())
-
         # Fecha con calendario
         self.lbl_fecha_barra = tk.Label(barra, text="", bg=BLANCO,
                                         fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10))
@@ -325,8 +309,6 @@ class App(tk.Tk):
         caja = self.caja_actual()
         if caja:
             self.lbl_fecha_barra.config(text=self._fecha_barra(caja["fecha"]))
-            n = _num_caja(caja)
-            self.lbl_caja_texto.config(text=f"Caja N° {n}" if n else "Caja")
             if caja["estado"] == "abierta":
                 self.pill_abierta.set("Abierta", "#ECF8F1", st.VERDE_OSCURO)
             else:
@@ -359,9 +341,13 @@ class App(tk.Tk):
                 command=lambda f=c["fecha"]: self.cambiar_caja(f)
             )
         
-        # Mostrar menú bajo el label
-        x = self.lbl_caja_selector.winfo_rootx()
-        y = self.lbl_caja_selector.winfo_rooty() + self.lbl_caja_selector.winfo_height()
+        # Mostrar menú bajo el selector "Ver caja de la fecha" (panel Inicio)
+        try:
+            sel = self.paneles["inicio"].selector_caja
+            x = sel.winfo_rootx()
+            y = sel.winfo_rooty() + sel.winfo_height()
+        except Exception:
+            x, y = 100, 120
         try:
             menu.tk_popup(x, y)
         finally:
