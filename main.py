@@ -10,6 +10,8 @@ Ejecutar con:  python main.py
 """
 
 import datetime
+import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
@@ -71,6 +73,19 @@ class App(tk.Tk):
         self.minsize(min(1100, ancho), min(700, alto))
         self.configure(bg=st.FONDO)
         self.cancelado = False
+
+        # Icono de la ventana (barra de tareas / título). En el .exe compilado
+        # icono.ico queda extraído en sys._MEIPASS.
+        try:
+            if getattr(sys, "frozen", False):
+                ruta_icono = os.path.join(sys._MEIPASS, "icono.ico")
+            else:
+                ruta_icono = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          "icono.ico")
+            if os.path.exists(ruta_icono):
+                self.iconbitmap(ruta_icono)
+        except tk.TclError:
+            pass
 
         st.aplicar_estilo(self)
 
