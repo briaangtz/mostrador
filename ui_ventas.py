@@ -11,6 +11,8 @@ from tkinter import ttk, messagebox
 
 import database as db
 import estilos as st
+import iconos as ic
+from widgets_figma import Tarjeta, Btn, Aviso
 from util import money, parse_entero, parse_numero, fecha_larga
 
 
@@ -29,59 +31,97 @@ class VentasPanel(tk.Frame):
         self._construir()
 
     def _construir(self):
-        # Contenido con scroll: nada queda cortado en pantallas chicas
+        PX = 28                                    # margen lateral (igual que Inicio)
+        MUTED = st.TEXTO_SUAVE
         contenido = st.contenido_scrollable(self)
 
+        # ---------------- Cabecera ----------------
         cab = tk.Frame(contenido, bg=st.FONDO)
-        cab.pack(fill="x", padx=24, pady=(20, 4))
-        tk.Label(cab, text="REGISTRO DE VENTAS", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 22, "bold")).pack(anchor="w")
-        self.lbl_sub = tk.Label(cab, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                                font=(st.FUENTE, 11), wraplength=760,
-                                justify="left")
-        self.lbl_sub.pack(anchor="w")
+        cab.pack(fill="x", padx=PX, pady=(22, 6))
+        self._cab = cab
+        tk.Label(cab, text="Registro de ventas", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
+        self.lbl_sub = tk.Label(cab, text="", bg=st.FONDO, fg=MUTED,
+                                font=(st.FUENTE, 11), justify="left", anchor="w")
+        self.lbl_sub.pack(anchor="w", pady=(2, 0))
 
-        self.lbl_bloqueada = tk.Label(contenido, text="", bg=st.ROJO_CLARO,
-                                      fg=st.ROJO,
-                                      font=(st.FUENTE, 10, "bold"), padx=12,
-                                      pady=7, anchor="w")
+        # Aviso de caja cerrada / sin abrir (se muestra desde refresh)
+        self.lbl_bloqueada = Aviso(contenido)
+
+        # ---------------- Utilidades de armado ----------------
+        def tarjeta(parent, titulo, icono, **pack):
+            t = Tarjeta(parent, radio=12, padx=20, pady=16)
+            t.pack(**pack)
+            h = tk.Frame(t.cuerpo, bg=st.TARJETA)
+            h.pack(fill="x", pady=(0, 12))
+            tk.Label(h, image=ic.icono(icono, 20, "#64748B"),
+                     bg=st.TARJETA).pack(side="left", padx=(0, 10))
+            tk.Label(h, text=titulo, bg=st.TARJETA, fg=st.TEXTO,
+                     font=(st.FUENTE, 12, "bold")).pack(side="left")
+            return t, t.cuerpo
+
+        def entrada(parent, var):
+            e = tk.Entry(parent, textvariable=var, font=(st.FUENTE, 11),
+                         relief="flat", bd=0, bg="#FFFFFF", fg=st.TEXTO,
+                         insertbackground=st.TEXTO, highlightthickness=1,
+                         highlightbackground="#D9E0EC",
+                         highlightcolor=st.ACENTO,
+                         disabledbackground="#F1F5F9",
+                         disabledforeground=MUTED)
+            e.pack(fill="x", pady=(4, 0), ipady=7)
+            return e
+
+        def seccion_lista(parent, titulo):
+            t = Tarjeta(parent, fondo="#F8FAFC", radio=10, padx=12, pady=10,
+                        exterior=st.TARJETA)
+            tk.Label(t.cuerpo, text=titulo, bg="#F8FAFC", fg=MUTED,
+                     font=(st.FUENTE, 9, "bold")).pack(anchor="w", pady=(0, 6))
+            return t, t.cuerpo
 
         # ---------------- Formulario ----------------
-        form = st.labelframe(contenido, " NUEVA VENTA ", padx=14, pady=12)
-        form.pack(fill="x", padx=24, pady=(14, 0))
+        form_card, form = tarjeta(contenido, "Nueva venta", "cart",
+                                  fill="x", padx=PX, pady=(12, 0))
 
         # Cómo se usa, en dos pasos: se ve siempre, sin scrollear
-        self.lbl_pasos = tk.Label(
-            form, bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
-            justify="left", anchor="w", wraplength=880,
-            text=("PASO 1 · Producto, cantidad y precio → botón "
-                  "+ AGREGAR AL TICKET (uno por cada producto del ticket).\n"
-                  "PASO 2 · Medio de pago → botón REGISTRAR VENTA "
-                  "(el importe se carga solo con lo que falta)."),
-        )
-        self.lbl_pasos.pack(fill="x", pady=(0, 10))
+        pasos = tk.Frame(form, bg=st.TARJETA)
+        pasos.pack(fill="x", pady=(0, 12))
+        for n, txt in (
+                (1, "Producto, cantidad y precio → botón + AGREGAR AL TICKET "
+                    "(uno por cada producto del ticket)."),
+                (2, "Medio de pago → botón REGISTRAR VENTA "
+                    "(el importe se carga solo con lo que falta).")):
+            f = tk.Frame(pasos, bg=st.TARJETA)
+            f.pack(anchor="w", pady=2)
+            tk.Label(f, image=ic.avatar(str(n), 20, st.ACENTO, "#FFFFFF", 0.62),
+                     bg=st.TARJETA).pack(side="left", padx=(0, 8))
+            tk.Label(f, text=txt, bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 10)).pack(side="left")
+        self.lbl_pasos = pasos
 
         # Dos filas de 4 campos: en pantallas chicas nada queda cortado
-        grid = tk.Frame(form, bg=st.FONDO)
+        grid = tk.Frame(form, bg=st.TARJETA)
         grid.pack(fill="x")
         for c in range(4):
-            grid.columnconfigure(c, weight=1)
-        for f in range(2):
-            grid.rowconfigure(f, weight=1, pad=8)
+            grid.columnconfigure(c, weight=1, uniform="campo")
 
         def campo(col, etiqueta, fila=0):
-            celda = tk.Frame(grid, bg=st.FONDO)
-            celda.grid(row=fila, column=col, sticky="nsew", padx=(0, 12))
-            lbl = tk.Label(celda, text=etiqueta, bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                           font=(st.FUENTE, 9, "bold"))
-            lbl.pack(anchor="w")
+            celda = tk.Frame(grid, bg=st.TARJETA)
+            celda.grid(row=fila, column=col, sticky="nsew",
+                       padx=(0 if col == 0 else 8, 0 if col == 3 else 8),
+                       pady=(0, 10))
+            lbl = tk.Label(celda, text=etiqueta, bg=st.TARJETA, fg=MUTED,
+                           font=(st.FUENTE, 9, "bold"), anchor="w",
+                           justify="left")
+            lbl.pack(fill="x")
+            celda.bind("<Configure>", lambda e, l=lbl: l.configure(
+                wraplength=max(60, e.width - 2)))
             return celda, lbl
 
         # Fila 1: qué se lleva el cliente
         c_producto, _ = campo(0, "PRODUCTO", 0)
-        self.combo_producto = ttk.Combobox(c_producto, state="readonly", width=22,
-                                            font=(st.FUENTE, 11))
-        self.combo_producto.pack(fill="x", pady=(3, 0), ipady=3)
+        self.combo_producto = ttk.Combobox(c_producto, state="readonly",
+                                           width=22, font=(st.FUENTE, 11))
+        self.combo_producto.pack(fill="x", pady=(4, 0))
         self.combo_producto.bind("<<ComboboxSelected>>", self._producto_cambiado)
 
         c_cantidad, _ = campo(1, "CANTIDAD", 0)
@@ -90,24 +130,18 @@ class VentasPanel(tk.Frame):
                                          textvariable=self.var_cantidad,
                                          font=(st.FUENTE, 11), justify="center",
                                          command=self._linea_modificada)
-        self.spin_cantidad.pack(fill="x", pady=(3, 0), ipady=3)
+        self.spin_cantidad.pack(fill="x", pady=(4, 0))
         self.var_cantidad.trace_add("write", self._linea_modificada)
 
         c_precio, _ = campo(2, "PRECIO UNITARIO", 0)
         self.var_precio = tk.StringVar(value="")
-        self.ent_precio = tk.Entry(c_precio, textvariable=self.var_precio,
-                                   font=(st.FUENTE, 11), justify="left",
-                                   relief="solid", bd=1)
-        self.ent_precio.pack(fill="x", pady=(3, 0), ipady=4)
+        self.ent_precio = entrada(c_precio, self.var_precio)
         self.var_precio.trace_add("write", self._linea_modificada)
 
         # Nombre de la persona / cliente (aparece en el Excel exportado)
         c_cliente, _ = campo(3, "NOMBRE / CLIENTE (opcional)", 0)
         self.var_cliente = tk.StringVar(value="")
-        self.ent_cliente = tk.Entry(c_cliente, textvariable=self.var_cliente,
-                                    font=(st.FUENTE, 11), justify="left",
-                                    relief="solid", bd=1)
-        self.ent_cliente.pack(fill="x", pady=(3, 0), ipady=4)
+        self.ent_cliente = entrada(c_cliente, self.var_cliente)
 
         # Fila 2: cómo paga (uno o varios medios, cada uno con su importe)
         c_medio, _ = campo(0, "MEDIO DE PAGO", 1)
@@ -115,105 +149,87 @@ class VentasPanel(tk.Frame):
                                         values=db.MEDIOS_PAGO,
                                         font=(st.FUENTE, 11))
         self.combo_medio.set(db.MEDIOS_PAGO[0])
-        self.combo_medio.pack(fill="x", pady=(3, 0), ipady=3)
+        self.combo_medio.pack(fill="x", pady=(4, 0))
         self.combo_medio.bind("<<ComboboxSelected>>", self._medio_cambiado)
 
         c_importe, self.lbl_importe = campo(1, "IMPORTE", 1)
         self.lbl_importe.config(wraplength=235, justify="left")
         self.var_importe = tk.StringVar(value="")
-        self.ent_importe = tk.Entry(c_importe, textvariable=self.var_importe,
-                                    font=(st.FUENTE, 11), justify="left",
-                                    relief="solid", bd=1)
-        self.ent_importe.pack(fill="x", pady=(3, 0), ipady=4)
+        self.ent_importe = entrada(c_importe, self.var_importe)
         self.var_importe.trace_add("write", self._importe_modificado)
 
         # N° de comprobante: obligatorio para Transferencia
         c_comprobante, self.lbl_comprobante = campo(2, "N° DE COMPROBANTE", 1)
         self.var_comprobante = tk.StringVar(value="")
-        self.ent_comprobante = tk.Entry(c_comprobante,
-                                        textvariable=self.var_comprobante,
-                                        font=(st.FUENTE, 11), justify="left",
-                                        relief="solid", bd=1)
-        self.ent_comprobante.pack(fill="x", pady=(3, 0), ipady=4)
+        self.ent_comprobante = entrada(c_comprobante, self.var_comprobante)
 
-        # CÓDIGO DE MUTUAL: obligatorio para BONO (mínimo 3 números)
+        # CÓDIGO DE MUTUAL: obligatorio para BONO (mínimo 3 números).
+        # Ocupa el mismo lugar que el comprobante; se muestra uno u otro.
         c_mutual, self.lbl_mutual = campo(2, "CÓDIGO DE MUTUAL", 1)
         self.var_mutual = tk.StringVar(value="")
-        self.ent_mutual = tk.Entry(c_mutual,
-                                    textvariable=self.var_mutual,
-                                    font=(st.FUENTE, 11), justify="left",
-                                    relief="solid", bd=1)
-        self.ent_mutual.pack(fill="x", pady=(3, 0), ipady=4)
+        self.ent_mutual = entrada(c_mutual, self.var_mutual)
+        self._c_comprobante = c_comprobante
+        self._c_mutual = c_mutual
+        c_mutual.grid_remove()
 
         c_total, _ = campo(3, "TOTAL DEL TICKET", 1)
-        self.lbl_total = tk.Label(c_total, text="$0", bg=st.TARJETA,
+        caja_total = Tarjeta(c_total, fondo="#ECF7F0", borde="#BDE5CD",
+                             radio=10, padx=12, pady=7, exterior=st.TARJETA)
+        caja_total.pack(fill="x", pady=(4, 0))
+        self.lbl_total = tk.Label(caja_total.cuerpo, text="$0", bg="#ECF7F0",
                                   fg=st.VERDE_OSCURO,
-                                  font=(st.FUENTE, 15, "bold"), relief="solid",
-                                  bd=1, anchor="e", padx=10)
-        self.lbl_total.pack(fill="x", pady=(3, 0), ipady=4)
+                                  font=(st.FUENTE, 16, "bold"), anchor="e")
+        self.lbl_total.pack(fill="x")
 
         # Qué tiene adentro el total + cuadre: se ve arriba de todo, sin bajar
-        self.lbl_desglose = tk.Label(form, text="", bg=st.FONDO,
-                                     fg=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
-                                     justify="right", anchor="e", wraplength=880)
-        self.lbl_desglose.pack(anchor="e", pady=(8, 0))
+        self.lbl_desglose = tk.Label(form, text="", bg=st.TARJETA, fg=MUTED,
+                                     font=(st.FUENTE, 10), justify="right",
+                                     anchor="e", wraplength=880)
+        self.lbl_desglose.pack(anchor="e", pady=(2, 0))
 
-        self.lbl_pago = tk.Label(form, text="", bg=st.TARJETA, fg=st.TEXTO_SUAVE,
-                                 font=(st.FUENTE, 12, "bold"), justify="right",
-                                 anchor="e", wraplength=880, padx=10, pady=5,
-                                 relief="solid", bd=1)
-        self.lbl_pago.pack(anchor="e", pady=(4, 0))
+        caja_pago = Tarjeta(form, fondo="#F8FAFC", borde=st.BORDE, radio=10,
+                            padx=14, pady=7, exterior=st.TARJETA)
+        caja_pago.pack(anchor="e", pady=(6, 0))
+        self.lbl_pago = tk.Label(caja_pago.cuerpo, text="", bg="#F8FAFC",
+                                 fg=MUTED, font=(st.FUENTE, 11, "bold"),
+                                 justify="right", anchor="e", wraplength=760)
+        self.lbl_pago.pack()
 
         # ---------------- Acciones del ticket ----------------
-        acciones = tk.Frame(form, bg=st.FONDO)
-        acciones.pack(fill="x", pady=(12, 0))
+        acciones = tk.Frame(form, bg=st.TARJETA)
+        acciones.pack(fill="x", pady=(14, 0))
 
-        self.btn_agregar_item = tk.Button(
+        self.btn_agregar_item = Btn(
             acciones, text="+ AGREGAR AL TICKET", command=self._agregar_item,
-            relief="flat", bg=st.ACENTO, fg="#ffffff",
-            font=(st.FUENTE, 10, "bold"), padx=12, pady=8, cursor="hand2",
-        )
+            bg=st.ACENTO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=9)
         self.btn_agregar_item.pack(side="left")
-        self.btn_agregar_item.bind(
-            "<Enter>", lambda e: self.btn_agregar_item.config(bg=st.ACENTO_OSCURO))
-        self.btn_agregar_item.bind(
-            "<Leave>", lambda e: self.btn_agregar_item.config(bg=st.ACENTO))
 
-        self.btn_agregar_pago = tk.Button(
-            acciones, text="+ AGREGAR MEDIO DE PAGO",
-            command=self._agregar_pago,
-            relief="flat", bg=st.BARRA, fg="#ffffff",
-            font=(st.FUENTE, 10, "bold"), padx=12, pady=8, cursor="hand2",
-        )
+        self.btn_agregar_pago = Btn(
+            acciones, text="+ AGREGAR MEDIO DE PAGO", command=self._agregar_pago,
+            bg=st.BARRA, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=9)
         self.btn_agregar_pago.pack(side="left", padx=(10, 0))
-        self.btn_agregar_pago.bind(
-            "<Enter>", lambda e: self.btn_agregar_pago.config(bg="#243355"))
-        self.btn_agregar_pago.bind(
-            "<Leave>", lambda e: self.btn_agregar_pago.config(bg=st.BARRA))
 
-        self.btn_registrar = tk.Button(
+        self.btn_registrar = Btn(
             acciones, text="REGISTRAR VENTA", command=self._registrar,
-            relief="flat", bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 11, "bold"),
-            padx=18, pady=9, cursor="hand2",
-        )
+            bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 11, "bold"),
+            padx=24, pady=10)
         self.btn_registrar.pack(side="right")
-        self.btn_registrar.bind("<Enter>",
-                                lambda e: self.btn_registrar.config(bg=st.VERDE_OSCURO))
-        self.btn_registrar.bind("<Leave>",
-                                lambda e: self.btn_registrar.config(bg=st.VERDE))
 
         # ---------------- Listas del ticket ----------------
-        listas = tk.Frame(form, bg=st.FONDO)
-        listas.pack(fill="both", expand=True, pady=(12, 0))
-        listas.columnconfigure(0, weight=3)
-        listas.columnconfigure(1, weight=2)
+        listas = tk.Frame(form, bg=st.TARJETA)
+        listas.pack(fill="both", expand=True, pady=(14, 0))
+        listas.columnconfigure(0, weight=3, uniform="lst")
+        listas.columnconfigure(1, weight=2, uniform="lst")
         listas.rowconfigure(0, weight=1)
 
-        marco_items = st.labelframe(listas, " PRODUCTOS DEL TICKET ", padx=8,
-                                    pady=6)
-        marco_items.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        t_items, marco_items = seccion_lista(listas, "PRODUCTOS DEL TICKET")
+        t_items.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        zona_i = tk.Frame(marco_items, bg="#F8FAFC")
+        zona_i.pack(fill="both", expand=True)
         self.tree_items = ttk.Treeview(
-            marco_items, columns=("producto", "cantidad", "precio", "subtotal"),
+            zona_i, columns=("producto", "cantidad", "precio", "subtotal"),
             show="headings", height=3)
         self.tree_items.heading("producto", text="Producto")
         self.tree_items.heading("cantidad", text="Cantidad")
@@ -223,25 +239,25 @@ class VentasPanel(tk.Frame):
         self.tree_items.column("cantidad", width=65, anchor="center")
         self.tree_items.column("precio", width=100, anchor="e")
         self.tree_items.column("subtotal", width=95, anchor="e")
-        scroll_i = ttk.Scrollbar(marco_items, orient="vertical",
+        scroll_i = ttk.Scrollbar(zona_i, orient="vertical",
                                  command=self.tree_items.yview)
         self.tree_items.configure(yscrollcommand=scroll_i.set)
         scroll_i.pack(side="right", fill="y")
         self.tree_items.pack(fill="both", expand=True)
 
-        pie_items = tk.Frame(marco_items, bg=st.FONDO)
-        pie_items.pack(fill="x", pady=(6, 0))
-        self.btn_quitar_item = tk.Button(
+        pie_items = tk.Frame(marco_items, bg="#F8FAFC")
+        pie_items.pack(fill="x", pady=(8, 0))
+        self.btn_quitar_item = Btn(
             pie_items, text="Quitar seleccionado", command=self._quitar_item,
-            relief="flat", bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 9),
-            padx=10, pady=5, cursor="hand2",
-        )
+            bg="#E5EAF1", fg=st.TEXTO, font=(st.FUENTE, 9), padx=12, pady=5)
         self.btn_quitar_item.pack(side="left")
 
-        marco_pagos = st.labelframe(listas, " FORMAS DE PAGO ", padx=8, pady=6)
-        marco_pagos.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        t_pagos, marco_pagos = seccion_lista(listas, "FORMAS DE PAGO")
+        t_pagos.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        zona_p = tk.Frame(marco_pagos, bg="#F8FAFC")
+        zona_p.pack(fill="both", expand=True)
         self.tree_pagos = ttk.Treeview(
-            marco_pagos, columns=("medio", "importe", "comprobante"),
+            zona_p, columns=("medio", "importe", "comprobante"),
             show="headings", height=3)
         self.tree_pagos.heading("medio", text="Medio")
         self.tree_pagos.heading("importe", text="Importe")
@@ -249,38 +265,36 @@ class VentasPanel(tk.Frame):
         self.tree_pagos.column("medio", width=135, anchor="w")
         self.tree_pagos.column("importe", width=95, anchor="e")
         self.tree_pagos.column("comprobante", width=115, anchor="w")
-        scroll_p = ttk.Scrollbar(marco_pagos, orient="vertical",
+        scroll_p = ttk.Scrollbar(zona_p, orient="vertical",
                                  command=self.tree_pagos.yview)
         self.tree_pagos.configure(yscrollcommand=scroll_p.set)
         scroll_p.pack(side="right", fill="y")
         self.tree_pagos.pack(fill="both", expand=True)
         self.tree_pagos.bind("<<TreeviewSelect>>", self._pago_seleccionado)
 
-        pie_pagos = tk.Frame(marco_pagos, bg=st.FONDO)
-        pie_pagos.pack(fill="x", pady=(6, 0))
-        self.btn_quitar_pago = tk.Button(
+        pie_pagos = tk.Frame(marco_pagos, bg="#F8FAFC")
+        pie_pagos.pack(fill="x", pady=(8, 0))
+        self.btn_quitar_pago = Btn(
             pie_pagos, text="Quitar seleccionado", command=self._quitar_pago,
-            relief="flat", bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 9),
-            padx=10, pady=5, cursor="hand2",
-        )
+            bg="#E5EAF1", fg=st.TEXTO, font=(st.FUENTE, 9), padx=12, pady=5)
         self.btn_quitar_pago.pack(side="left")
 
-        # Estado del cuadre: los pagos tienen que dar el total
-        # (la etiqueta vive arriba, al lado del total, para que se vea siempre)
-
-        self.lbl_info = tk.Label(form, text="", bg=st.FONDO, fg=st.TEXTO,
+        # Estado del cuadre / mensajes de edición
+        self.lbl_info = tk.Label(form, text="", bg=st.TARJETA, fg=st.TEXTO,
                                  font=(st.FUENTE, 11, "bold"), anchor="w")
-        self.lbl_info.pack(fill="x", pady=(6, 0))
+        self.lbl_info.pack(fill="x", pady=(10, 0))
 
-        # ---------------- Listado ----------------
-        marco_lista = st.labelframe(contenido, " VENTAS REGISTRADAS ", padx=10,
-                                    pady=10)
-        marco_lista.pack(fill="both", expand=True, padx=24, pady=(14, 24))
+        # ---------------- Listado de ventas ----------------
+        lista_card, marco_lista = tarjeta(contenido, "Ventas registradas",
+                                          "clipboard", fill="both",
+                                          expand=True, padx=PX, pady=(14, 0))
 
+        zona = tk.Frame(marco_lista, bg=st.TARJETA)
+        zona.pack(fill="both", expand=True)
         columnas = ("ticket", "hora", "productos", "cantidad", "cliente",
                     "medios", "comprobante", "total", "cajero")
-        self.tree = ttk.Treeview(marco_lista, columns=columnas, show="headings",
-                                 height=12, selectmode="extended")
+        self.tree = ttk.Treeview(zona, columns=columnas, show="headings",
+                                 height=10, selectmode="extended")
         self.tree.heading("ticket", text="#")
         self.tree.heading("hora", text="Hora")
         self.tree.heading("productos", text="Productos del ticket")
@@ -294,73 +308,60 @@ class VentasPanel(tk.Frame):
         self.tree.column("ticket", width=46, anchor="center", stretch=False)
         self.tree.column("hora", width=56, anchor="center", stretch=False)
         self.tree.column("productos", width=200, anchor="w")
-        self.tree.column("cantidad", width=46, anchor="center", stretch=False)
+        self.tree.column("cantidad", width=54, anchor="center", stretch=False)
         self.tree.column("cliente", width=100, anchor="w")
         self.tree.column("medios", width=165, anchor="w")
         self.tree.column("comprobante", width=110, anchor="w")
         self.tree.column("total", width=95, anchor="e")
         self.tree.column("cajero", width=80, anchor="w")
 
-        scroll = ttk.Scrollbar(marco_lista, orient="vertical",
-                               command=self.tree.yview)
-        scroll_h = ttk.Scrollbar(marco_lista, orient="horizontal",
+        scroll = ttk.Scrollbar(zona, orient="vertical", command=self.tree.yview)
+        scroll_h = ttk.Scrollbar(zona, orient="horizontal",
                                  command=self.tree.xview)
         self.tree.configure(yscrollcommand=scroll.set,
                             xscrollcommand=scroll_h.set)
-        # Los bars se ubican primero: el listado ocupa el resto
+        # Las barras se ubican primero: el listado ocupa el resto
         scroll.pack(side="right", fill="y")
         scroll_h.pack(side="bottom", fill="x")
         self.tree.pack(side="left", fill="both", expand=True)
 
-        pie = tk.Frame(contenido, bg=st.FONDO)
-        pie.pack(fill="x", padx=24, pady=(0, 20))
+        pie = tk.Frame(marco_lista, bg=st.TARJETA)
+        pie.pack(fill="x", pady=(12, 0))
 
-        self.btn_editar = tk.Button(
+        self.btn_editar = Btn(
             pie, text="Editar venta seleccionada", command=self._editar,
-            relief="flat", bg=st.ACENTO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-            padx=14, pady=8, cursor="hand2",
-        )
+            bg=st.ACENTO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=8)
         self.btn_editar.pack(side="left")
-        self.btn_editar.bind("<Enter>",
-                             lambda e: self.btn_editar.config(bg=st.ACENTO_OSCURO))
-        self.btn_editar.bind("<Leave>",
-                             lambda e: self.btn_editar.config(bg=st.ACENTO))
 
-        self.btn_eliminar = tk.Button(
+        self.btn_eliminar = Btn(
             pie, text="Eliminar seleccionadas", command=self._eliminar,
-            relief="flat", bg=st.ROJO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-            padx=14, pady=8, cursor="hand2",
-        )
+            bg=st.ROJO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=8)
         self.btn_eliminar.pack(side="left", padx=(10, 0))
-        self.btn_eliminar.bind("<Enter>",
-                               lambda e: self.btn_eliminar.config(bg="#b91c1c"))
-        self.btn_eliminar.bind("<Leave>",
-                               lambda e: self.btn_eliminar.config(bg=st.ROJO))
 
-        self.btn_vaciar = tk.Button(
+        self.btn_vaciar = Btn(
             pie, text="Borrar toda la caja", command=self._vaciar_caja,
-            relief="flat", bg="#7f1d1d", fg="#ffffff",
-            font=(st.FUENTE, 10, "bold"), padx=14, pady=8, cursor="hand2",
-        )
+            bg="#7f1d1d", fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=8)
         self.btn_vaciar.pack(side="left", padx=(10, 0))
-        self.btn_vaciar.bind("<Enter>",
-                             lambda e: self.btn_vaciar.config(bg="#5b1010"))
-        self.btn_vaciar.bind("<Leave>",
-                             lambda e: self.btn_vaciar.config(bg="#7f1d1d"))
 
-        self.btn_cancelar = tk.Button(
+        self.btn_cancelar = Btn(
             pie, text="Cancelar edición", command=self._cancelar_edicion,
-            relief="flat", bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 10),
-            padx=14, pady=8, cursor="hand2",
-        )
+            bg="#E5EAF1", fg=st.TEXTO, font=(st.FUENTE, 10), padx=16, pady=8)
 
-        self.lbl_pie = tk.Label(pie, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                                font=(st.FUENTE, 10), wraplength=340,
+        self.lbl_pie = tk.Label(pie, text="", bg=st.TARJETA, fg=MUTED,
+                                font=(st.FUENTE, 10), wraplength=420,
                                 justify="right", anchor="e")
         self.lbl_pie.pack(side="right")
 
+        # ---------------- Ayuda ----------------
+        ayuda = tk.Frame(contenido, bg=st.FONDO)
+        ayuda.pack(fill="x", padx=PX, pady=(12, 24))
+        tk.Label(ayuda, image=ic.icono("info", 16, "#94A3B8", 1.9),
+                 bg=st.FONDO).pack(side="left", anchor="n", padx=(0, 8), pady=1)
         self.lbl_ayuda = tk.Label(
-            contenido,
+            ayuda,
             text="Armá el ticket: cargá el producto y presioná "
                  "+ AGREGAR AL TICKET (repetí por cada producto). Después "
                  "cargá el medio de pago y su importe con "
@@ -368,10 +369,11 @@ class VentasPanel(tk.Frame):
                  "total) y registrá. ¿Cargaste de más? Seleccioná una o varias "
                  "ventas (Ctrl o Shift + clic) y usá Editar, Eliminar "
                  "seleccionadas o Borrar toda la caja.",
-            bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
-            wraplength=760, anchor="w", justify="left",
-        )
-        self.lbl_ayuda.pack(fill="x", padx=24, pady=(0, 20))
+            bg=st.FONDO, fg=MUTED, font=(st.FUENTE, 9), wraplength=760,
+            anchor="w", justify="left")
+        self.lbl_ayuda.pack(side="left", fill="x", expand=True)
+        ayuda.bind("<Configure>", lambda e: self.lbl_ayuda.configure(
+            wraplength=max(200, e.width - 40)))
 
         self._pintar_items()
         self._pintar_pagos()
@@ -414,6 +416,14 @@ class VentasPanel(tk.Frame):
                 font=(st.FUENTE, 9, "bold"),
             )
             self.ent_comprobante.config(bg="#ffffff")
+
+        # Se muestra el campo que corresponde al medio de pago
+        if es_bono:
+            self._c_comprobante.grid_remove()
+            self._c_mutual.grid()
+        else:
+            self._c_mutual.grid_remove()
+            self._c_comprobante.grid()
 
         # CÓDIGO DE MUTUAL (BONO)
         if es_bono:
@@ -1141,16 +1151,16 @@ class VentasPanel(tk.Frame):
         if operativa:
             self.lbl_bloqueada.pack_forget()
         else:
-            self.lbl_bloqueada.pack(fill="x", padx=24, pady=(10, 0))
+            self.lbl_bloqueada.pack(fill="x", padx=28, pady=(8, 0), after=self._cab)
             if sin_abrir:
-                self.lbl_bloqueada.config(
-                    text="■ CAJA SIN ABRIR: presioná ABRIR CAJA en la pantalla "
+                self.lbl_bloqueada.set(
+                    text="CAJA SIN ABRIR: presioná ABRIR CAJA en la pantalla "
                          "Inicio para registrar el monto inicial y poder "
                          "cargar ventas."
                 )
             else:
-                self.lbl_bloqueada.config(
-                    text="■ CAJA CERRADA: no se pueden registrar ni eliminar ventas. "
+                self.lbl_bloqueada.set(
+                    text="CAJA CERRADA: no se pueden registrar ni eliminar ventas. "
                          "Para modificar, usá la reapertura de caja en Historial."
                 )
 

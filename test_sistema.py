@@ -6,6 +6,11 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# La consola de Windows (cp1252) no codifica todos los símbolos de los
+# mensajes (✕, ·, …): sin esto la impresión de un OK corta la ejecución.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import database as db
 import permisos as perms
 
@@ -229,6 +234,7 @@ hora = db.guardar_cierre(
     caja["id"], total_garrafas=r2["total_garrafas"], total_vendido=r2["total_vendido"],
     efectivo_esperado=r2["efectivo_esperado"], efectivo_contado=total,
     transferencias=r2["transferencias"], debito=r2["debito"], credito=r2["credito"],
+    bono=r2.get("bono", 0),
     total_general=r2["total_general"], diferencia=dif, estado=estado,
     billetes={str(d): c for d, c in conteo.items()},
 )
@@ -263,7 +269,8 @@ check(db.get_caja_por_id(caja["id"])["estado"] == "abierta", "reabrir devuelve l
 check(len(db.historial_cierres()) == 0, "el cierre anulado sale del historial")
 db.guardar_cierre(
     caja["id"], total_garrafas=0, total_vendido=0, efectivo_esperado=0,
-    efectivo_contado=0, transferencias=0, debito=0, credito=0, total_general=0,
+    efectivo_contado=0, transferencias=0, debito=0, credito=0, bono=0,
+    total_general=0,
     diferencia=0, estado="Cuadrada", billetes={},
 )
 check(len(db.historial_cierres()) == 1, "al cerrar de nuevo vuelve al historial")
@@ -292,9 +299,27 @@ _sd.askstring = lambda *a, **k: "admin"
 
 import main as main_mod
 from ui_cierre import CierreDialog
+import iconos as _ic
+
+
+def _nueva_app():
+    """Crea una App fresca para tests. Al destruir la raíz Tk mueren las
+    PhotoImage del caché de iconos, así que se limpia antes de reconstruir.
+    Si quedó alguna raíz vieja viva, se destruye: con dos raízes a la vez,
+    PIL crea las imágenes en la raíz equivocada y el widget no las encuentra."""
+    raiz = getattr(tk, "_default_root", None)
+    if raiz is not None:
+        try:
+            raiz.destroy()
+        except tk.TclError:
+            pass
+    _ic._cache.clear()
+    a = main_mod.App()
+    a.update()
+    return a
 
 # La sesión ya está iniciada (admin) — la app no vuelve a pedir login
-app = main_mod.App()
+app = _nueva_app()
 app.update()
 
 # Ventas del día en la interfaz
@@ -306,16 +331,16 @@ check(len(panel.tree.get_children()) == 8, "listado de ventas en la interfaz")
 # Panel de inicio
 app.mostrar("inicio")
 app.update()
-check(app.paneles["inicio"].cards["garrafas"].cget("text") == "35",
+check(app.paneles["inicio"].v_garrafas.cget("text") == "35",
       "tarjeta garrafas vendidas = 35")
-check(app.paneles["inicio"].cards["general"].cget("text") == "$650.000",
+check(app.paneles["inicio"].v_general.cget("text") == "$650.000",
       "tarjeta total general = $650.000")
-check(app.paneles["inicio"].cards["tarjetas"].cget("text") == "$240.000",
+check(app.paneles["inicio"].v_tarjetas.cget("text") == "$240.000",
       "tarjeta TARJETAS agrupa débito + crédito ($240.000)")
 check("Débito $150.000" in app.paneles["inicio"]
-      .cards_detalle["tarjetas"].cget("text")
+      .d_tarjetas.cget("text")
       and "Crédito $90.000" in app.paneles["inicio"]
-      .cards_detalle["tarjetas"].cget("text"),
+      .d_tarjetas.cget("text"),
       "la tarjeta TARJETAS discrimina débito y crédito")
 
 # Punto 4: el listado de Inicio muestra solo lo vendido y nada queda oculto
@@ -331,7 +356,8 @@ _r_ini = db.resumen(caja["id"])
 _vendidos_ini = [i for i in _r_ini["por_producto"].values()
                  if int(i["cantidad"]) > 0]
 _filas_inicio = inicio.contenedor_producto.winfo_children()
-check(len(_filas_inicio) == len(_vendidos_ini) + 2,
+# 3 etiquetas de encabezado + 3 por producto + 1 separador + 3 de TOTAL GENERAL
+check(len(_filas_inicio) == 3 * len(_vendidos_ini) + 7,
       f"punto 4: Inicio lista solo los {len(_vendidos_ini)} productos "
       f"vendidos + su total (obtuvo {len(_filas_inicio)} filas)")
 check(len(_vendidos_ini) < 10,
@@ -340,9 +366,9 @@ check(len(_vendidos_ini) < 10,
 
 _uni_ini = sum(int(i["cantidad"]) for i in _vendidos_ini)
 _textos_total = [str(w.cget("text"))
-                 for w in _filas_inicio[-1].winfo_children()]
+                 for w in _filas_inicio[-3:]]
 check(any(t == "TOTAL GENERAL" for t in _textos_total)
-      and any(t == f"{_uni_ini} unidades" for t in _textos_total),
+      and any(t == f"{_uni_ini} u." for t in _textos_total),
       f"punto 4: fila TOTAL GENERAL con {_uni_ini} unidades "
       f"(obtuvo {_textos_total})")
 
@@ -808,7 +834,7 @@ check(dlg_login.resultado is not None
 aux_root.destroy()
 
 # Reconstruimos la app con sesión iniciada para probar el panel admin
-app = main_mod.App()
+app = _nueva_app()
 app.update()
 app.mostrar("admin")
 app.update()
@@ -885,14 +911,19 @@ ini = app.paneles["inicio"]
 _fecha_prueba = "2026-12-30"
 app.cambiar_caja(_fecha_prueba)
 app.update()
-check(str(ini.btn_abrir.cget("text")) == "ABRIR CAJA — admin",
-      f"botón ABRIR CAJA muestra el usuario "
-      f"(obtuvo {ini.btn_abrir.cget('text')!r})")
-check(ini.btn_abrir.cget("state") == "normal",
-      "ABRIR CAJA habilitado cuando la caja no tiene apertura")
-check(str(ini.btn_cierre.cget("text")) == "CERRAR CAJA — admin",
-      f"botón CERRAR CAJA muestra el usuario "
-      f"(obtuvo {ini.btn_cierre.cget('text')!r})")
+def _texto_boton(b):
+    """Texto visible de un widget Boton (vive en su label interno)."""
+    return str(b.lbl.cget("text")).strip()
+
+
+check(_texto_boton(ini.btn_abrir) == "Abrir caja — admin",
+      f"botón Abrir caja muestra el usuario "
+      f"(obtuvo {_texto_boton(ini.btn_abrir)!r})")
+check(ini.btn_abrir.habilitado,
+      "Abrir caja habilitado cuando la caja no tiene apertura")
+check(_texto_boton(ini.btn_cierre) == "Cerrar caja — admin",
+      f"botón Cerrar caja muestra el usuario "
+      f"(obtuvo {_texto_boton(ini.btn_cierre)!r})")
 
 ini._abrir_caja()
 app.update()
@@ -901,17 +932,18 @@ dlg_abrir = [w for w in app.winfo_children()
 check(bool(dlg_abrir), "el diálogo de apertura se abre desde Inicio")
 if dlg_abrir:
     dlg_abrir[0].var.set("120.000")
-    dlg_abrir[0]._confirmar()
+    dlg_abrir[0]._abrir()
     app.update()
 ap2 = db.apertura_de(db.get_caja(_fecha_prueba)["id"])
 check(ap2 is not None and ap2["monto_inicial"] == 120000,
       f"el diálogo registra el monto inicial "
       f"(obtuvo {ap2 and ap2['monto_inicial']})")
-check(str(ini.btn_abrir.cget("text")).startswith("CAJA ABIERTA"),
-      "abierta la caja, ABRIR CAJA queda deshabilitado")
+check(not ini.btn_abrir.winfo_ismapped(),
+      "abierta la caja, el botón Abrir caja desaparece")
 app.update()
-check(ini.lbl_apertura.winfo_ismapped()
-      and "Abierta por admin" in str(ini.lbl_apertura.cget("text")),
+check(ini.lbl_abierto_por.winfo_ismapped()
+      and "Abierta por admin" in str(ini.lbl_abierto_por.cget("text"))
+      and str(ini.lbl_monto.cget("text")) == "$120.000",
       "punto 4: se ve quién abrió la caja y con cuánto fondo inicial")
 
 # Caja sin ventas: el cierre es directo (sin diálogo de arqueo ni contraseña)
@@ -923,14 +955,13 @@ check(not dialogos_cierre, "caja vacía: no se abre el diálogo de arqueo")
 check(db.get_caja(_fecha_prueba)["estado"] == "cerrada",
       "caja vacía: se cierra de un solo clic")
 
-# Efecto deslizante de usuario/rango en el lateral
-check(app._item_usuario is not None
-      and "admin" in str(app.canvas_usuario_nav.itemcget(app._item_usuario, "text")),
+# Usuario/rango del lateral
+check("admin" in str(app.lbl_usuario_nombre.cget("text")),
       "el lateral muestra el usuario conectado")
 app.mostrar("inicio")
 app.update()
-check(app._item_usuario is not None
-      and "admin" in str(app.canvas_usuario_nav.itemcget(app._item_usuario, "text")),
+check("admin" in str(app.lbl_usuario_nombre.cget("text"))
+      and "DESARROLLADOR" in str(app.lbl_usuario_rango.cget("text")),
       "al cambiar de pantalla el usuario/rango se vuelve a pintar")
 
 # Panel Mi cuenta
@@ -969,7 +1000,8 @@ app.destroy()
 # Caja bloqueada: no se puede vender con la caja cerrada
 db.guardar_cierre(
     caja["id"], total_garrafas=0, total_vendido=0, efectivo_esperado=0,
-    efectivo_contado=0, transferencias=0, debito=0, credito=0, total_general=0,
+    efectivo_contado=0, transferencias=0, debito=0, credito=0, bono=0,
+    total_general=0,
     diferencia=0, estado="Cuadrada", billetes={}, n_transferencias=2,
 )
 check(not db.caja_esta_abierta(caja["id"]), "caja cerrada queda bloqueada")
@@ -1022,7 +1054,7 @@ check(not db.puede("exportar_excel") and not db.puede("estadisticas"),
 check(not db.puede("pago_credito") and not db.puede("pago_transferencia"),
       "punto 1: los medios de pago se restringen uno por uno")
 
-app3 = main_mod.App()
+app3 = _nueva_app()
 app3.update()
 ancho_v = int(app3.geometry().split("x")[0])
 alto_v = int(app3.geometry().split("x")[1].split("+")[0])
@@ -1104,7 +1136,7 @@ db.reabrir_caja(caja["id"])
 _p0 = db.productos()[0]
 db.registrar_venta(caja["id"], _p0["id"], 1, _p0["precio"], "Efectivo")
 
-app2 = main_mod.App()
+app2 = _nueva_app()
 app2.update()
 app2.mostrar("ventas")            # para comprobar que vuelve a Inicio al cerrar
 app2.update()
@@ -1197,7 +1229,7 @@ check(all(ayuda.resolver(s)["ok"] for s in ayuda.SUGERENCIAS),
       "soporte: cada pregunta rápida responde de verdad")
 
 # -------- la ventana flotante --------
-app4 = main_mod.App()
+app4 = _nueva_app()
 app4.update()
 check(hasattr(app4, "btn_soporte"), "soporte: el botón flotante existe")
 
@@ -1245,11 +1277,48 @@ app4.update()
 check(app4.ventana_soporte is _ven,
       "soporte: la segunda pulsada reutiliza la misma ventana")
 
+import time as _time
+
 for _p in ["¿Cómo cierro la caja?", "¿Cómo exporto a Excel?",
            "caja", "xyzqr", "hola"]:
     _ven.preguntar(_p)
     app4.update()
-_texto_soporte = _ven.chat.get("1.0", "end")
+# Las respuestas llegan con delay ("escribiendo…"): se espera a que la cola
+# se vacíe y no haya ninguna respuesta en curso.
+_espera_ms = 0
+while (_ven._cola or _ven._pensando) and _espera_ms < 30000:
+    app4.update()
+    _time.sleep(0.05)
+    _espera_ms += 50
+check(not _ven._cola and not _ven._pensando,
+      "soporte: todas las respuestas se procesaron")
+
+
+def _texto_chat(ven):
+    """Une el texto de todas las burbujas: cada cuerpo es un Text
+    deshabilitado y las horas/fuentes son Labels."""
+    partes = []
+
+    def _barrer(w):
+        for c in w.winfo_children():
+            try:
+                if c.winfo_class() == "Text":
+                    partes.append(c.get("1.0", "end"))
+            except tk.TclError:
+                pass
+            try:
+                t = c.cget("text")
+                if isinstance(t, str) and t.strip():
+                    partes.append(t)
+            except tk.TclError:
+                pass
+            _barrer(c)
+
+    _barrer(ven.hilo)
+    return "\n".join(partes)
+
+
+_texto_soporte = _texto_chat(_ven)
 check("FALTANTE" in _texto_soporte,
       "soporte: la respuesta se escribe en la ventana")
 check("TARJETAS" in _texto_soporte,
@@ -1258,8 +1327,8 @@ check("No tengo esa respuesta" in _texto_soporte,
       "soporte: admite que no tiene cargada una pregunta")
 check("más de un tema" in _texto_soporte,
       "soporte: ante una pregunta vaga sugiere temas")
-check(_ven.chat.cget("state") == "disabled",
-      "soporte: el chat no se puede editar a mano")
+check(_ven.lienzo.winfo_class() == "Canvas",
+      "soporte: el chat es de solo lectura (no se puede editar a mano)")
 _ven._al_cerrar()
 app4.update()
 check(not _ven.winfo_viewable(),
@@ -1450,7 +1519,7 @@ db.DB_PATH = _ruta_ok
 os.remove(_mig)
 
 # ---- Interfaz: armar y registrar un ticket desde Ventas ----
-app5 = main_mod.App()
+app5 = _nueva_app()
 app5.update()
 app5.mostrar("ventas")
 app5.update()
@@ -1543,8 +1612,17 @@ check("vacío" in pv5.lbl_importe.cget("text")
       and "$" in pv5.lbl_importe.cget("text"),
       f"ui ticket: la etiqueta del importe dice cuánto se cobra si lo dejan "
       f"vacío (obtuvo {pv5.lbl_importe.cget('text')})")
-check("PASO 1" in pv5.lbl_pasos.cget("text")
-      and "PASO 2" in pv5.lbl_pasos.cget("text"),
+_textos_pasos = []
+for _fila_p in pv5.lbl_pasos.winfo_children():
+    for _w_p in _fila_p.winfo_children():
+        try:
+            _t_p = _w_p.cget("text")
+            if isinstance(_t_p, str) and _t_p.strip():
+                _textos_pasos.append(_t_p)
+        except tk.TclError:
+            pass
+check(any("AGREGAR AL TICKET" in t for t in _textos_pasos)
+      and any("REGISTRAR VENTA" in t for t in _textos_pasos),
       "ui ticket: el formulario explica los dos pasos del flujo")
 # ---------------- Rendición por buzón: carga, calculadora y planilla A4 ----------------
 from util import money as _money, parse_numero as _pn
@@ -1564,7 +1642,10 @@ check(db.rendicion_de("1999-01-01") == {},
 db.borrar_rendicion(db.hoy())
 check(db.rendicion_de(db.hoy()) == {}, "rendición: la rendición se puede borrar")
 
-app6 = main_mod.App()
+# Se destruye app5 ANTES de crear otra raíz Tk: si quedan dos vivas, PIL
+# crea las imágenes en la raíz vieja y el widget nuevo no las encuentra.
+app5.destroy()
+app6 = _nueva_app()
 app6.update()
 check("rendicion" in app6.paneles and "rendicion" in app6.botones_nav,
       "rendición: la pantalla nueva está en el lateral")
@@ -1726,7 +1807,6 @@ for _pregunta_r in ("planilla de rendicion", "calculadora de billetes",
     check(_rr["ok"] and _rr["tema"]["id"] == "rendicion",
           f"soporte: responde rendición ante «{_pregunta_r}»")
 app6.destroy()
-app5.destroy()
 
 os.remove(TMP)
 import shutil as _shutil

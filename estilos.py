@@ -305,6 +305,51 @@ def aplicar_estilo(root):
                     relief="flat", width=9, arrowsize=9)
     style.map("Fino.Vertical.TScrollbar",
               background=[("pressed", "#8794AD"), ("active", "#9AA8BF")])
+
+    # Barras de scroll de todo el programa: finas y sin flechas
+    for o in ("Vertical", "Horizontal"):
+        nom = f"{o}.TScrollbar"
+        style.layout(nom, [(f"{o}.Scrollbar.trough", {"sticky": "nswe", "children": [
+            (f"{o}.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+        style.configure(nom, troughcolor=FONDO, background="#D5DCE8",
+                        bordercolor=FONDO, lightcolor="#D5DCE8",
+                        darkcolor="#D5DCE8", relief="flat", width=8, arrowsize=8)
+        style.map(nom, background=[("pressed", "#8794AD"), ("active", "#B3BFD2")])
+
+    # Campos desplegables y numéricos
+    for nom in ("TCombobox", "TSpinbox", "TEntry"):
+        style.configure(nom, fieldbackground="#FFFFFF", background="#FFFFFF",
+                        foreground=TEXTO, bordercolor="#D9E0EC",
+                        lightcolor="#D9E0EC", darkcolor="#D9E0EC",
+                        arrowcolor=TEXTO_SUAVE, insertcolor=TEXTO,
+                        padding=(8, 7), relief="flat")
+        style.map(nom,
+                  fieldbackground=[("disabled", "#F1F5F9"), ("readonly", "#FFFFFF")],
+                  foreground=[("disabled", TEXTO_SUAVE)],
+                  bordercolor=[("focus", ACENTO)],
+                  lightcolor=[("focus", ACENTO)],
+                  darkcolor=[("focus", ACENTO)])
+    style.map("TCombobox",
+              selectbackground=[("readonly", "#FFFFFF")],
+              selectforeground=[("readonly", TEXTO)])
+    root.option_add("*TCombobox*Listbox.font", (FUENTE, 10))
+    root.option_add("*TCombobox*Listbox.selectBackground", "#DBEAFE")
+    root.option_add("*TCombobox*Listbox.selectForeground", TEXTO)
+    root.option_add("*TCombobox*Listbox.background", "#FFFFFF")
+
+    # Tablas
+    style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+    style.configure("Treeview", background="#FFFFFF", fieldbackground="#FFFFFF",
+                    foreground=TEXTO, rowheight=30, borderwidth=0,
+                    font=(FUENTE, 10))
+    style.map("Treeview", background=[("selected", "#DBEAFE")],
+              foreground=[("selected", TEXTO)])
+    style.configure("Treeview.Heading", background="#F1F5F9",
+                    foreground=TEXTO_SUAVE, relief="flat", borderwidth=0,
+                    bordercolor="#E2E8F0", lightcolor="#F1F5F9",
+                    darkcolor="#F1F5F9", font=(FUENTE, 9, "bold"),
+                    padding=(8, 8))
+    style.map("Treeview.Heading", background=[("active", "#E8EEF7")])
     return style
 
 

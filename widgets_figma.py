@@ -9,6 +9,7 @@ Widgets del diseño Figma, en Tkinter puro (sin librerías extra):
 """
 
 import tkinter as tk
+import tkinter.font as tkfont
 
 import estilos as st
 import iconos as ic
@@ -65,8 +66,8 @@ class Tarjeta(tk.Canvas):
 
     def _ajustar_alto(self, _e=None):
         h = self.cuerpo.winfo_reqheight() + 2 * self.pady
-        if h != int(self.cget("height")):
-            self.configure(height=h)
+        if h != int(tk.Canvas.cget(self, "height")):
+            tk.Canvas.configure(self, height=h)
 
     # ------------------------------------------------------------ dibujo
     def redibujar(self):
@@ -98,7 +99,7 @@ class Tarjeta(tk.Canvas):
             self.borde = borde
         if exterior:
             self._exterior = exterior
-            self.configure(bg=exterior)
+            tk.Canvas.configure(self, bg=exterior)
         self.redibujar()
 
 
@@ -247,3 +248,149 @@ class Pildora(Tarjeta):
         self._inner.configure(bg=fondo)
         self.lbl_punto.configure(bg=fondo, fg=color)
         self.lbl.configure(text=texto, bg=fondo, fg=color)
+
+
+class Btn(Tarjeta):
+    """Botón redondeado que se usa como un tk.Button de siempre.
+
+    Acepta text, command, bg, fg, font, padx, pady y state, y también
+    .config(text=..., bg=..., state=...), así la lógica existente no cambia.
+    El hover (un tono más oscuro) lo maneja solo.
+    """
+
+    def __init__(self, parent, text="", command=None, bg=None, fg="#FFFFFF",
+                 font=None, padx=14, pady=8, state="normal", radio=9, **_):
+        self._b_texto = text
+        self._b_cmd = command
+        self._b_color = bg or st.ACENTO
+        self._b_fg = fg
+        self._b_font = font or (st.FUENTE, 10, "bold")
+        self._b_px = padx
+        self._b_py = pady
+        self._b_estado = state
+        self._b_hover = False
+        try:
+            exterior = parent.cget("bg")
+        except tk.TclError:
+            exterior = st.FONDO
+        ancho, alto = self._medir()
+        super().__init__(parent, fondo=self._b_color, sin_borde=True,
+                         radio=radio, padx=0, pady=0, alto=alto, ancho=ancho,
+                         exterior=exterior)
+        self._b_lbl = tk.Label(self.cuerpo, text=text, bg=self._b_color,
+                               fg=fg, font=self._b_font)
+        self._b_lbl.place(relx=0.5, rely=0.5, anchor="center")
+        for w in (self, self.cuerpo, self._b_lbl):
+            w.bind("<Button-1>", self._b_clic)
+            w.bind("<Enter>", self._b_entra)
+            w.bind("<Leave>", self._b_sale)
+        self._b_aplicar()
+
+    # --- tamaño según el texto ---
+    def _medir(self):
+        f = tkfont.Font(font=self._b_font)
+        return (f.measure(self._b_texto) + 2 * self._b_px + 4,
+                f.metrics("linespace") + 2 * self._b_py)
+
+    # --- eventos ---
+    def _b_clic(self, _e=None):
+        if self._b_estado != "disabled" and self._b_cmd:
+            self._b_cmd()
+
+    def _b_entra(self, _e=None):
+        self._b_hover = True
+        self._b_aplicar()
+
+    def _b_sale(self, _e=None):
+        self._b_hover = False
+        self._b_aplicar()
+
+    def _b_aplicar(self):
+        bg = self._b_color
+        if self._b_estado != "disabled" and self._b_hover:
+            bg = _oscurecer(bg, 0.88)
+        Tarjeta.pintar(self, fondo=bg)
+        self._b_lbl.configure(bg=bg, fg=self._b_fg, text=self._b_texto,
+                              font=self._b_font)
+        cur = "arrow" if self._b_estado == "disabled" else "hand2"
+        tk.Canvas.configure(self, cursor=cur)
+        self.cuerpo.configure(cursor=cur)
+        self._b_lbl.configure(cursor=cur)
+
+    # --- compatibilidad con tk.Button ---
+    def configure(self, cnf=None, **kw):
+        if cnf:
+            kw = {**cnf, **kw}
+        medir = False
+        for k in list(kw):
+            if k in ("bg", "background"):
+                self._b_color = kw.pop(k)
+            elif k in ("fg", "foreground"):
+                self._b_fg = kw.pop(k)
+            elif k == "text":
+                self._b_texto = kw.pop(k)
+                medir = True
+            elif k == "state":
+                self._b_estado = kw.pop(k)
+            elif k == "command":
+                self._b_cmd = kw.pop(k)
+            elif k == "font":
+                self._b_font = kw.pop(k)
+                medir = True
+            elif k == "padx":
+                self._b_px = kw.pop(k)
+                medir = True
+            elif k == "pady":
+                self._b_py = kw.pop(k)
+                medir = True
+            elif k in ("activebackground", "activeforeground", "relief", "bd",
+                       "borderwidth", "overrelief"):
+                kw.pop(k)
+        if kw:
+            tk.Canvas.configure(self, **kw)
+        if medir:
+            ancho, alto = self._medir()
+            tk.Canvas.configure(self, width=ancho, height=alto)
+        self._b_aplicar()
+
+    config = configure
+
+    def cget(self, key):
+        if key == "text":
+            return self._b_texto
+        if key == "state":
+            return self._b_estado
+        if key in ("bg", "background"):
+            return self._b_color
+        return super().cget(key)
+
+    def invoke(self):
+        self._b_clic()
+
+
+class Aviso(Tarjeta):
+    """Franja de aviso redondeada (por ejemplo "CAJA CERRADA")."""
+
+    def __init__(self, parent, fondo="#FDEEEE", borde="#F5C2C2", color=None,
+                 icono="lock"):
+        try:
+            exterior = parent.cget("bg")
+        except tk.TclError:
+            exterior = st.FONDO
+        super().__init__(parent, fondo=fondo, borde=borde, radio=12,
+                         padx=16, pady=11, exterior=exterior)
+        color = color or st.ROJO
+        fila = tk.Frame(self.cuerpo, bg=fondo)
+        fila.pack(fill="x")
+        tk.Label(fila, image=ic.icono(icono, 20, color, 1.8),
+                 bg=fondo).pack(side="left", padx=(0, 10))
+        self.lbl = tk.Label(fila, text="", bg=fondo, fg=color,
+                            font=(st.FUENTE, 10, "bold"), justify="left",
+                            anchor="w")
+        self.lbl.pack(side="left", fill="x", expand=True)
+        fila.bind("<Configure>", lambda e: self.lbl.configure(
+            wraplength=max(120, e.width - 40)))
+
+    def set(self, text=None, **_):
+        if text is not None:
+            self.lbl.configure(text=text)
