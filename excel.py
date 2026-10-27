@@ -825,10 +825,17 @@ def exportar_rendicion(datos, destino):
         ws.row_dimensions[fila].height = 22
         fila += 1
 
-    # La última sección es el efectivo que sale de la calculadora
+    # La última sección es el efectivo que sale de la calculadora,
+    # ya descontando los gastos del día (campo GASTOS de la rendición)
+    gastos = 0.0
+    try:
+        gastos = float(datos.get("gastos") or 0)
+    except (TypeError, ValueError):
+        gastos = 0.0
+    efectivo_neto = total_billetes_de(datos) - gastos
     pintar(fila, 1, 4, "EFECTIVO (BILLETES)", fuente=f_rotulo,
            fondo=fondo_verde, alineacion=al_izq)
-    pintar(fila, 5, 8, total_billetes_de(datos), fuente=f_total,
+    pintar(fila, 5, 8, efectivo_neto, fuente=f_total,
            fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
     ws.row_dimensions[fila].height = 26
     fila += 1
