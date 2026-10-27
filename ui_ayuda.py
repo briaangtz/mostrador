@@ -90,7 +90,7 @@ class SoporteVentana(tk.Toplevel):
     def __init__(self, app, boton=None):
         super().__init__(app)
         self.app = app
-        self.title("Asistente GARRAFAS — Soporte")
+        self.title("Asistente DOBLE G SRL — Soporte")
         self.configure(bg=st.FONDO)
 
         # Tamaño adaptado a la pantalla; se abre junto al botón que la llamó
@@ -170,7 +170,7 @@ class SoporteVentana(tk.Toplevel):
                                             x=2, y=2)
         col = tk.Frame(izq, bg=SB)
         col.pack(side="left", padx=(12, 0))
-        tk.Label(col, text="Asistente GARRAFAS", bg=SB, fg="#FFFFFF",
+        tk.Label(col, text="Asistente DOBLE G SRL", bg=SB, fg="#FFFFFF",
                  font=(st.FUENTE, 12, "bold")).pack(anchor="w")
         est = tk.Frame(col, bg=SB)
         est.pack(anchor="w")
@@ -489,7 +489,7 @@ class SoporteVentana(tk.Toplevel):
         except Exception:
             nombre = ""
         saludo = "¡Hola" + (f", {nombre}" if nombre else "") + \
-                 "! Soy el **asistente virtual** de GARRAFAS."
+                 "! Soy el **asistente virtual** de DOBLE G SRL."
         self._responder(lambda: self._bot(saludo), 500)
         self._cola.append(lambda: self._bot(
             "Te explico cómo usar el programa: **caja, ventas, permisos, "

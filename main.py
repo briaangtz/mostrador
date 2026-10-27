@@ -62,7 +62,7 @@ class App(tk.Tk):
         super().__init__()
         db.init()
 
-        self.title(f"GARRAFAS — Control de caja diaria  ·  v{VERSION}")
+        self.title(f"DOBLE G SRL — MOSTRADOR  ·  v{VERSION}")
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         ancho = min(1400, int(sw * 0.95))
@@ -101,7 +101,7 @@ class App(tk.Tk):
                 self.destroy()
                 return
         self.deiconify()
-        self.title(f"GARRAFAS — {usuario['usuario']} "
+        self.title(f"DOBLE G SRL — {usuario['usuario']} "
                    f"({usuario['rango']})  ·  v{VERSION}")
 
         if db.respaldo_automatico_activo():
@@ -175,9 +175,9 @@ class App(tk.Tk):
         ).pack(side="left", padx=(0, 12))
         col = tk.Frame(marca, bg=SB)
         col.pack(side="left")
-        tk.Label(col, text="GARRAFAS", bg=SB, fg="#FFFFFF",
+        tk.Label(col, text="DOBLE G SRL", bg=SB, fg="#FFFFFF",
                  font=(st.FUENTE, 17)).pack(anchor="w")
-        tk.Label(col, text="Control de caja diaria", bg=SB, fg="#9FB0CC",
+        tk.Label(col, text="MOSTRADOR", bg=SB, fg="#9FB0CC",
                  font=(st.FUENTE, 9)).pack(anchor="w")
 
         self.ventana_soporte = None
@@ -421,7 +421,7 @@ class App(tk.Tk):
                 self.destroy()
                 return
             break
-        self.title(f"GARRAFAS — {usuario['usuario']} "
+        self.title(f"DOBLE G SRL — {usuario['usuario']} "
                    f"({usuario['rango']})  ·  v{VERSION}")
         self._actualizar_nav()
         if self.panel_actual and not self.botones_nav[self.panel_actual].winfo_ismapped():

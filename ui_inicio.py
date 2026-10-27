@@ -242,7 +242,7 @@ class InicioPanel(tk.Frame):
         # ================= PIE =================
         pie = tk.Frame(c, bg=st.FONDO)
         pie.pack(fill="x", padx=PADX, pady=(16, 24))
-        _lbl(pie, "GARRAFAS / Control de caja diaria", 9, MUTED).pack(side="left")
+        _lbl(pie, "DOBLE G SRL / MOSTRADOR", 9, MUTED).pack(side="left")
         self.lbl_pie_caja = _lbl(pie, "", 9, MUTED)
         self.lbl_pie_caja.pack(side="right")
 
