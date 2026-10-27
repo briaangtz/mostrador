@@ -10,6 +10,22 @@ del sistema.
 # Rangos disponibles (el primero es el de mayor nivel)
 RANGOS = ["DESARROLLADOR", "USUARIO"]
 
+# ---------------------------------------------------------------------------
+# Permisos agregados a futuro
+# ---------------------------------------------------------------------------
+# Cuando se AGREGA un permiso nuevo al sistema hay que:
+#   1. subir PERMISOS_VERSION en 1, y
+#   2. registrarlo en NUEVOS_POR_VERSION con la versión que lo trajo.
+# Así, los usuarios con permisos asignados a mano (lista guardada de una
+# versión anterior) reciben el permiso nuevo automáticamente si su rango lo
+# tiene, sin pisar los permisos que el administrador les quitó a propósito.
+# (Historia: v1 = listas guardadas antes del versionado; v2 = trajo pago_bono,
+#  que se había quedado fuera de los usuarios creados antes de la 1.0.4.)
+PERMISOS_VERSION = 2
+NUEVOS_POR_VERSION = {
+    2: ("pago_bono",),
+}
+
 # Permiso -> lista de rangos que lo poseen (valores por defecto).
 # Un usuario con permisos asignados a mano usa ESA lista en vez de estas.
 PERMISOS = {
@@ -106,6 +122,20 @@ def puede(permiso, rango):
 def permisos_de(rango):
     """Lista de permisos que posee un rango."""
     return [p for p, rangos in PERMISOS.items() if rango in rangos]
+
+
+def pendientes(desde_version, rango):
+    """Permisos nuevos (creados después de `desde_version`) que el rango tiene.
+
+    Es lo que falta agregar a una lista de permisos guardada a mano en una
+    versión anterior. Solo suma permisos que el rango sí posee.
+    """
+    extra = []
+    for v, nuevos in NUEVOS_POR_VERSION.items():
+        if v > desde_version:
+            extra.extend(p for p in nuevos
+                         if p in PERMISOS and rango in PERMISOS[p])
+    return extra
 
 
 def es_desarrollador(rango):

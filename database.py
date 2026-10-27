@@ -16,7 +16,8 @@ from datetime import datetime, date
 
 from permisos import (puede as _puede_permiso, RANGOS,
                       PERMISOS as PERMISOS_BASE,
-                      permisos_de as _permisos_de_rango)
+                      permisos_de as _permisos_de_rango,
+                      PERMISOS_VERSION, pendientes as _pendientes)
 
 # Carpeta de datos: junto al .exe si está compilado, o junto al código
 if getattr(sys, "frozen", False):
@@ -212,9 +213,10 @@ def crear_usuario(usuario, password, rango="USUARIO", permisos=None):
     with db() as con:
         cur = con.execute(
             "INSERT INTO usuarios (usuario, password, rango, activo, creado, "
-            "permisos) VALUES (?, ?, ?, 1, ?, ?)",
+            "permisos, permisos_v) VALUES (?, ?, ?, 1, ?, ?, ?)",
             (nombre, _nuevo_hash(str(password)), rango,
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"), valor_permisos),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"), valor_permisos,
+             PERMISOS_VERSION),
         )
         nuevo_id = cur.lastrowid
     detalle = f"{nombre} — rango {rango}"
@@ -252,8 +254,10 @@ def actualizar_usuario(uid, usuario=None, rango=None, activo=None, permisos=None
              int(activo) if activo is not None else actual["activo"], uid),
         )
         if permisos is not None:
-            con.execute("UPDATE usuarios SET permisos = ? WHERE id = ?",
-                        (_valor_permisos(permisos, rango_final), uid))
+            con.execute("UPDATE usuarios SET permisos = ?, permisos_v = ? "
+                        "WHERE id = ?",
+                        (_valor_permisos(permisos, rango_final),
+                         PERMISOS_VERSION, uid))
     cambios = []
     if nombre != actual["usuario"]:
         cambios.append(f"nombre → {nombre}")
@@ -394,7 +398,8 @@ def set_permisos_usuario(uid, permisos):
         raise ValueError("El usuario no existe.")
     valor = _valor_permisos(permisos, u["rango"])
     with db() as con:
-        con.execute("UPDATE usuarios SET permisos = ? WHERE id = ?", (valor, uid))
+        con.execute("UPDATE usuarios SET permisos = ?, permisos_v = ? "
+                    "WHERE id = ?", (valor, PERMISOS_VERSION, uid))
     n = 0 if valor is None else len(valor.split(","))
     log_actividad("Permisos modificados",
                   f"{u['usuario']}: {n} permisos asignados")
@@ -781,6 +786,27 @@ def init():
             con.execute("ALTER TABLE usuarios ADD COLUMN foto TEXT")
         if "permisos" not in columnas_usuarios:
             con.execute("ALTER TABLE usuarios ADD COLUMN permisos TEXT")
+        # Versión de la lista de permisos de cada usuario: permite agregar
+        # permisos nuevos (p. ej. pago_bono) a las listas guardadas en una
+        # versión anterior, sin pisar los permisos quitados a propósito.
+        if "permisos_v" not in columnas_usuarios:
+            con.execute("ALTER TABLE usuarios ADD COLUMN permisos_v INTEGER "
+                        "DEFAULT 1")
+        for f in con.execute(
+                "SELECT id, rango, permisos, permisos_v FROM usuarios "
+                "WHERE permisos IS NOT NULL").fetchall():
+            desde = int(f["permisos_v"] or 1)
+            if desde >= PERMISOS_VERSION:
+                continue
+            lista = [p for p in (f["permisos"] or "").split(",") if p]
+            extra = [p for p in _pendientes(desde, f["rango"])
+                     if p not in lista]
+            if extra:
+                lista = sorted(set(lista) | set(extra))
+            con.execute(
+                "UPDATE usuarios SET permisos = ?, permisos_v = ? WHERE id = ?",
+                (",".join(lista), PERMISOS_VERSION, f["id"]),
+            )
 
         # Productos: renombra los antiguos y completa los que falten.
         # Se busca por nombre (activo o no) para no reanimar productos
