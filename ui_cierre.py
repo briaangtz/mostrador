@@ -6,7 +6,75 @@ from tkinter import ttk, messagebox, simpledialog
 
 import database as db
 import estilos as st
+import iconos as ic
 from util import money
+from widgets_figma import Tarjeta, Btn, Banda
+
+
+def pedir_password(parent, usuario):
+    """Pide la contraseña del responsable (ventana propia, con el estilo del
+    programa). Devuelve el texto escrito o None si se cancela."""
+    dlg = tk.Toplevel(parent)
+    dlg.title("Autenticación de cierre")
+    dlg.configure(bg=st.FONDO)
+    dlg.resizable(False, False)
+    dlg.transient(parent)
+    resultado = {"valor": None}
+
+    cont = tk.Frame(dlg, bg=st.FONDO)
+    cont.pack(fill="both", expand=True, padx=24, pady=22)
+    cab = tk.Frame(cont, bg=st.FONDO)
+    cab.pack(fill="x")
+    tk.Label(cab, image=ic.cuadro("lock", 46, "#2563EB", "#E8F0FE", 12, 24, 1.8),
+             bg=st.FONDO).pack(side="left", padx=(0, 14))
+    col = tk.Frame(cab, bg=st.FONDO)
+    col.pack(side="left")
+    tk.Label(col, text="Autenticación de cierre", bg=st.FONDO, fg=st.TEXTO,
+             font=(st.FUENTE, 14, "bold")).pack(anchor="w")
+    tk.Label(col, text=f"Usuario: {usuario}", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+             font=(st.FUENTE, 10)).pack(anchor="w")
+
+    tk.Label(cont, text="Para cerrar la caja ingresá TU contraseña:",
+             bg=st.FONDO, fg=st.TEXTO, font=(st.FUENTE, 10)
+             ).pack(anchor="w", pady=(16, 6))
+    var = tk.StringVar()
+    ent = tk.Entry(cont, textvariable=var, show="•", width=34,
+                   font=(st.FUENTE, 12), relief="flat", bd=0, bg="#FFFFFF",
+                   fg=st.TEXTO, insertbackground=st.TEXTO,
+                   highlightthickness=1, highlightbackground="#D9E0EC",
+                   highlightcolor=st.ACENTO)
+    ent.pack(fill="x", ipady=8)
+
+    def aceptar(_e=None):
+        resultado["valor"] = var.get()
+        dlg.destroy()
+
+    def cancelar(_e=None):
+        dlg.destroy()
+
+    fila = tk.Frame(cont, bg=st.FONDO)
+    fila.pack(fill="x", pady=(18, 0))
+    Btn(fila, text="Cancelar", command=cancelar, bg="#E5EAF1", fg=st.TEXTO,
+        font=(st.FUENTE, 10), padx=18, pady=9).pack(side="left")
+    Btn(fila, text="CONFIRMAR", command=aceptar, bg=st.VERDE, fg="#ffffff",
+        font=(st.FUENTE, 10, "bold"), padx=22, pady=9).pack(side="right")
+    dlg.bind("<Return>", aceptar)
+    dlg.bind("<Escape>", cancelar)
+    dlg.protocol("WM_DELETE_WINDOW", cancelar)
+
+    # Centrada sobre la ventana que la llamó
+    dlg.update_idletasks()
+    w, h = dlg.winfo_reqwidth(), dlg.winfo_reqheight()
+    x = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
+    y = parent.winfo_rooty() + (parent.winfo_height() - h) // 2
+    dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+    try:
+        dlg.grab_set()
+    except tk.TclError:
+        pass
+    ent.focus_set()
+    parent.wait_window(dlg)
+    return resultado["valor"]
 
 
 class CierreDialog(tk.Toplevel):
@@ -22,16 +90,19 @@ class CierreDialog(tk.Toplevel):
         # Se adapta al tamaño de la pantalla (nada cortado ni fuera de vista)
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        ancho = min(760, max(620, sw - 60))
+        ancho = min(1000, max(720, sw - 60))
         alto = min(820, max(560, sh - 90))
         x = max(0, (sw - ancho) // 2)
         y = max(0, (sh - alto) // 2 - 20)
         self.geometry(f"{ancho}x{alto}+{x}+{y}")
-        self.minsize(min(640, ancho), min(520, alto))
+        self.minsize(min(720, ancho), min(520, alto))
         self.transient(app)
         self.grab_set()
 
         self.resumen = db.resumen(caja["id"])
+        # Efectivo esperado antes de descontar gastos (ventas en efectivo + fondo)
+        self._efectivo_base = self.resumen["efectivo_base"]
+        self.gastos = 0.0
         self.conteo = {d: 0 for d in db.DENOMINACIONES}
         self.celdas = {}
         self.subtotales = {}
@@ -42,11 +113,28 @@ class CierreDialog(tk.Toplevel):
 
     # ------------------------------------------------------------------ UI
     def _construir(self):
-        # Contenido con scroll vertical: en pantallas chicas se baja con
-        # la rueda del mouse y los botones nunca quedan fuera de la vista.
+        MUTED = st.TEXTO_SUAVE
+        GRIS_I, GRIS_F = "#64748B", "#F1F5F9"
+        AZUL_I, AZUL_F = "#2563EB", "#E8F0FE"
+
+        # ---------- Pie fijo: los botones nunca quedan fuera de la vista ----------
+        pie = tk.Frame(self, bg=st.TARJETA)
+        pie.pack(side="bottom", fill="x")
+        tk.Frame(pie, bg=st.BARRA_BORDE, height=1).pack(fill="x")
+        fb = tk.Frame(pie, bg=st.TARJETA)
+        fb.pack(fill="x", padx=24, pady=12)
+        Btn(fb, text="Cancelar", command=self.destroy, bg="#E5EAF1",
+            fg=st.TEXTO, font=(st.FUENTE, 10), padx=20, pady=10
+            ).pack(side="left")
+        self.btn_cerrar = Btn(
+            fb, text="CONFIRMAR CIERRE", command=self._confirmar, bg=st.VERDE,
+            fg="#ffffff", font=(st.FUENTE, 12, "bold"), padx=28, pady=11)
+        self.btn_cerrar.pack(side="right")
+
+        # ---------- Contenido con scroll vertical ----------
         # (App._rueda_global detecta este canvas_scroll automáticamente.)
         marco_scroll = tk.Frame(self, bg=st.FONDO)
-        marco_scroll.pack(fill="both", expand=True, padx=16, pady=16)
+        marco_scroll.pack(side="top", fill="both", expand=True)
         self.canvas_scroll = tk.Canvas(marco_scroll, bg=st.FONDO,
                                        highlightthickness=0)
         barra = ttk.Scrollbar(marco_scroll, orient="vertical",
@@ -65,105 +153,137 @@ class CierreDialog(tk.Toplevel):
             "<Configure>",
             lambda e: self.canvas_scroll.itemconfigure(ventana, width=e.width))
 
-        tk.Label(
-            cont,
-            text="CIERRE DE CAJA",
-            bg=st.FONDO, fg=st.TEXTO, font=(st.FUENTE, 18, "bold"),
-        ).pack(anchor="w")
-        tk.Label(
-            cont,
-            text=f"Fecha: {db.fecha_larga(self.caja['fecha'])}",
-            bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 11),
-        ).pack(anchor="w", pady=(0, 2))
+        pagina = tk.Frame(cont, bg=st.FONDO)
+        pagina.pack(fill="both", expand=True, padx=24, pady=(20, 18))
+
+        # ---------- Utilidades de armado ----------
+        def tarjeta(parent, titulo, icono):
+            t = Tarjeta(parent, radio=12, padx=18, pady=14)
+            t.pack(fill="x", pady=(0, 12))
+            h = tk.Frame(t.cuerpo, bg=st.TARJETA)
+            h.pack(fill="x", pady=(0, 8))
+            tk.Label(h, image=ic.icono(icono, 20, GRIS_I),
+                     bg=st.TARJETA).pack(side="left", padx=(0, 10))
+            tk.Label(h, text=titulo, bg=st.TARJETA, fg=st.TEXTO,
+                     font=(st.FUENTE, 12, "bold")).pack(side="left")
+            return t.cuerpo
+
+        def fila(parent, texto, valor="—", negrita=False, tenue=False,
+                 sangria=0, tam=11):
+            f = tk.Frame(parent, bg=st.TARJETA)
+            f.pack(fill="x", pady=3)
+            tk.Label(f, text=texto, bg=st.TARJETA,
+                     fg=MUTED if tenue else st.TEXTO,
+                     font=(st.FUENTE, tam - 1 if tenue else tam,
+                           "bold" if negrita else "normal"),
+                     anchor="w").pack(side="left", padx=(sangria, 0))
+            lbl = tk.Label(f, text=valor, bg=st.TARJETA, fg=st.TEXTO,
+                           font=(st.FUENTE, tam - 1 if tenue else tam, "bold"),
+                           anchor="e")
+            lbl.pack(side="right")
+            return f, lbl
+
+        # ---------- Título ----------
+        tk.Label(pagina, text="Cierre de caja", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
+        tk.Label(pagina, text=f"Fecha: {db.fecha_larga(self.caja['fecha'])}",
+                 bg=st.FONDO, fg=MUTED, font=(st.FUENTE, 11)
+                 ).pack(anchor="w", pady=(2, 8))
 
         u = db.usuario_sesion() or {}
+        chip = Tarjeta(pagina, fondo=AZUL_F, borde="#C3D6F8", radio=14,
+                       padx=14, pady=7, ancho_auto=True)
+        chip.pack(anchor="w")
+        cf = tk.Frame(chip.cuerpo, bg=AZUL_F)
+        cf.pack()
+        tk.Label(cf, image=ic.icono("user", 18, AZUL_I, 1.8),
+                 bg=AZUL_F).pack(side="left", padx=(0, 8))
         self.lbl_usuario = tk.Label(
-            cont,
-            text=f"Usuario que va a cerrar: {u.get('usuario', '—')} "
-                 f"({u.get('rango', '—')})",
-            bg=st.FONDO, fg=st.ACENTO, font=(st.FUENTE, 11, "bold"),
-        )
-        self.lbl_usuario.pack(anchor="w", pady=(0, 10))
+            cf, text=f"Usuario que va a cerrar: {u.get('usuario', '—')} "
+                     f"({u.get('rango', '—')})",
+            bg=AZUL_F, fg=st.ACENTO_OSCURO, font=(st.FUENTE, 10, "bold"))
+        self.lbl_usuario.pack(side="left")
 
-        # ---------------- Resumen del día ----------------
-        res = st.labelframe(cont, " RESUMEN DEL DÍA ", padx=12, pady=10)
-        res.pack(fill="x")
-
-        self.lbl_garrafas = {}
-        marco_prod = tk.Frame(res, bg=st.FONDO)
-        marco_prod.pack(fill="x")
-
-        for pid, info in self.resumen["por_producto"].items():
-            fila = tk.Frame(marco_prod, bg=st.FONDO)
-            fila.pack(fill="x", pady=1)
-            tk.Label(fila, text=f"• {info['nombre']} vendidas", bg=st.FONDO,
-                     fg=st.TEXTO, font=(st.FUENTE, 10), anchor="w").pack(
-                side="left")
-            lbl = tk.Label(fila, text="0", bg=st.FONDO, fg=st.TEXTO,
-                           font=(st.FUENTE, 10, "bold"), anchor="e")
-            lbl.pack(side="right")
-            self.lbl_garrafas[pid] = lbl
-
-        tk.Frame(res, bg=st.BORDE, height=1).pack(fill="x", pady=6)
-
-        filas_totales = [
-            ("Total de garrafas vendidas", "total_garrafas", True),
-            ("Total de ventas", "total_vendido", True),
-            ("Operaciones realizadas", "cantidad_ventas", False),
-        ]
+        # ---------- Totales del día ----------
+        kpis = tk.Frame(pagina, bg=st.FONDO)
+        kpis.pack(fill="x", pady=(14, 12))
+        for i in range(3):
+            kpis.columnconfigure(i, weight=1, uniform="kpi")
         self.valores_resumen = {}
-        for texto, clave, negrita in filas_totales:
-            f = tk.Frame(res, bg=st.FONDO)
-            f.pack(fill="x", pady=1)
-            tk.Label(f, text=texto, bg=st.FONDO, fg=st.TEXTO,
-                     font=(st.FUENTE, 11, "bold" if negrita else "normal"),
-                     anchor="w").pack(side="left")
-            lbl = tk.Label(f, text="—", bg=st.FONDO, fg=st.TEXTO,
-                           font=(st.FUENTE, 11, "bold"), anchor="e")
-            lbl.pack(side="right")
+        for i, (titulo, clave, icono, ci, cf_) in enumerate((
+                ("Garrafas vendidas", "total_garrafas", "cube", GRIS_I, GRIS_F),
+                ("Total de ventas", "total_vendido", "dollar", AZUL_I, AZUL_F),
+                ("Operaciones realizadas", "cantidad_ventas", "clipboard",
+                 GRIS_I, GRIS_F))):
+            t = Tarjeta(kpis, radio=12, padx=18, pady=14,
+                        borde="#C3D6F8" if i == 1 else None)
+            t.grid(row=0, column=i, sticky="nsew",
+                   padx=(0 if i == 0 else 6, 0 if i == 2 else 6))
+            top = tk.Frame(t.cuerpo, bg=st.TARJETA)
+            top.pack(fill="x")
+            tk.Label(top, text=titulo, bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 10)).pack(side="left")
+            tk.Label(top, image=ic.cuadro(icono, 32, ci, cf_, 8, 17),
+                     bg=st.TARJETA).pack(side="right")
+            lbl = tk.Label(t.cuerpo, text="—", bg=st.TARJETA, fg=st.TEXTO,
+                           font=(st.FUENTE, 24), anchor="w")
+            lbl.pack(anchor="w", pady=(8, 0))
             self.valores_resumen[clave] = lbl
 
-        # ---------------- Medios de pago ----------------
-        med = st.labelframe(cont, " MEDIOS DE PAGO ", padx=12, pady=10)
-        med.pack(fill="x", pady=(12, 0))
+        # ---------- Dos columnas ----------
+        cols = tk.Frame(pagina, bg=st.FONDO)
+        cols.pack(fill="both", expand=True)
+        cols.columnconfigure(0, weight=1, uniform="col")
+        cols.columnconfigure(1, weight=1, uniform="col")
+        izq = tk.Frame(cols, bg=st.FONDO)
+        izq.grid(row=0, column=0, sticky="new", padx=(0, 6))
+        der = tk.Frame(cols, bg=st.FONDO)
+        der.grid(row=0, column=1, sticky="new", padx=(6, 0))
 
+        # ---------------- Resumen por producto ----------------
+        self.lbl_garrafas = {}
+        res = tarjeta(izq, "Resumen del día", "cube")
+        for pid, info in self.resumen["por_producto"].items():
+            _f, lbl = fila(res, f"{info['nombre']} vendidas")
+            self.lbl_garrafas[pid] = lbl
+            lbl.config(text="0")
+        if not self.resumen["por_producto"]:
+            tk.Label(res, text="Sin productos vendidos.", bg=st.TARJETA,
+                     fg=MUTED, font=(st.FUENTE, 10)).pack(anchor="w")
+
+        # ---------------- Medios de pago ----------------
+        med = tarjeta(izq, "Medios de pago", "card")
         filas_medio = [
             ("Efectivo esperado", "efectivo_esperado"),
             ("Transferencias", "transferencias"),
             ("Transferencias realizadas (cantidad)", "n_transferencias"),
             ("Tarjetas", "tarjetas"),
-            ("   · Tarjeta de débito", "debito"),
-            ("   · Tarjeta de crédito", "credito"),
+            ("Tarjeta de débito", "debito"),
+            ("Tarjeta de crédito", "credito"),
             ("BONOS", "bono"),
             ("Total general cobrado", "total_general"),
         ]
         self.valores_medio = {}
-        for i, (texto, clave) in enumerate(filas_medio):
-            f = tk.Frame(med, bg=st.FONDO)
-            f.pack(fill="x", pady=1)
+        for texto, clave in filas_medio:
             es_total = clave == "total_general"
             es_grupo = clave == "tarjetas"
             es_detalle = clave in ("debito", "credito")
-            tk.Label(f, text=texto, bg=st.FONDO,
-                     fg=st.TEXTO if not es_detalle else st.TEXTO_SUAVE,
-                     font=(st.FUENTE, 11 if not es_detalle else 10,
-                           "bold" if (es_total or es_grupo) else "normal"),
-                     anchor="w").pack(side="left")
-            lbl = tk.Label(f, text="—", bg=st.FONDO, fg=st.TEXTO,
-                           font=(st.FUENTE, 11 if not es_detalle else 10,
-                                 "bold"), anchor="e")
-            lbl.pack(side="right")
+            if es_total:
+                tk.Frame(med, bg=st.BORDE, height=1).pack(fill="x", pady=(8, 4))
+            f, lbl = fila(med, texto, negrita=es_total or es_grupo,
+                          tenue=es_detalle, sangria=18 if es_detalle else 0,
+                          tam=12 if es_total else 11)
+            if es_total:
+                lbl.config(fg=st.VERDE_OSCURO)
             self.valores_medio[clave] = lbl
             if clave == "efectivo_esperado":
                 self.lbl_esperado_detalle = tk.Label(
-                    f, text="(incluye fondo inicial)", bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                    font=(st.FUENTE, 8))
+                    f, text="(incluye fondo inicial)", bg=st.TARJETA,
+                    fg=MUTED, font=(st.FUENTE, 8))
                 self.lbl_esperado_detalle.pack(side="right", padx=(0, 8))
 
         # ---------------- Detalle de transferencias ----------------
-        trf = st.labelframe(cont, " COMPROBANTES DE TRANSFERENCIA ", padx=12, pady=10)
-        trf.pack(fill="x", pady=(12, 0))
-
+        trf = tarjeta(izq, "Comprobantes de transferencia", "transfer")
         columnas = ("comprobante", "hora", "producto", "cantidad", "importe")
         self.tree_transferencias = ttk.Treeview(trf, columns=columnas,
                                                 show="headings", height=4)
@@ -172,110 +292,85 @@ class CierreDialog(tk.Toplevel):
         self.tree_transferencias.heading("producto", text="Productos")
         self.tree_transferencias.heading("cantidad", text="Cant.")
         self.tree_transferencias.heading("importe", text="Importe")
-        self.tree_transferencias.column("comprobante", width=170, anchor="w")
-        self.tree_transferencias.column("hora", width=70, anchor="center")
-        self.tree_transferencias.column("producto", width=220, anchor="w")
-        self.tree_transferencias.column("cantidad", width=60, anchor="center")
-        self.tree_transferencias.column("importe", width=130, anchor="e")
+        self.tree_transferencias.column("comprobante", width=125, anchor="w")
+        self.tree_transferencias.column("hora", width=52, anchor="center", stretch=False)
+        self.tree_transferencias.column("producto", width=120, anchor="w")
+        self.tree_transferencias.column("cantidad", width=48, anchor="center", stretch=False)
+        self.tree_transferencias.column("importe", width=90, anchor="e")
         self.tree_transferencias.pack(fill="x")
 
         self.lbl_sin_transferencias = tk.Label(
             trf, text="Sin transferencias registradas en el día.",
-            bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9))
+            bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9))
 
         # ---------------- Arqueo de caja ----------------
-        arq = st.labelframe(cont, " ARQUEO DE CAJA — CONTEO DE BILLETES ",
-                            padx=12, pady=10)
-        arq.pack(fill="x", pady=(12, 0))
-
-        enc = tk.Frame(arq, bg=st.BARRA, height=28)
+        arq = tarjeta(der, "Arqueo de caja — conteo de billetes", "banknote")
+        enc = tk.Frame(arq, bg=GRIS_F)
         enc.pack(fill="x")
-        enc.pack_propagate(False)
-        for txt, w, lado in (("BILLETE", 140, "left"), ("CANTIDAD", 140, "left"),
-                             ("SUBTOTAL", 180, "right")):
-            tk.Label(enc, text=txt, bg=st.BARRA, fg="#ffffff",
-                     font=(st.FUENTE, 9, "bold"), width=w // 10, anchor="w",
-                     padx=8).pack(side=lado)
+        for c in range(3):
+            enc.columnconfigure(c, weight=1, uniform="arq")
+        for c, (txt, anc) in enumerate((("BILLETE", "w"), ("CANTIDAD", "center"),
+                                        ("SUBTOTAL", "e"))):
+            tk.Label(enc, text=txt, bg=GRIS_F, fg=MUTED,
+                     font=(st.FUENTE, 9, "bold"), anchor=anc if anc != "center"
+                     else "center").grid(row=0, column=c, sticky="ew",
+                                         padx=10, pady=8)
 
         for denom in db.DENOMINACIONES:
-            fila = tk.Frame(arq, bg=st.TARJETA, highlightbackground=st.BORDE,
-                            highlightthickness=1)
-            fila.pack(fill="x", pady=1)
-
-            tk.Label(fila, text=money(denom), bg=st.TARJETA, fg=st.TEXTO,
-                     font=(st.FUENTE, 11, "bold"), width=13, anchor="w",
-                     padx=8).pack(side="left", ipady=4)
+            f = tk.Frame(arq, bg=st.TARJETA)
+            f.pack(fill="x")
+            for c in range(3):
+                f.columnconfigure(c, weight=1, uniform="arq")
+            tk.Label(f, text=money(denom), bg=st.TARJETA, fg=st.TEXTO,
+                     font=(st.FUENTE, 11, "bold"), anchor="w"
+                     ).grid(row=0, column=0, sticky="ew", padx=10, pady=5)
 
             var = tk.StringVar(value="0")
             var.trace_add("write", lambda *_: self._recalcular())
-            ent = tk.Entry(fila, textvariable=var, width=10, justify="center",
-                           font=(st.FUENTE, 11), relief="solid", bd=1)
-            ent.pack(side="left", padx=8, pady=4, ipady=3)
+            ent = tk.Entry(f, textvariable=var, width=8, justify="center",
+                           font=(st.FUENTE, 11), relief="flat", bd=0,
+                           bg="#FFFFFF", fg=st.TEXTO, insertbackground=st.TEXTO,
+                           highlightthickness=1, highlightbackground="#D9E0EC",
+                           highlightcolor=st.ACENTO)
+            ent.grid(row=0, column=1, padx=10, pady=5, ipady=4)
             self.celdas[denom] = var
 
-            lbl_sub = tk.Label(fila, text="$0", bg=st.TARJETA, fg=st.TEXTO,
-                               font=(st.FUENTE, 11), width=16, anchor="e", padx=8)
-            lbl_sub.pack(side="right", ipady=4)
+            lbl_sub = tk.Label(f, text="$0", bg=st.TARJETA, fg=st.TEXTO,
+                               font=(st.FUENTE, 11), anchor="e")
+            lbl_sub.grid(row=0, column=2, sticky="ew", padx=10, pady=5)
             self.subtotales[denom] = lbl_sub
+            tk.Frame(arq, bg=st.BORDE, height=1).pack(fill="x")
 
-        total_fila = tk.Frame(arq, bg=st.TARJETA, highlightbackground=st.BORDE,
-                              highlightthickness=1)
-        total_fila.pack(fill="x", pady=(8, 0))
-        tk.Label(total_fila, text="TOTAL EFECTIVO CONTADO", bg=st.TARJETA,
-                 fg=st.TEXTO, font=(st.FUENTE, 12, "bold"), anchor="w",
-                 padx=8).pack(side="left", ipady=6)
-        self.lbl_contado = tk.Label(total_fila, text="$0", bg=st.TARJETA,
-                                    fg=st.VERDE_OSCURO, font=(st.FUENTE, 14, "bold"),
-                                    anchor="e", padx=8)
-        self.lbl_contado.pack(side="right", ipady=6)
+        tot = Tarjeta(arq, fondo="#ECF7F0", borde="#BDE5CD", radio=10,
+                      padx=14, pady=9)
+        tot.pack(fill="x", pady=(10, 0))
+        tf = tk.Frame(tot.cuerpo, bg="#ECF7F0")
+        tf.pack(fill="x")
+        tk.Label(tf, text="TOTAL EFECTIVO CONTADO", bg="#ECF7F0", fg=st.TEXTO,
+                 font=(st.FUENTE, 11, "bold")).pack(side="left")
+        self.lbl_contado = tk.Label(tf, text="$0", bg="#ECF7F0",
+                                    fg=st.VERDE_OSCURO,
+                                    font=(st.FUENTE, 15, "bold"))
+        self.lbl_contado.pack(side="right")
 
         # ---------------- Comparación ----------------
-        comp = st.labelframe(cont, " COMPARACIÓN DE CAJA ", padx=12, pady=10)
-        comp.pack(fill="x", pady=(12, 0))
-
-        c1 = tk.Frame(comp, bg=st.FONDO)
-        c1.pack(fill="x")
-        tk.Label(c1, text="Efectivo esperado:", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 11), anchor="w").pack(side="left")
-        self.lbl_esperado2 = tk.Label(c1, text="$0", bg=st.FONDO, fg=st.TEXTO,
-                                      font=(st.FUENTE, 11, "bold"))
-        self.lbl_esperado2.pack(side="right")
-
-        c2 = tk.Frame(comp, bg=st.FONDO)
-        c2.pack(fill="x")
-        tk.Label(c2, text="Efectivo contado:", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 11), anchor="w").pack(side="left")
-        self.lbl_contado2 = tk.Label(c2, text="$0", bg=st.FONDO, fg=st.TEXTO,
-                                     font=(st.FUENTE, 11, "bold"))
-        self.lbl_contado2.pack(side="right")
-
-        c3 = tk.Frame(comp, bg=st.FONDO)
-        c3.pack(fill="x")
-        tk.Label(c3, text="Diferencia (contado − esperado):", bg=st.FONDO,
-                 fg=st.TEXTO, font=(st.FUENTE, 11), anchor="w").pack(side="left")
-        self.lbl_diferencia = tk.Label(c3, text="$0", bg=st.FONDO, fg=st.TEXTO,
-                                       font=(st.FUENTE, 11, "bold"))
-        self.lbl_diferencia.pack(side="right")
-
-        self.lbl_estado = tk.Label(comp, text="CAJA CUADRADA", bg=st.VERDE_CLARO,
-                                   fg=st.VERDE_OSCURO, font=(st.FUENTE, 16, "bold"),
-                                   pady=8)
-        self.lbl_estado.pack(fill="x", pady=(10, 0))
-
-        # ---------------- Botones ----------------
-        botones = tk.Frame(cont, bg=st.FONDO)
-        botones.pack(fill="x", pady=(14, 0))
-        tk.Button(botones, text="Cancelar", command=self.destroy, relief="flat",
-                  bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 10), padx=16, pady=9,
-                  cursor="hand2").pack(side="left")
-        self.btn_cerrar = tk.Button(
-            botones, text="CONFIRMAR CIERRE", command=self._confirmar,
-            relief="flat", bg=st.VERDE, fg="#ffffff",
-            font=(st.FUENTE, 12, "bold"), padx=24, pady=10, cursor="hand2",
-        )
-        self.btn_cerrar.pack(side="right")
-        self.btn_cerrar.bind("<Enter>", lambda e: self.btn_cerrar.config(bg=st.VERDE_OSCURO))
-        self.btn_cerrar.bind("<Leave>", lambda e: self.btn_cerrar.config(bg=st.VERDE))
+        comp = tarjeta(der, "Comparación de caja", "history")
+        _f, self.lbl_esperado2 = fila(comp, "Efectivo esperado:")
+        _f, self.lbl_contado2 = fila(comp, "Efectivo contado:")
+        _f, self.lbl_diferencia = fila(comp, "Diferencia (contado − esperado):",
+                                       negrita=True)
+        self.lbl_esperado2.config(text="$0")
+        self.lbl_contado2.config(text="$0")
+        self.lbl_diferencia.config(text="$0")
+        # -------- Gastos del día (se descuentan del efectivo esperado) --------
+        _f, self.lbl_gastos = fila(comp, "Gastos del día:")
+        self.ent_gastos = tk.Entry(_f, font=(st.FUENTE, 11), justify="right",
+                                   width=12, relief="solid", borderwidth=1)
+        self.ent_gastos.insert(0, "0")
+        self.ent_gastos.pack(side="right")
+        self.ent_gastos.bind("<KeyRelease>", lambda e: self._on_gastos_cambio())
+        self.lbl_estado = Banda(comp, texto="CAJA CUADRADA")
+        self.lbl_estado.pack(fill="x", pady=(12, 0))
 
     # ------------------------------------------------------------- Lógica
     def _pintar_resumen(self):
@@ -296,6 +391,7 @@ class CierreDialog(tk.Toplevel):
             text=money(r["debito"] + r["credito"]))
         self.valores_medio["debito"].config(text=money(r["debito"]))
         self.valores_medio["credito"].config(text=money(r["credito"]))
+        self.valores_medio["bono"].config(text=money(r.get("bono", 0)))
         self.valores_medio["total_general"].config(text=money(r["total_general"]))
 
         # Detalle de comprobantes de transferencia
@@ -317,8 +413,18 @@ class CierreDialog(tk.Toplevel):
 
         fondo = db.get_fondo_inicial()
         self.lbl_esperado_detalle.config(
-            text=f"(ventas {money(r['efectivo'])} + fondo {money(fondo)})"
+            text=f"(ventas {money(r['efectivo'])} + fondo {money(fondo)}"
+                 f"{' − gastos ' + money(r['gastos']) if r['gastos'] else ''})"
         )
+
+    def _on_gastos_cambio(self):
+        """Recalcula esperado y diferencia cuando el usuario edita los gastos."""
+        try:
+            txt = self.ent_gastos.get().strip().replace(".", "").replace(",", ".")
+            self.gastos = float(txt) if txt else 0.0
+        except ValueError:
+            self.gastos = 0.0
+        self._recalcular()
 
     def _recalcular(self):
         total = 0
@@ -339,7 +445,8 @@ class CierreDialog(tk.Toplevel):
             total += subtotal
             self.subtotales[denom].config(text=money(subtotal))
 
-        esperado = self.resumen["efectivo_esperado"]
+        # El esperado descuenta los gastos del día
+        esperado = self._efectivo_base - self.gastos
         diferencia = total - esperado
         estado, etiqueta = db.clasificar_diferencia(diferencia)
 
@@ -348,15 +455,14 @@ class CierreDialog(tk.Toplevel):
         self.lbl_esperado2.config(text=money(esperado))
         self.lbl_diferencia.config(
             text=money(diferencia),
-            fg=st.ROJO if diferencia < 0 else (st.AMBAR if diferencia > 0 else st.VERDE_OSCURO),
+            fg=st.ROJO if diferencia < 0 else ("#B45309" if diferencia > 0 else st.VERDE_OSCURO),
         )
-        self.lbl_estado.config(text=etiqueta)
         if estado == "Faltante":
-            self.lbl_estado.config(bg=st.ROJO_CLARO, fg=st.ROJO)
+            self.lbl_estado.set(etiqueta, "#FDEEEE", st.ROJO, "#F5C2C2")
         elif estado == "Sobrante":
-            self.lbl_estado.config(bg=st.AMBAR_CLARO, fg=st.AMBAR)
+            self.lbl_estado.set(etiqueta, "#FFF7E0", "#B45309", "#F8D98B")
         else:
-            self.lbl_estado.config(bg=st.VERDE_CLARO, fg=st.VERDE_OSCURO)
+            self.lbl_estado.set(etiqueta, "#ECF7F0", st.VERDE_OSCURO, "#BDE5CD")
 
         self._estado_actual = estado
         self._contado_actual = total
@@ -393,13 +499,11 @@ class CierreDialog(tk.Toplevel):
                 "No hay usuario conectado. Iniciá sesión e intentá de nuevo.",
                 parent=self)
             return
-        password = simpledialog.askstring(
-            "Autenticación de cierre",
-            f"Usuario: {u['usuario']}\n\n"
-            "Para cerrar la caja ingresá TU contraseña:",
-            parent=self,
-            show="*",
-        )
+        password = pedir_password(self, u["usuario"])
+        try:
+            self.grab_set()
+        except tk.TclError:
+            pass
         if password is None:
             return
         if not db.validar_password_sesion(password):
@@ -447,6 +551,7 @@ class CierreDialog(tk.Toplevel):
                 estado=self._estado_actual,
                 billetes={str(d): c for d, c in self.conteo.items()},
                 n_transferencias=self.resumen["n_transferencias"],
+                gastos=self.gastos,
             )
         except Exception as e:
             messagebox.showerror(

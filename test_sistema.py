@@ -299,6 +299,8 @@ _sd.askstring = lambda *a, **k: "admin"
 
 import main as main_mod
 from ui_cierre import CierreDialog
+import ui_cierre as _uic
+_uic.pedir_password = lambda parent, usuario: "admin"   # diálogo modal propio
 import iconos as _ic
 
 
@@ -409,7 +411,7 @@ app.update()
 check(dlg.lbl_contado.cget("text") == "$516.000", "diálogo: contado $516.000")
 check(dlg.lbl_esperado2.cget("text") == "$520.000", "diálogo: esperado $520.000")
 check(dlg.lbl_diferencia.cget("text") == "-$4.000", "diálogo: diferencia -$4.000")
-check(dlg.lbl_estado.cget("text") == "FALTANTE", "diálogo: estado FALTANTE")
+check(dlg.lbl_estado.lbl.cget("text") == "FALTANTE", "diálogo: estado FALTANTE")
 check(dlg.valores_medio["tarjetas"].cget("text") == "$240.000",
       "diálogo: la fila TARJETAS suma débito + crédito ($240.000)")
 check(dlg.valores_medio["debito"].cget("text") == "$150.000"
@@ -419,12 +421,12 @@ check(dlg.valores_medio["debito"].cget("text") == "$150.000"
 # Caja cuadrada
 dlg.celdas[500].set("10")
 dlg._recalcular()
-check(dlg.lbl_estado.cget("text") == "CAJA CUADRADA", "diálogo: CAJA CUADRADA")
+check(dlg.lbl_estado.lbl.cget("text") == "CAJA CUADRADA", "diálogo: CAJA CUADRADA")
 
 # Sobrante
 dlg.celdas[100].set("1")
 dlg._recalcular()
-check(dlg.lbl_estado.cget("text") == "SOBRANTE", "diálogo: SOBRANTE")
+check(dlg.lbl_estado.lbl.cget("text") == "SOBRANTE", "diálogo: SOBRANTE")
 
 dlg._confirmar()  # confirma el cierre completo
 app.update()
@@ -455,8 +457,8 @@ def _textos_de(widget):
 _textos_det = _textos_de(det)
 check("Total tarjetas" in _textos_det,
       "detalle del cierre: agrupa los totales en 'Total tarjetas'")
-check("   · Tarjeta de débito" in _textos_det
-      and "   · Tarjeta de crédito" in _textos_det,
+check("Tarjeta de débito" in _textos_det
+      and "Tarjeta de crédito" in _textos_det,
       "detalle del cierre: discrimina tarjeta de débito y de crédito")
 det.destroy()
 
@@ -1731,8 +1733,8 @@ if os.path.exists(_ruta_planilla):
 _ult = xl.exportar_rendicion(_g, _ruta_planilla)
 _wbp = load_workbook(_ruta_planilla)
 _wsp = _wbp.active
-check(_wsp.page_setup.orientation == "portrait",
-      "rendición A4: la hoja va en vertical")
+check(_wsp.page_setup.orientation == "landscape",
+      "rendición A4: la hoja va en horizontal")
 check(str(_wsp.page_setup.paperSize) == str(_wsp.PAPERSIZE_A4),
       "rendición A4: el papel es A4")
 check(_wsp.page_setup.fitToWidth == 1 and _wsp.page_setup.fitToHeight == 1

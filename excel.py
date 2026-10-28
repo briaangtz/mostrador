@@ -659,7 +659,7 @@ def datetime_texto():
 
 
 # ---------------------------------------------------------------------------
-# Planilla de rendición por buzón (una hoja A4 vertical)
+# Planilla de rendición por buzón (una hoja A4 horizontal)
 # ---------------------------------------------------------------------------
 
 # 8 columnas: la planilla se arma con dos bloques de a 4 columnas
@@ -722,8 +722,8 @@ def total_billetes_de(datos):
 def exportar_rendicion(datos, destino):
     """
     Vuelca lo cargado en la pestaña CARGA / RENDICIÓN (más el conteo de la
-    calculadora de billetes) a UNA hoja A4 vertical, ajustada para que no
-    se divida nunca en dos páginas.
+    calculadora de billetes) a UNA hoja A4 horizontal, ajustada para que no
+    se divida nunca en dos páginas y se vea lo más grande posible.
 
     Devuelve la última fila usada.
     """
@@ -948,14 +948,14 @@ def exportar_rendicion(datos, destino):
     for i, ancho in enumerate(ANCHOS_RENDICION, start=1):
         ws.column_dimensions[get_column_letter(i)].width = ancho
 
-    # ---------------- Impresión: UNA hoja A4 vertical ----------------
+    # ---------------- Impresión: UNA hoja A4 horizontal ----------------
     ws.sheet_view.showGridLines = False
-    ws.page_setup.orientation = "portrait"
+    ws.page_setup.orientation = "landscape"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 1
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-    ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.4, bottom=0.4,
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.3, bottom=0.3,
                                   header=0.2, footer=0.2)
     ws.print_options.horizontalCentered = True
     ws.print_area = f"A1:H{ultima_fila}"

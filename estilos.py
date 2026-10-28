@@ -337,6 +337,23 @@ def aplicar_estilo(root):
     root.option_add("*TCombobox*Listbox.selectForeground", TEXTO)
     root.option_add("*TCombobox*Listbox.background", "#FFFFFF")
 
+    # Pestañas
+    style.configure("TNotebook", background=FONDO, borderwidth=0,
+                    bordercolor=FONDO, lightcolor=FONDO, darkcolor=FONDO,
+                    tabmargins=(0, 0, 0, 0))
+    style.configure("TNotebook.Tab", background="#E3E9F3",
+                    foreground=TEXTO_SUAVE, padding=(18, 10), borderwidth=0,
+                    bordercolor="#E3E9F3", lightcolor="#E3E9F3",
+                    darkcolor="#E3E9F3", font=(FUENTE, 10, "bold"))
+    style.map("TNotebook.Tab",
+              background=[("selected", "#FFFFFF"), ("active", "#EDF1F8")],
+              foreground=[("selected", ACENTO_OSCURO)],
+              lightcolor=[("selected", "#FFFFFF")],
+              darkcolor=[("selected", "#FFFFFF")],
+              bordercolor=[("selected", "#FFFFFF")],
+              padding=[("selected", (18, 10))],
+              expand=[("selected", (0, 0, 0, 0))])
+
     # Tablas
     style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
     style.configure("Treeview", background="#FFFFFF", fieldbackground="#FFFFFF",

@@ -20,6 +20,8 @@ from tkinter import ttk, messagebox, filedialog
 import database as db
 import estilos as st
 import excel
+import ui_comun as uc
+from widgets_figma import Tarjeta, Btn
 from util import (money, parse_numero, parse_entero, fecha_a_iso,
                   fecha_corta)
 
@@ -54,39 +56,41 @@ class RendicionPanel(tk.Frame):
 
     # ------------------------------------------------------------------ UI
     def _construir(self):
+        PX = 28
         # ---------------- Cabecera (siempre visible, fuera del scroll)
         cab = tk.Frame(self, bg=st.FONDO)
-        cab.pack(fill="x", padx=24, pady=(18, 8))
+        cab.pack(fill="x", padx=PX, pady=(22, 10))
 
         izq = tk.Frame(cab, bg=st.FONDO)
         izq.pack(side="left")
-        tk.Label(izq, text="RENDICIÓN POR BUZÓN", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 22, "bold")).pack(anchor="w")
-        tk.Label(izq, text="Carga de datos + calculadora de billetes",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                 font=(st.FUENTE, 11)).pack(anchor="w")
+        tk.Label(izq, text="Planilla de rendición", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
+        tk.Label(izq, text="Rendición por buzón: carga de datos + calculadora "
+                           "de billetes", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+                 font=(st.FUENTE, 11)).pack(anchor="w", pady=(2, 0))
 
         der = tk.Frame(cab, bg=st.FONDO)
         der.pack(side="right")
-        self.btn_guardar = tk.Button(
-            der, text="GUARDAR RENDICIÓN", command=self._guardar_click,
-            relief="flat", bg=st.ACENTO,
-            fg="#ffffff", font=(st.FUENTE, 11, "bold"), padx=16, pady=8,
-            cursor="hand2")
-        self.btn_guardar.pack(anchor="e")
-        self.btn_planilla = tk.Button(
-            der, text="GENERAR PLANILLA A4", command=self._exportar_click,
-            relief="flat", bg=st.VERDE, fg="#ffffff",
-            font=(st.FUENTE, 11, "bold"), padx=16, pady=8, cursor="hand2")
-        self.btn_planilla.pack(anchor="e", pady=(6, 0))
+        botones = tk.Frame(der, bg=st.FONDO)
+        botones.pack(anchor="e")
+        self.btn_planilla = Btn(
+            botones, text="GENERAR PLANILLA A4", command=self._exportar_click,
+            bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=18, pady=10)
+        self.btn_planilla.pack(side="left", padx=(0, 10))
+        self.btn_guardar = Btn(
+            botones, text="GUARDAR RENDICIÓN", command=self._guardar_click,
+            bg=st.ACENTO, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=18, pady=10)
+        self.btn_guardar.pack(side="left")
         self.lbl_estado = tk.Label(der, text="Sin cambios sin guardar",
                                    bg=st.FONDO, fg=st.TEXTO_SUAVE,
                                    font=(st.FUENTE, 9))
-        self.lbl_estado.pack(anchor="e", pady=(4, 0))
+        self.lbl_estado.pack(anchor="e", pady=(6, 0))
 
         # ---------------- Pestañas ----------------
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        self.notebook.pack(fill="both", expand=True, padx=PX - 12, pady=(0, 12))
 
         self.tab_carga = tk.Frame(self.notebook, bg=st.FONDO)
         self.tab_billetes = tk.Frame(self.notebook, bg=st.FONDO)
@@ -120,46 +124,53 @@ class RendicionPanel(tk.Frame):
 
     # ---------------------------------------------------------- pestaña 1
     def _campo(self, padre, label, var, ancho=PESO_ANCHO, fila=None, col=0):
-        """Rótulo + entrada en línea dentro de un LabelFrame."""
-        celda = tk.Frame(padre, bg=st.FONDO)
+        """Rótulo + entrada (dentro de una tarjeta)."""
+        celda = tk.Frame(padre, bg=st.TARJETA)
         if fila is None:
             celda.pack(side="left", padx=(0, 18))
         else:
             celda.grid(row=fila, column=col, sticky="w", padx=(0, 18),
-                       pady=(4, 4))
-        tk.Label(celda, text=label, bg=st.FONDO, fg=st.TEXTO_SUAVE,
+                       pady=(4, 6))
+        tk.Label(celda, text=label, bg=st.TARJETA, fg=st.TEXTO_SUAVE,
                  font=(st.FUENTE, 9, "bold")).pack(anchor="w")
-        e = tk.Entry(celda, textvariable=var, width=ancho,
-                     font=(st.FUENTE, 11), bg="#ffffff",
-                     highlightbackground=st.BORDE, highlightthickness=1,
-                     relief="flat")
-        e.pack(anchor="w", ipady=3)
+        e = uc.entrada(celda, var, width=ancho)
+        e.pack(anchor="w", ipady=5, pady=(3, 0))
         return e
 
+    def _boton_suave(self, padre, texto, comando, rojo=False):
+        return Btn(padre, text=texto, command=comando,
+                   bg=st.ROJO_CLARO if rojo else "#E8EEF7",
+                   fg=st.ROJO if rojo else st.TEXTO,
+                   font=(st.FUENTE, 9, "bold"), padx=12, pady=6)
+
+    def _tarjeta(self, padre, titulo, icono, ultimo=False):
+        t, cuerpo, _h = uc.tarjeta(padre, titulo, icono)
+        t.pack(fill="x", padx=12, pady=(14 if titulo != "Cabecera" else 16,
+                                        20 if ultimo else 0))
+        return cuerpo
+
     def _cargar_cabecera(self, padre):
-        marco = st.labelframe(padre, " CABECERA ", padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(16, 0))
+        marco = self._tarjeta(padre, "Cabecera", "doc")
+        fila = tk.Frame(marco, bg=st.TARJETA)
+        fila.pack(fill="x")
 
         self.var_fecha = tk.StringVar(value=self.app.caja_fecha)
         self.var_chofer = tk.StringVar()
-        self.entry_fecha = self._campo(marco, "FECHA (AAA-MM-DD)",
+        self.entry_fecha = self._campo(fila, "FECHA (AAA-MM-DD)",
                                        self.var_fecha, ancho=14)
-        self._campo(marco, "CHOFER", self.var_chofer, ancho=22)
+        self._campo(fila, "CHOFER", self.var_chofer, ancho=22)
         self.entry_fecha.bind("<FocusOut>", lambda e: self._recargar_si_cambio())
 
-        acciones = tk.Frame(marco, bg=st.FONDO)
-        acciones.pack(side="right", padx=(18, 0))
-        tk.Button(acciones, text="Precargar del día", command=self._precargar_click,
-                  relief="flat", bg="#e8eef7", fg=st.TEXTO, font=(st.FUENTE, 9),
-                  padx=10, pady=4, cursor="hand2").pack(side="left", padx=(0, 6))
-        tk.Button(acciones, text="Limpiar todo", command=self._limpiar_click,
-                  relief="flat", bg=st.ROJO_CLARO, fg=st.ROJO, font=(st.FUENTE, 9),
-                  padx=10, pady=4, cursor="hand2").pack(side="left")
+        acciones = tk.Frame(fila, bg=st.TARJETA)
+        acciones.pack(side="right", anchor="s", pady=(0, 2))
+        self._boton_suave(acciones, "Precargar del día",
+                          self._precargar_click).pack(side="left", padx=(0, 8))
+        self._boton_suave(acciones, "Limpiar todo", self._limpiar_click,
+                          rojo=True).pack(side="left")
 
     def _cargar_detalle(self, padre):
-        marco = st.labelframe(padre, " DETALLE — TIPO · CANTIDAD · IMPORTE · TOTAL ",
-                              padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(14, 0))
+        marco = self._tarjeta(padre, "Detalle — tipo · cantidad · importe · total",
+                              "cube")
 
         cols = ("tipo", "cantidad", "importe", "total")
         self.tree_detalle = ttk.Treeview(marco, columns=cols, show="headings",
@@ -171,87 +182,84 @@ class RendicionPanel(tk.Frame):
             self.tree_detalle.heading(col, text=txt, anchor=alinea)
             self.tree_detalle.column(col, width=ancho, anchor=alinea,
                                      stretch=(col == "tipo"))
-        self.tree_detalle.pack(fill="x", pady=(0, 8))
+        self.tree_detalle.pack(fill="x", pady=(0, 10))
 
-        alta = tk.Frame(marco, bg=st.FONDO)
+        alta = tk.Frame(marco, bg=st.TARJETA)
         alta.pack(fill="x")
-        self.combo_tipo = ttk.Combobox(alta, width=34, font=(st.FUENTE, 10))
+        self.combo_tipo = ttk.Combobox(alta, width=30, font=(st.FUENTE, 10))
         self.combo_tipo.pack(side="left")
         self.combo_tipo.bind("<<ComboboxSelected>>", self._tipo_elegido)
         self.var_cant_det = tk.StringVar(value="1")
         self.var_imp_det = tk.StringVar()
-        for texto, var, ancho in (("Cant.", self.var_cant_det, 7),
+        for texto, var, ancho in (("Cant.", self.var_cant_det, 6),
                                   ("Importe", self.var_imp_det, 12)):
-            tk.Label(alta, text=texto, bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                     font=(st.FUENTE, 9)).pack(side="left", padx=(10, 4))
-            tk.Entry(alta, textvariable=var, width=ancho, font=(st.FUENTE, 11),
-                     relief="flat", highlightbackground=st.BORDE,
-                     highlightthickness=1).pack(side="left")
-        tk.Button(alta, text="+ AGREGAR", command=self._agregar_item,
-                  relief="flat", bg=st.ACENTO,
-                  fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=12, pady=4,
-                  cursor="hand2").pack(side="left", padx=12)
-        tk.Button(alta, text="Quitar fila", command=self._quitar_item,
-                  relief="flat", bg="#e8eef7", fg=st.TEXTO, font=(st.FUENTE, 9),
-                  padx=10, pady=4, cursor="hand2").pack(side="left")
-        tk.Label(alta, text="Enter o + AGREGAR suma la fila",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
-                 ).pack(side="left", padx=12)
+            tk.Label(alta, text=texto, bg=st.TARJETA, fg=st.TEXTO_SUAVE,
+                     font=(st.FUENTE, 9)).pack(side="left", padx=(12, 4))
+            uc.entrada(alta, var, width=ancho).pack(side="left", ipady=4)
+        Btn(alta, text="+ AGREGAR", command=self._agregar_item, bg=st.ACENTO,
+            fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=16, pady=7
+            ).pack(side="left", padx=(14, 8))
+        self._boton_suave(alta, "Quitar fila", self._quitar_item
+                          ).pack(side="left")
+        tk.Label(marco, text="Enter o + AGREGAR suma la fila.",
+                 bg=st.TARJETA, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
+                 ).pack(anchor="w", pady=(6, 0))
 
-        pie = tk.Frame(marco, bg=st.FONDO)
-        pie.pack(fill="x", pady=(8, 0))
-        tk.Label(pie, text="TOTAL DEL DETALLE", bg=st.FONDO, fg=st.TEXTO,
+        tk.Frame(marco, bg=st.BORDE, height=1).pack(fill="x", pady=(12, 8))
+        pie = tk.Frame(marco, bg=st.TARJETA)
+        pie.pack(fill="x")
+        tk.Label(pie, text="TOTAL DEL DETALLE", bg=st.TARJETA, fg=st.TEXTO,
                  font=(st.FUENTE, 11, "bold")).pack(side="left")
-        self.lbl_total_detalle = tk.Label(pie, text=money(0), bg=st.FONDO,
-                                          fg=st.VERDE,
-                                          font=(st.FUENTE, 13, "bold"))
+        self.lbl_total_detalle = tk.Label(pie, text=money(0), bg=st.TARJETA,
+                                          fg=st.VERDE_OSCURO,
+                                          font=(st.FUENTE, 15, "bold"))
         self.lbl_total_detalle.pack(side="right")
 
         # Se pegan las filas con Enter también
         self.combo_tipo.bind("<Return>", lambda e: self._agregar_item())
 
     def _cargar_secciones(self, padre):
-        marco = st.labelframe(padre, " SECCIONES DE LA PLANILLA ", padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(14, 0))
+        marco = self._tarjeta(padre, "Secciones de la planilla", "clipboard")
+        grilla = tk.Frame(marco, bg=st.TARJETA)
+        grilla.pack(fill="x")
         self.secciones = {}
         for i, (clave, texto) in enumerate(SECCIONES):
             var = tk.StringVar()
             self.secciones[clave] = var
-            self._campo(marco, texto, var, fila=i // 3, col=i % 3)
-        marco.columnconfigure((0, 1, 2), weight=1)
-        tk.Label(marco, text="TARJETAS y TRANSFERENCIAS se precargan con las "
-                             "ventas del día; cualquier campo se puede corregir "
-                             "a mano.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
+            self._campo(grilla, texto, var, fila=i // 3, col=i % 3)
+        grilla.columnconfigure((0, 1, 2), weight=1)
+        tk.Label(grilla, text="TARJETAS y TRANSFERENCIAS se precargan con las "
+                              "ventas del día; cualquier campo se puede corregir "
+                              "a mano.",
+                 bg=st.TARJETA, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
                  ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def _cargar_efectivo(self, padre):
-        marco = st.labelframe(padre, " EFECTIVO — TOTAL DE BILLETES ", padx=12,
-                              pady=8)
-        marco.pack(fill="x", padx=24, pady=(14, 0))
+        marco = self._tarjeta(padre, "Efectivo — total de billetes", "banknote")
+        fila = tk.Frame(marco, bg=st.TARJETA)
+        fila.pack(fill="x")
 
         self.var_efectivo = tk.StringVar(value=money(0))
-        e = tk.Entry(marco, textvariable=self.var_efectivo, width=18,
-                     font=(st.FUENTE, 15, "bold"), state="readonly",
-                     readonlybackground=st.VERDE_CLARO, relief="flat",
-                     highlightbackground=st.BORDE,
-                     highlightthickness=1)
-        e.pack(side="left", ipady=4)
+        e = tk.Entry(fila, textvariable=self.var_efectivo, width=16,
+                     font=(st.FUENTE, 16, "bold"), state="readonly",
+                     readonlybackground="#ECF7F0", fg=st.VERDE_OSCURO,
+                     relief="flat", bd=0, highlightbackground="#BDE5CD",
+                     highlightcolor="#BDE5CD", highlightthickness=1)
+        e.pack(side="left", ipady=7)
 
-        texto = tk.Frame(marco, bg=st.FONDO)
-        texto.pack(side="left", padx=(14, 0))
+        texto = tk.Frame(fila, bg=st.TARJETA)
+        texto.pack(side="left", padx=(16, 0))
         tk.Label(texto, text="Se completa SOLO: viene de la pestaña "
                              "«2 · CALCULADORA DE BILLETES».",
-                 bg=st.FONDO, fg=st.TEXTO, font=(st.FUENTE, 10)
+                 bg=st.TARJETA, fg=st.TEXTO, font=(st.FUENTE, 10)
                  ).pack(anchor="w")
         tk.Label(texto, text="Contás los billetes ahí y el importe aparece acá "
                              "y en la planilla A4.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
+                 bg=st.TARJETA, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
                  ).pack(anchor="w")
 
     def _cargar_cheques(self, padre):
-        marco = st.labelframe(padre, " CHEQUES ", padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(14, 0))
+        marco = self._tarjeta(padre, "Cheques", "card")
 
         cols = ("cliente", "numero", "banco", "importe")
         self.tree_cheques = ttk.Treeview(marco, columns=cols, show="headings",
@@ -263,104 +271,103 @@ class RendicionPanel(tk.Frame):
             self.tree_cheques.heading(col, text=txt, anchor=alinea)
             self.tree_cheques.column(col, width=ancho, anchor=alinea,
                                      stretch=(col == "cliente"))
-        self.tree_cheques.pack(fill="x", pady=(0, 8))
+        self.tree_cheques.pack(fill="x", pady=(0, 10))
 
-        alta = tk.Frame(marco, bg=st.FONDO)
+        alta = tk.Frame(marco, bg=st.TARJETA)
         alta.pack(fill="x")
         self.var_cheque_cliente = tk.StringVar()
         self.var_cheque_numero = tk.StringVar()
         self.var_cheque_banco = tk.StringVar()
         self.var_cheque_importe = tk.StringVar()
-        for texto, var, ancho in (("Cliente", self.var_cheque_cliente, 24),
-                                  ("N.º cheque", self.var_cheque_numero, 12),
-                                  ("Banco", self.var_cheque_banco, 16),
+        for texto, var, ancho in (("Cliente", self.var_cheque_cliente, 20),
+                                  ("N.º cheque", self.var_cheque_numero, 11),
+                                  ("Banco", self.var_cheque_banco, 14),
                                   ("Importe", self.var_cheque_importe, 10)):
-            tk.Label(alta, text=texto, bg=st.FONDO, fg=st.TEXTO_SUAVE,
+            tk.Label(alta, text=texto, bg=st.TARJETA, fg=st.TEXTO_SUAVE,
                      font=(st.FUENTE, 9)).pack(side="left", padx=(0, 4))
-            e = tk.Entry(alta, textvariable=var, width=ancho,
-                         font=(st.FUENTE, 10), relief="flat",
-                         highlightbackground=st.BORDE, highlightthickness=1)
-            e.pack(side="left", padx=(0, 10))
+            e = uc.entrada(alta, var, width=ancho, font=(st.FUENTE, 10))
+            e.pack(side="left", padx=(0, 10), ipady=4)
             if texto == "Cliente":
                 self.entry_cheque_cliente = e
                 e.bind("<Return>", lambda _e: self._agregar_cheque())
             if texto == "Importe":
                 e.bind("<Return>", lambda _e: self._agregar_cheque())
                 var.trace_add("write", lambda *_: self._total_cheques())
-        tk.Button(alta, text="+ AGREGAR", command=self._agregar_cheque,
-                  relief="flat", bg=st.ACENTO, fg="#ffffff",
-                  font=(st.FUENTE, 10, "bold"), padx=12, pady=4,
-                  cursor="hand2").pack(side="left", padx=(4, 8))
-        tk.Button(alta, text="Quitar", command=self._quitar_cheque,
-                  relief="flat", bg="#e8eef7", fg=st.TEXTO, font=(st.FUENTE, 9),
-                  padx=10, pady=4, cursor="hand2").pack(side="left")
+        Btn(alta, text="+ AGREGAR", command=self._agregar_cheque, bg=st.ACENTO,
+            fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=16, pady=7
+            ).pack(side="left", padx=(4, 8))
+        self._boton_suave(alta, "Quitar", self._quitar_cheque).pack(side="left")
 
-        pie = tk.Frame(marco, bg=st.FONDO)
-        pie.pack(fill="x", pady=(8, 0))
-        tk.Label(pie, text="TOTAL CHEQUES", bg=st.FONDO, fg=st.TEXTO,
+        tk.Frame(marco, bg=st.BORDE, height=1).pack(fill="x", pady=(12, 8))
+        pie = tk.Frame(marco, bg=st.TARJETA)
+        pie.pack(fill="x")
+        tk.Label(pie, text="TOTAL CHEQUES", bg=st.TARJETA, fg=st.TEXTO,
                  font=(st.FUENTE, 11, "bold")).pack(side="left")
-        self.lbl_total_cheques = tk.Label(pie, text=money(0), bg=st.FONDO,
-                                          fg=st.TEXTO, font=(st.FUENTE, 13, "bold"))
+        self.lbl_total_cheques = tk.Label(pie, text=money(0), bg=st.TARJETA,
+                                          fg=st.TEXTO, font=(st.FUENTE, 15, "bold"))
         self.lbl_total_cheques.pack(side="right")
 
     def _cargar_observaciones(self, padre):
-        marco = st.labelframe(padre, " OBSERVACIONES ", padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(14, 20))
+        marco = self._tarjeta(padre, "Observaciones", "info", ultimo=True)
         self.txt_obs = tk.Text(marco, height=3, font=(st.FUENTE, 11),
-                               relief="solid", bd=1, bg="#ffffff",
-                               highlightthickness=0)
+                               relief="flat", bd=0, bg="#FFFFFF", fg=st.TEXTO,
+                               insertbackground=st.TEXTO, highlightthickness=1,
+                               highlightbackground="#D9E0EC",
+                               highlightcolor=st.ACENTO, padx=8, pady=6)
         self.txt_obs.pack(fill="x")
 
     # ---------------------------------------------------------- pestaña 2
     def _cargar_calculadora(self, padre):
-        marco = st.labelframe(padre, " CALCULADORA DE BILLETES — CONTEO DE EFECTIVO ",
-                              padx=12, pady=8)
-        marco.pack(fill="x", padx=24, pady=(16, 0))
+        t, marco, _h = uc.tarjeta(padre, "Calculadora de billetes — conteo de "
+                                         "efectivo", "banknote")
+        t.pack(fill="x", padx=12, pady=(16, 0))
 
-        enc = tk.Frame(marco, bg=st.BARRA, height=30)
+        enc = tk.Frame(marco, bg=uc.GRIS_F)
         enc.pack(fill="x")
-        enc.pack_propagate(False)
-        for txt, ancho, lado in (("BILLETE", 160, "left"), ("CANTIDAD", 160, "left"),
-                                 ("IMPORTE", 200, "right")):
-            tk.Label(enc, text=txt, bg=st.BARRA, fg="#ffffff",
-                     font=(st.FUENTE, 10, "bold"), width=ancho // 10,
-                     anchor="w" if lado == "left" else "e",
-                     padx=10).pack(side=lado)
+        for c in range(3):
+            enc.columnconfigure(c, weight=1, uniform="bil")
+        for c, (txt, anc) in enumerate((("BILLETE", "w"), ("CANTIDAD", "center"),
+                                        ("IMPORTE", "e"))):
+            tk.Label(enc, text=txt, bg=uc.GRIS_F, fg=uc.MUTED,
+                     font=(st.FUENTE, 9, "bold"), anchor=anc
+                     ).grid(row=0, column=c, sticky="ew", padx=12, pady=9)
 
         self.celdas_billetes = {}
         for denom in db.DENOMINACIONES:
-            fila = tk.Frame(marco, bg=st.TARJETA,
-                            highlightbackground=st.BORDE, highlightthickness=1)
-            fila.pack(fill="x", pady=1)
+            fila = tk.Frame(marco, bg=st.TARJETA)
+            fila.pack(fill="x")
+            for c in range(3):
+                fila.columnconfigure(c, weight=1, uniform="bil")
             tk.Label(fila, text=money(denom), bg=st.TARJETA, fg=st.TEXTO,
-                     font=(st.FUENTE, 13, "bold"), width=16, anchor="w",
-                     padx=10).pack(side="left", ipady=4)
-            e = tk.Entry(fila, width=10, font=(st.FUENTE, 13), relief="flat",
-                         highlightthickness=0, justify="right")
-            e.pack(side="left", padx=10, ipady=3)
+                     font=(st.FUENTE, 13, "bold"), anchor="w"
+                     ).grid(row=0, column=0, sticky="ew", padx=12, pady=6)
+            e = uc.entrada(fila, None, width=12, font=(st.FUENTE, 13),
+                           justify="center")
+            e.grid(row=0, column=1, padx=12, pady=6, ipady=4)
             e.bind("<KeyRelease>", lambda _e: self._recalcular_billetes())
             self.celdas_billetes[denom] = e
             lbl = tk.Label(fila, text=money(0), bg=st.TARJETA, fg=st.TEXTO,
-                           font=(st.FUENTE, 13), width=18, anchor="e",
-                           padx=10)
-            lbl.pack(side="right", ipady=4)
+                           font=(st.FUENTE, 13), anchor="e")
+            lbl.grid(row=0, column=2, sticky="ew", padx=12, pady=6)
             setattr(self, f"lbl_billete_{denom}", lbl)
+            tk.Frame(marco, bg=st.BORDE, height=1).pack(fill="x")
 
-        pie = tk.Frame(marco, bg=st.VERDE_CLARO, highlightbackground=st.BORDE,
-                       highlightthickness=1)
-        pie.pack(fill="x", pady=(10, 0))
-        tk.Label(pie, text="TOTAL EFECTIVO", bg=st.VERDE_CLARO, fg=st.TEXTO,
-                 font=(st.FUENTE, 14, "bold"), padx=12, pady=8).pack(side="left")
-        self.lbl_total_billetes = tk.Label(pie, text=money(0), bg=st.VERDE_CLARO,
-                                           fg=st.TEXTO, font=(st.FUENTE, 20, "bold"),
-                                           padx=12, pady=6)
+        total = Tarjeta(marco, fondo="#ECF7F0", borde="#BDE5CD", radio=10,
+                        padx=18, pady=12)
+        total.pack(fill="x", pady=(12, 0))
+        pie = tk.Frame(total.cuerpo, bg="#ECF7F0")
+        pie.pack(fill="x")
+        tk.Label(pie, text="TOTAL EFECTIVO", bg="#ECF7F0", fg=st.TEXTO,
+                 font=(st.FUENTE, 14, "bold")).pack(side="left")
+        self.lbl_total_billetes = tk.Label(pie, text=money(0), bg="#ECF7F0",
+                                           fg=st.VERDE_OSCURO,
+                                           font=(st.FUENTE, 22, "bold"))
         self.lbl_total_billetes.pack(side="right")
 
         acciones = tk.Frame(padre, bg=st.FONDO)
-        acciones.pack(fill="x", padx=24, pady=(10, 0))
-        tk.Button(acciones, text="Limpiar conteo", command=self._limpiar_billetes,
-                  relief="flat", bg="#e8eef7", fg=st.TEXTO, font=(st.FUENTE, 10),
-                  padx=12, pady=6, cursor="hand2").pack(side="left")
+        acciones.pack(fill="x", padx=12, pady=(12, 20))
+        self._boton_suave(acciones, "Limpiar conteo",
+                          self._limpiar_billetes).pack(side="left")
         tk.Label(acciones, text="Este total se copia solo al campo EFECTIVO de la "
                                 "pestaña 1 y a la planilla A4.",
                  bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)
@@ -645,6 +652,10 @@ class RendicionPanel(tk.Frame):
     # --------------------------------------------------------------- datos
     def refresh(self):
         """Se llama al entrar a la pantalla y al refrescar el sistema."""
+        try:
+            self.combo_tipo["values"] = [p["nombre"] for p in db.productos()]
+        except Exception:
+            pass
         fecha = getattr(self.app, "caja_fecha", None) or db.hoy()
         if fecha != self._fecha_cargada:
             self._cargar(fecha)

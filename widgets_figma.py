@@ -30,7 +30,8 @@ class Tarjeta(tk.Canvas):
     """Tarjeta redondeada. El alto se ajusta solo al contenido de .cuerpo."""
 
     def __init__(self, parent, fondo=None, borde=None, radio=12, padx=20,
-                 pady=16, alto=None, ancho=1, exterior=None, sin_borde=False):
+                 pady=16, alto=None, ancho=1, exterior=None, sin_borde=False,
+                 ancho_auto=False):
         # OJO: no usar nombres _w, _name, etc. (los usa tkinter por dentro)
         self.fondo = fondo or st.TARJETA
         self.borde = None if sin_borde else (borde or st.BORDE)
@@ -52,6 +53,11 @@ class Tarjeta(tk.Canvas):
         self.bind("<Configure>", self._al_cambiar)
         if alto is None:
             self.cuerpo.bind("<Configure>", self._ajustar_alto)
+        if ancho_auto:      # el ancho se adapta al contenido (chips, etiquetas)
+            self.cuerpo.bind("<Configure>", self._ajustar_ancho, add="+")
+            # Con ancho 1 el contenido no llega a mostrarse (queda fuera del
+            # canvas) y no hay eventos: se mide una vez cuando ya está armado.
+            self.after_idle(self._ajuste_inicial)
 
     # ------------------------------------------------------------ tamaño
     def _al_cambiar(self, e):
@@ -68,6 +74,18 @@ class Tarjeta(tk.Canvas):
         h = self.cuerpo.winfo_reqheight() + 2 * self.pady
         if h != int(tk.Canvas.cget(self, "height")):
             tk.Canvas.configure(self, height=h)
+
+    def _ajuste_inicial(self):
+        try:
+            self._ajustar_ancho()
+            self._ajustar_alto()
+        except tk.TclError:
+            pass
+
+    def _ajustar_ancho(self, _e=None):
+        w = self.cuerpo.winfo_reqwidth() + 2 * self.padx
+        if w != int(tk.Canvas.cget(self, "width")):
+            tk.Canvas.configure(self, width=w)
 
     # ------------------------------------------------------------ dibujo
     def redibujar(self):
@@ -392,5 +410,32 @@ class Aviso(Tarjeta):
             wraplength=max(120, e.width - 40)))
 
     def set(self, text=None, **_):
+        if text is not None:
+            self.lbl.configure(text=text)
+
+
+class Banda(Tarjeta):
+    """Franja de estado grande y redondeada con colores que cambian
+    (por ejemplo CAJA CUADRADA / FALTANTE / SOBRANTE)."""
+
+    def __init__(self, parent, texto="", fondo="#ECF7F0", color=None,
+                 borde="#BDE5CD", tam=14):
+        try:
+            exterior = parent.cget("bg")
+        except tk.TclError:
+            exterior = st.FONDO
+        super().__init__(parent, fondo=fondo, borde=borde, radio=12,
+                         padx=16, pady=11, exterior=exterior)
+        self.lbl = tk.Label(self.cuerpo, text=texto, bg=fondo,
+                            fg=color or st.VERDE_OSCURO,
+                            font=(st.FUENTE, tam, "bold"))
+        self.lbl.pack()
+
+    def set(self, text=None, bg=None, fg=None, borde=None):
+        if bg:
+            self.pintar(fondo=bg, borde=borde if borde else _SIN)
+            self.lbl.configure(bg=bg)
+        if fg:
+            self.lbl.configure(fg=fg)
         if text is not None:
             self.lbl.configure(text=text)

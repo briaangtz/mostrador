@@ -778,6 +778,8 @@ def init():
             con.execute("ALTER TABLE cierres ADD COLUMN comprobantes TEXT")
         if "bono" not in columnas_cierres:
             con.execute("ALTER TABLE cierres ADD COLUMN bono REAL DEFAULT 0")
+        if "gastos" not in columnas_cierres:
+            con.execute("ALTER TABLE cierres ADD COLUMN gastos REAL DEFAULT 0")
 
         # Foto propia de cada usuario y permisos asignados uno por uno
         # (NULL en "permisos" = el usuario usa los permisos de su rango)
@@ -1467,7 +1469,7 @@ def venta_por_id(venta_id):
     return _armar_ticket(fila, items, pagos)
 
 
-def resumen(caja_id):
+def resumen(caja_id, gastos=0.0):
     """
     Resumen completo de la caja:
       - ventas por producto (cantidad y total) sumando los ítems
@@ -1522,7 +1524,10 @@ def resumen(caja_id):
     ap = apertura_de(caja_id)
     if ap and ap["monto_inicial"] is not None:
         fondo = float(ap["monto_inicial"])
-    efectivo_esperado = medios["efectivo"] + fondo
+    efectivo_base = medios["efectivo"] + fondo
+    # El efectivo esperado descuenta los gastos del día: el efectivo que
+    # se gastó durante el jornada ya no está en la caja al momento del cierre.
+    efectivo_esperado = efectivo_base - float(gastos)
     total_general = sum(medios.values())
 
     return {
@@ -1536,6 +1541,8 @@ def resumen(caja_id):
         "credito": medios["credito"],
         "bono": medios["bono"],
         "efectivo_esperado": efectivo_esperado,
+        "efectivo_base": efectivo_base,
+        "gastos": float(gastos),
         "fondo": fondo,
         "total_general": total_general,
         "cantidad_ventas": len(ventas),
@@ -1694,7 +1701,7 @@ def clasificar_diferencia(diferencia):
 def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
                    efectivo_contado, transferencias, debito, credito, bono,
                    total_general, diferencia, estado, billetes,
-                   n_transferencias=0, cerrado_por=None):
+                   n_transferencias=0, cerrado_por=None, gastos=0.0):
     caja = get_caja_por_id(caja_id)
     if not caja:
         raise ValueError("La caja indicada no existe.")
@@ -1732,8 +1739,8 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
                 total_vendido, efectivo_esperado, efectivo_contado, transferencias,
                 debito, credito, bono, total_general, diferencia, estado, billetes,
                 activo, reabierta, n_transferencias, cerrado_por, n_operaciones,
-                comprobantes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+                comprobantes, gastos)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)
             """,
             (
                 caja_id,
@@ -1755,6 +1762,7 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
                 u["id"] if u else None,
                 n_operaciones,
                 comprobantes or None,
+                float(gastos),
             ),
         )
         con.execute("UPDATE cajas SET estado = 'cerrada' WHERE id = ?", (caja_id,))

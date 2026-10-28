@@ -8,6 +8,9 @@ from datetime import date, timedelta
 import database as db
 import estilos as st
 import excel
+import iconos as ic
+import ui_comun as uc
+from widgets_figma import Tarjeta, Btn
 from util import money, fecha_corta, fecha_a_iso, fecha_larga
 
 MAX_DIAS_GRAFICO = 21
@@ -22,57 +25,35 @@ class EstadisticasPanel(tk.Frame):
 
     # ------------------------------------------------------------------ UI
     def _construir(self):
-        # Contenido con scroll vertical
-        marco_exterior = tk.Frame(self, bg=st.FONDO)
-        marco_exterior.pack(fill="both", expand=True)
+        PX = 28
+        MUTED = st.TEXTO_SUAVE
+        # Contenido con scroll vertical (App._rueda_global usa canvas_scroll)
+        cont = st.contenido_scrollable(self)
+        self.contenido = cont
+        self.canvas = self.canvas_scroll
 
-        self.canvas = tk.Canvas(marco_exterior, bg=st.FONDO, highlightthickness=0)
-        self.canvas_scroll = self.canvas    # lo usa App._rueda_global
-        scroll = ttk.Scrollbar(marco_exterior, orient="vertical",
-                               command=self.canvas.yview)
-        self.contenido = tk.Frame(self.canvas, bg=st.FONDO)
-        self.contenido.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
-        )
-        self._ventana_canvas = self.canvas.create_window(
-            (0, 0), window=self.contenido, anchor="nw")
-        self.canvas.configure(yscrollcommand=scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        self.canvas.bind(
-            "<Configure>",
-            lambda e: self.canvas.itemconfigure(self._ventana_canvas, width=e.width),
-        )
-        for evento in ("<MouseWheel>",):
-            self.contenido.bind(evento, self._scroll_mouse)
-
-        cont = self.contenido
-
-        # Cabecera
+        # ---------------- Cabecera ----------------
         cab = tk.Frame(cont, bg=st.FONDO)
-        cab.pack(fill="x", padx=24, pady=(20, 4))
-        tk.Label(cab, text="ESTADÍSTICAS", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 22, "bold")).pack(anchor="w")
-        self.lbl_periodo = tk.Label(cab, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+        cab.pack(fill="x", padx=PX, pady=(22, 4))
+        tk.Label(cab, text="Estadísticas y reportes", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
+        self.lbl_periodo = tk.Label(cab, text="", bg=st.FONDO, fg=MUTED,
                                     font=(st.FUENTE, 11))
-        self.lbl_periodo.pack(anchor="w")
+        self.lbl_periodo.pack(anchor="w", pady=(2, 0))
 
         # ---------------- Filtros por fecha ----------------
-        filtros = st.labelframe(cont, " PERÍODO DE CONSULTA ", padx=14, pady=10)
-        filtros.pack(fill="x", padx=24, pady=(12, 0))
-
-        fila_f = tk.Frame(filtros, bg=st.FONDO)
+        t, filtros, _h = uc.tarjeta(cont, "Período de consulta", "calendar")
+        t.pack(fill="x", padx=PX, pady=(14, 0))
+        fila_f = tk.Frame(filtros, bg=st.TARJETA)
         fila_f.pack(fill="x")
 
         def campo_fecha(texto):
-            c = tk.Frame(fila_f, bg=st.FONDO)
-            tk.Label(c, text=texto, bg=st.FONDO, fg=st.TEXTO_SUAVE,
+            c = tk.Frame(fila_f, bg=st.TARJETA)
+            tk.Label(c, text=texto, bg=st.TARJETA, fg=MUTED,
                      font=(st.FUENTE, 9, "bold")).pack(anchor="w")
             var = tk.StringVar()
-            tk.Entry(c, textvariable=var, width=12, font=(st.FUENTE, 11),
-                     justify="center", relief="solid", bd=1).pack(pady=(3, 0),
-                                                                  ipady=3)
+            uc.entrada(c, var, width=12, justify="center").pack(
+                pady=(3, 0), ipady=5)
             return var, c
 
         self.var_desde, f1 = campo_fecha("DESDE (dd/mm/aaaa)")
@@ -80,12 +61,8 @@ class EstadisticasPanel(tk.Frame):
         f1.pack(side="left")
         f2.pack(side="left", padx=(14, 0))
 
-        c_botones = tk.Frame(fila_f, bg=st.FONDO)
-        c_botones.pack(side="left", padx=(20, 0), anchor="s")
-        tk.Label(c_botones, text="", bg=st.FONDO).pack()
-        fila_botones = tk.Frame(c_botones, bg=st.FONDO)
-        fila_botones.pack(anchor="w", pady=(16, 0))
-
+        fila_botones = tk.Frame(fila_f, bg=st.TARJETA)
+        fila_botones.pack(side="left", padx=(20, 0), anchor="s", pady=(0, 1))
         self._btn(fila_botones, "Hoy", lambda: self._preset("hoy")).pack(
             side="left", padx=(0, 6))
         self._btn(fila_botones, "Últimos 7 días",
@@ -93,72 +70,80 @@ class EstadisticasPanel(tk.Frame):
         self._btn(fila_botones, "Este mes",
                   lambda: self._preset("mes")).pack(side="left", padx=(0, 6))
         self._btn(fila_botones, "Todo", lambda: self._preset("todo")).pack(
-            side="left", padx=(0, 6))
+            side="left", padx=(0, 10))
         self._btn(fila_botones, "Actualizar", self._aplicar_fechas,
                   color=st.ACENTO).pack(side="left")
 
-        c_excel = tk.Frame(fila_f, bg=st.FONDO)
-        c_excel.pack(side="right", anchor="s")
-        tk.Label(c_excel, text="", bg=st.FONDO).pack()
-        btn_excel = tk.Button(
-            c_excel, text="EXPORTAR",
-            command=self._exportar_excel, relief="flat", bg=st.VERDE,
-            fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=14, pady=10,
-            cursor="hand2",
-        )
-        btn_excel.pack(anchor="e", pady=(16, 0))
+        Btn(fila_f, text="EXPORTAR", command=self._exportar_excel, bg=st.VERDE,
+            fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=20, pady=9
+            ).pack(side="right", anchor="s")
 
-        # ---------------- Tarjetas ----------------
+        # ---------------- Indicadores ----------------
         marco_cards = tk.Frame(cont, bg=st.FONDO)
-        marco_cards.pack(fill="x", padx=24, pady=(14, 0))
+        marco_cards.pack(fill="x", padx=PX, pady=(14, 0))
         for c in range(4):
-            marco_cards.columnconfigure(c, weight=1)
+            marco_cards.columnconfigure(c, weight=1, uniform="kpi")
 
+        # (título, clave, columnas que ocupa, icono)
         definiciones = [
-            ("Total de ventas", "ventas", 1),
-            ("Garrafas vendidas", "garrafas", 1),
-            ("Total recaudado", "recaudado", 1),
-            ("Ventas promedio", "promedio", 1),
-            ("Efectivo", "efectivo", 1),
-            ("Transferencias", "transferencias", 1),
-            ("Tarjetas", "tarjetas", 2),
-            ("Transferencias (cantidad)", "n_transferencias", 1),
-            ("Días con ventas", "dias", 1),
-            ("Cierres en el período", "cierres", 1),
-            ("Mayor venta del día", "max", 1),
+            ("Total de ventas", "ventas", 1, "clipboard"),
+            ("Garrafas vendidas", "garrafas", 1, "cube"),
+            ("Total recaudado", "recaudado", 1, "dollar"),
+            ("Ventas promedio", "promedio", 1, "chart"),
+            ("Efectivo", "efectivo", 1, "banknote"),
+            ("Transferencias", "transferencias", 1, "transfer"),
+            ("Tarjetas", "tarjetas", 2, "card"),
+            ("Transferencias (cantidad)", "n_transferencias", 1, "transfer"),
+            ("Días con ventas", "dias", 1, "calendar"),
+            ("Cierres en el período", "cierres", 1, "history"),
+            ("Mayor venta del día", "max", 1, "chart"),
         ]
         self.cards = {}
         self.cards_detalle = {}
         fila, col = 0, 0
-        for titulo, clave, span in definiciones:
+        for titulo, clave, span, icono in definiciones:
             if col + span > 4:
                 fila, col = fila + 1, 0
-            celda = tk.Frame(marco_cards, bg=st.FONDO)
-            celda.grid(row=fila, column=col, columnspan=span,
-                       sticky="nsew", padx=6, pady=6)
-            frame, lbl = st.tarjeta_simple(celda, titulo)
-            frame.pack(fill="both", expand=True)
+            destacado = clave == "recaudado"
+            t = Tarjeta(marco_cards, radio=12, padx=18, pady=14,
+                        borde="#C3D6F8" if destacado else None)
+            t.grid(row=fila, column=col, columnspan=span, sticky="nsew",
+                   padx=5, pady=5)
+            top = tk.Frame(t.cuerpo, bg=st.TARJETA)
+            top.pack(fill="x")
+            tk.Label(top, text=titulo, bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 10)).pack(side="left")
+            tk.Label(top, image=ic.cuadro(
+                icono, 32, uc.AZUL_I if destacado else uc.GRIS_I,
+                uc.AZUL_F if destacado else uc.GRIS_F, 8, 17),
+                bg=st.TARJETA).pack(side="right")
+            lbl = tk.Label(t.cuerpo, text="—", bg=st.TARJETA, fg=st.TEXTO,
+                           font=(st.FUENTE, 22), anchor="w")
+            lbl.pack(anchor="w", pady=(8, 0))
+            det = tk.Label(t.cuerpo, text="", bg=st.TARJETA, fg=MUTED,
+                           font=(st.FUENTE, 9), anchor="w")
+            det.pack(anchor="w")
             self.cards[clave] = lbl
-            self.cards_detalle[clave] = frame.lbl_detalle
+            self.cards_detalle[clave] = det
             col += span
         self.cards["recaudado"].config(fg=st.VERDE_OSCURO)
 
         # ---------------- Producto + evolución ----------------
         medio = tk.Frame(cont, bg=st.FONDO)
-        medio.pack(fill="x", padx=24, pady=(14, 0))
-        medio.columnconfigure(0, weight=1)
-        medio.columnconfigure(1, weight=1)
+        medio.pack(fill="x", padx=PX, pady=(9, 0))
+        medio.columnconfigure(0, weight=1, uniform="med")
+        medio.columnconfigure(1, weight=1, uniform="med")
         medio.rowconfigure(0, weight=1)
 
-        izq = st.labelframe(medio, " VENTAS POR PRODUCTO ", padx=10, pady=10)
-        izq.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        marco_prod = tk.Frame(izq, bg=st.FONDO)
+        t_izq, izq, _h = uc.tarjeta(medio, "Ventas por producto", "cube")
+        t_izq.grid(row=0, column=0, sticky="nsew", padx=(5, 5))
+        marco_prod = tk.Frame(izq, bg=st.TARJETA)
         marco_prod.pack(fill="both", expand=True)
         scroll_prod = ttk.Scrollbar(marco_prod, orient="vertical")
         scroll_prod.pack(side="right", fill="y")
         self.tree_productos = ttk.Treeview(
-            marco_prod, columns=("producto", "garrafas", "total"), show="headings",
-            height=5, yscrollcommand=scroll_prod.set)
+            marco_prod, columns=("producto", "garrafas", "total"),
+            show="headings", height=6, yscrollcommand=scroll_prod.set)
         self.tree_productos.heading("producto", text="Producto")
         self.tree_productos.heading("garrafas", text="Garrafas")
         self.tree_productos.heading("total", text="Total")
@@ -168,18 +153,21 @@ class EstadisticasPanel(tk.Frame):
         self.tree_productos.pack(side="left", fill="both", expand=True)
         scroll_prod.config(command=self.tree_productos.yview)
 
-        der = st.labelframe(medio, " EVOLUCIÓN DE VENTAS POR DÍA ", padx=10, pady=10)
-        der.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        t_der, der, _h = uc.tarjeta(medio, "Evolución de ventas por día", "chart")
+        t_der.grid(row=0, column=1, sticky="nsew", padx=(5, 5))
         self.canvas_grafico = tk.Canvas(der, bg=st.TARJETA, highlightthickness=0,
-                                        height=170)
+                                        height=230)
         self.canvas_grafico.pack(fill="both", expand=True)
-        self.lbl_grafico = tk.Label(der, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+        self.lbl_grafico = tk.Label(der, text="", bg=st.TARJETA, fg=MUTED,
                                     font=(st.FUENTE, 9), anchor="w")
+        self._evolucion = None
+        self._tam_grafico = (0, 0)
+        self.canvas_grafico.bind("<Configure>", self._al_redimensionar_grafico)
 
         # ---------------- Cierres ----------------
-        cierres_frame = st.labelframe(cont, " RESUMEN DE CIERRES DE CAJA ",
-                                      padx=10, pady=10)
-        cierres_frame.pack(fill="x", padx=24, pady=(14, 24))
+        t_c, cierres_frame, _h = uc.tarjeta(cont, "Resumen de cierres de caja",
+                                            "history")
+        t_c.pack(fill="x", padx=PX, pady=(14, 24))
 
         columnas = ("fecha", "vendido", "efectivo", "transferencia", "tarjetas",
                     "diferencia", "estado")
@@ -199,12 +187,11 @@ class EstadisticasPanel(tk.Frame):
             self.tree_cierres.column(clave, width=ancho, anchor=alinear)
         self.tree_cierres.pack(fill="x")
 
-    def _btn(self, parent, texto, comando, color="#e5eaf1"):
-        return tk.Button(parent, text=texto, command=comando, relief="flat",
-                         bg=color,
-                         fg="#ffffff" if color != "#e5eaf1" else st.TEXTO,
-                         font=(st.FUENTE, 9, "bold"), padx=10, pady=6,
-                         cursor="hand2")
+    def _btn(self, parent, texto, comando, color="#E8EEF7"):
+        gris = color == "#E8EEF7"
+        return Btn(parent, text=texto, command=comando, bg=color,
+                   fg=st.TEXTO if gris else "#ffffff",
+                   font=(st.FUENTE, 9, "bold"), padx=14, pady=8)
 
     def _scroll_mouse(self, evento):
         self.canvas.yview_scroll(int(-evento.delta / 120), "units")
@@ -368,21 +355,34 @@ class EstadisticasPanel(tk.Frame):
             etiqueta = ("faltante" if c["estado"] == "Faltante" else
                         "sobrante" if c["estado"] == "Sobrante" else "cuadrada")
             color = (st.ROJO if etiqueta == "faltante" else
-                     st.AMBAR if etiqueta == "sobrante" else st.VERDE_OSCURO)
+                     "#B45309" if etiqueta == "sobrante" else st.VERDE_OSCURO)
             self.tree_cierres.tag_configure(etiqueta, foreground=color)
             self.tree_cierres.item(self.tree_cierres.get_children()[-1],
                                    tags=(etiqueta,))
 
     def _dibujar_grafico(self, evolucion):
+        """Guarda los datos y dibuja el gráfico (se redibuja al cambiar de tamaño)."""
+        self._evolucion = evolucion
+        self._pintar_grafico()
+
+    def _al_redimensionar_grafico(self, evento):
+        if (evento.width, evento.height) == self._tam_grafico:
+            return
+        self._tam_grafico = (evento.width, evento.height)
+        self._pintar_grafico()
+
+    def _pintar_grafico(self):
         lienzo = self.canvas_grafico
+        evolucion = self._evolucion
         lienzo.delete("all")
         self.lbl_grafico.pack_forget()
+        ancho = max(lienzo.winfo_width(), 300)
+        alto = max(lienzo.winfo_height(), 200)
 
         if not evolucion:
-            lienzo.create_text(
-                lienzo.winfo_width() // 2 or 200, 80, text="Sin ventas en el período",
-                fill=st.TEXTO_SUAVE, font=(st.FUENTE, 10),
-            )
+            lienzo.create_text(ancho // 2, alto // 2,
+                               text="Sin ventas en el período",
+                               fill=st.TEXTO_SUAVE, font=(st.FUENTE, 10))
             return
 
         datos = evolucion
@@ -392,29 +392,41 @@ class EstadisticasPanel(tk.Frame):
             nota = (f"Mostrando los últimos {MAX_DIAS_GRAFICO} días con ventas "
                     f"(de {len(evolucion)} en el período).")
 
-        lienzo.update_idletasks()
-        ancho = max(lienzo.winfo_width(), 300)
-        alto = max(lienzo.winfo_height(), 170)
-        borde_inferior = alto - 24
+        izq, der, arriba, abajo = 54, 12, 18, 28
+        base = alto - abajo
+        area = base - arriba
         maximo = max(d["total"] for d in datos) or 1
-        hueco = ancho / len(datos)
-        ancho_barra = max(6, hueco * 0.62)
+
+        # Líneas guía con su valor
+        for frac in (0, 0.5, 1):
+            y = base - area * frac
+            lienzo.create_line(izq, y, ancho - der, y,
+                               fill="#E3E9F3" if frac else "#CBD5E1")
+            lienzo.create_text(izq - 8, y, anchor="e",
+                               text=self._corto(maximo * frac) if frac else "$0",
+                               fill=st.TEXTO_SUAVE, font=(st.FUENTE, 8))
+
+        hueco = (ancho - izq - der) / len(datos)
+        ancho_barra = max(6, min(46, hueco * 0.62))
+        paso = max(1, int(38 / hueco) + 1) if hueco < 38 else 1
 
         for i, dia in enumerate(datos):
-            x0 = i * hueco + (hueco - ancho_barra) / 2
+            x0 = izq + i * hueco + (hueco - ancho_barra) / 2
             x1 = x0 + ancho_barra
-            altura = max(3, (dia["total"] / maximo) * (borde_inferior - 34))
-            y0 = borde_inferior - altura
-            lienzo.create_rectangle(x0, y0, x1, borde_inferior,
-                                    fill=st.ACENTO, outline="")
+            altura = max(3, (dia["total"] / maximo) * area)
+            y0 = base - altura
+            es_max = dia["total"] == maximo
+            lienzo.create_rectangle(x0, y0, x1, base, outline="",
+                                    fill=st.ACENTO_OSCURO if es_max else st.ACENTO)
             if len(datos) <= 12:
-                lienzo.create_text((x0 + x1) / 2, y0 - 8,
+                lienzo.create_text((x0 + x1) / 2, y0 - 9,
                                    text=self._corto(dia["total"]),
                                    fill=st.VERDE_OSCURO,
                                    font=(st.FUENTE, 8, "bold"))
-            lienzo.create_text((x0 + x1) / 2, borde_inferior + 12,
-                               text=fecha_corta(dia["fecha"])[:5],
-                               fill=st.TEXTO_SUAVE, font=(st.FUENTE, 7))
+            if i % paso == 0:
+                lienzo.create_text((x0 + x1) / 2, base + 14,
+                                   text=fecha_corta(dia["fecha"])[:5],
+                                   fill=st.TEXTO_SUAVE, font=(st.FUENTE, 8))
 
         if nota:
             self.lbl_grafico.config(text=nota)
