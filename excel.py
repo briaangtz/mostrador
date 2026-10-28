@@ -21,7 +21,7 @@ from openpyxl.worksheet.page import PageMargins
 from openpyxl.worksheet.properties import PageSetupProperties
 
 import database as db
-from util import fecha_corta, money
+from util import fecha_corta, fecha_a_iso, money
 
 AZUL = "000000"                      # sin color: todo en blanco y negro
 GRIS_CLARO = "FFFFFF"
@@ -662,19 +662,19 @@ def datetime_texto():
 # Planilla de rendición por buzón (una hoja A4 horizontal)
 # ---------------------------------------------------------------------------
 
-# 8 columnas: la planilla se arma con dos bloques de a 4 columnas
-# (detalle a la izquierda, secciones a la derecha) y bloques completos
-# para cheques, billetes y observaciones.
-ANCHOS_RENDICION = [20, 11, 13, 13, 16, 11, 11, 13]
+# 10 columnas: cheques (cliente, n.º, banco, emisión, cobro, importe)
+# a la izquierda y billetes (denominación, cantidad, importe) a la
+# derecha; los bloques de título, secciones y observaciones ocupan
+# las 10.
+ANCHOS_RENDICION = [20, 11, 13, 12, 12, 13, 14, 11, 11, 13]
 
 # Secciones de la planilla, en el orden en que aparecen en el formulario.
-# Sin ENVÍOS: al usuario no le sirve y no se imprime.
+# Sin ENVÍOS ni RECIBOS: al usuario no le sirven y no se imprimen.
 SECCIONES_RENDICION = [
     ("gastos", "GASTOS"),
     ("caja", "CAJA"),
     ("tarjetas", "TARJETAS"),
     ("transferencias", "TRANSFERENCIAS"),
-    ("recibos", "RECIBOS"),
 ]
 
 MIN_FILAS_CHEQUES = 7
@@ -754,6 +754,20 @@ def exportar_rendicion(datos, destino):
     al_der = Alignment(horizontal="right", vertical="center")
     al_ctr = Alignment(horizontal="center", vertical="center")
 
+    def _fecha_txt(valor):
+        """dd/mm/aaaa para la planilla; si el dato viejo no es fecha,
+        se muestra tal cual (sin romper la exportación)."""
+        texto = str(valor or "").strip()
+        if not texto:
+            return ""
+        iso = fecha_a_iso(texto)
+        if not iso:
+            return texto
+        try:
+            return fecha_corta(iso)
+        except Exception:
+            return texto
+
     def pintar(fila, col_ini, col_fin, valor=None, *, fuente=None, fondo=None,
                alineacion=None, formato=None, bordear=True):
         """Escribe una celda (uniendo columnas si hace falta)."""
@@ -776,19 +790,19 @@ def exportar_rendicion(datos, destino):
 
     fila = 1
     # ---------------- Título ----------------
-    pintar(fila, 1, 8, "PLANILLA DE RENDICIÓN", fuente=f_titulo,
+    pintar(fila, 1, 10, "PLANILLA DE RENDICIÓN", fuente=f_titulo,
            fondo=fondo_titulo, alineacion=al_ctr, bordear=False)
     ws.row_dimensions[fila].height = 34
     fila += 1
 
     # ---------------- Cabecera: fecha y chofer ----------------
-    pintar(fila, 1, 2, "FECHA", fuente=f_rotulo, fondo=fondo_rotulo,
+    pintar(fila, 1, 3, "FECHA", fuente=f_rotulo, fondo=fondo_rotulo,
            alineacion=al_izq)
-    pintar(fila, 3, 4, fecha_corta(datos.get("fecha") or ""),
+    pintar(fila, 4, 5, fecha_corta(datos.get("fecha") or ""),
            fuente=f_dato, alineacion=al_ctr)
-    pintar(fila, 5, 6, "CHOFER", fuente=f_rotulo, fondo=fondo_rotulo,
+    pintar(fila, 6, 7, "CHOFER", fuente=f_rotulo, fondo=fondo_rotulo,
            alineacion=al_izq)
-    pintar(fila, 7, 8, datos.get("chofer") or "", fuente=f_dato,
+    pintar(fila, 8, 10, datos.get("chofer") or "", fuente=f_dato,
            alineacion=al_ctr)
     ws.row_dimensions[fila].height = 24
     fila += 1
@@ -798,14 +812,14 @@ def exportar_rendicion(datos, destino):
     # ---------------- Secciones de la planilla ----------------
     # Sin el detalle de venta: la hoja queda para el resumen y las secciones
     # ocupan todo el ancho.
-    pintar(fila, 1, 8, "SECCIONES DE LA PLANILLA", fuente=f_seccion,
+    pintar(fila, 1, 10, "SECCIONES DE LA PLANILLA", fuente=f_seccion,
            fondo=fondo_rotulo, alineacion=al_izq)
     ws.row_dimensions[fila].height = 24
     fila += 1
 
-    pintar(fila, 1, 4, "SECCIÓN", fuente=f_rotulo, fondo=fondo_rotulo,
+    pintar(fila, 1, 5, "SECCIÓN", fuente=f_rotulo, fondo=fondo_rotulo,
            alineacion=al_izq)
-    pintar(fila, 5, 8, "IMPORTE", fuente=f_rotulo, fondo=fondo_rotulo,
+    pintar(fila, 6, 10, "IMPORTE", fuente=f_rotulo, fondo=fondo_rotulo,
            alineacion=al_der)
     ws.row_dimensions[fila].height = 22
     fila += 1
@@ -818,9 +832,9 @@ def exportar_rendicion(datos, destino):
             valor = None
         if valor == 0:            # casillero sin cargar = casillero en blanco
             valor = None
-        pintar(fila, 1, 4, texto, fuente=f_rotulo, fondo=fondo_rotulo,
+        pintar(fila, 1, 5, texto, fuente=f_rotulo, fondo=fondo_rotulo,
                alineacion=al_izq)
-        pintar(fila, 5, 8, valor, fuente=f_num, alineacion=al_der,
+        pintar(fila, 6, 10, valor, fuente=f_num, alineacion=al_der,
                formato=FORMATO_MONEDA)
         ws.row_dimensions[fila].height = 22
         fila += 1
@@ -833,9 +847,9 @@ def exportar_rendicion(datos, destino):
     except (TypeError, ValueError):
         gastos = 0.0
     efectivo_neto = total_billetes_de(datos) - gastos
-    pintar(fila, 1, 4, "EFECTIVO (BILLETES)", fuente=f_rotulo,
+    pintar(fila, 1, 5, "EFECTIVO (BILLETES)", fuente=f_rotulo,
            fondo=fondo_verde, alineacion=al_izq)
-    pintar(fila, 5, 8, efectivo_neto, fuente=f_total,
+    pintar(fila, 6, 10, efectivo_neto, fuente=f_total,
            fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
     ws.row_dimensions[fila].height = 26
     fila += 1
@@ -843,18 +857,19 @@ def exportar_rendicion(datos, destino):
     fila += 1
 
     # ---------------- Cheques (izquierda) y billetes (derecha) ----------------
-    pintar(fila, 1, 4, "CHEQUES", fuente=f_seccion, fondo=fondo_rotulo,
+    pintar(fila, 1, 6, "CHEQUES", fuente=f_seccion, fondo=fondo_rotulo,
            alineacion=al_izq)
-    pintar(fila, 5, 8, "TOTAL DE BILLETES", fuente=f_seccion,
+    pintar(fila, 7, 10, "TOTAL DE BILLETES", fuente=f_seccion,
            fondo=fondo_rotulo, alineacion=al_izq)
     ws.row_dimensions[fila].height = 24
     fila += 1
 
     for col_ini, col_fin, texto, alineado in (
             (1, 1, "CLIENTE", al_izq), (2, 2, "N.º CHEQUE", al_izq),
-            (3, 3, "BANCO", al_izq), (4, 4, "IMPORTE", al_der),
-            (5, 6, "BILLETE", al_izq), (7, 7, "CANTIDAD", al_der),
-            (8, 8, "IMPORTE", al_der)):
+            (3, 3, "BANCO", al_izq), (4, 4, "F. EMISIÓN", al_ctr),
+            (5, 5, "F. COBRO", al_ctr), (6, 6, "IMPORTE", al_der),
+            (7, 8, "BILLETE", al_izq), (9, 9, "CANTIDAD", al_der),
+            (10, 10, "IMPORTE", al_der)):
         pintar(fila, col_ini, col_fin, texto, fuente=f_rotulo,
                fondo=fondo_rotulo, alineacion=alineado)
     ws.row_dimensions[fila].height = 22
@@ -875,7 +890,11 @@ def exportar_rendicion(datos, destino):
                fuente=f_dato, alineacion=al_izq)
         pintar(fila, 3, 3, (ch["banco"] or "") if ch else None,
                fuente=f_dato, alineacion=al_izq)
-        pintar(fila, 4, 4, float(ch["importe"]) if ch else None,
+        pintar(fila, 4, 4, _fecha_txt(ch.get("emision"))
+               if ch else None, fuente=f_dato, alineacion=al_ctr)
+        pintar(fila, 5, 5, _fecha_txt(ch.get("cobro"))
+               if ch else None, fuente=f_dato, alineacion=al_ctr)
+        pintar(fila, 6, 6, float(ch["importe"]) if ch else None,
                fuente=f_num, alineacion=al_der, formato=FORMATO_MONEDA)
 
         if i < len(db.DENOMINACIONES):
@@ -884,25 +903,25 @@ def exportar_rendicion(datos, destino):
                 cant = int(billetes.get(str(denom), 0) or 0)
             except (TypeError, ValueError):
                 cant = 0
-            pintar(fila, 5, 6, float(denom), fuente=f_num,
+            pintar(fila, 7, 8, float(denom), fuente=f_num,
                    alineacion=al_izq, formato=FORMATO_MONEDA)
-            pintar(fila, 7, 7, cant, fuente=f_num, alineacion=al_der,
+            pintar(fila, 9, 9, cant, fuente=f_num, alineacion=al_der,
                    formato=FORMATO_ENTERO)
-            pintar(fila, 8, 8, float(denom) * cant, fuente=f_num,
+            pintar(fila, 10, 10, float(denom) * cant, fuente=f_num,
                    alineacion=al_der, formato=FORMATO_MONEDA)
         else:
-            pintar(fila, 5, 6, None, alineacion=al_izq)
-            pintar(fila, 7, 7, None, alineacion=al_der)
-            pintar(fila, 8, 8, None, alineacion=al_der)
+            pintar(fila, 7, 8, None, alineacion=al_izq)
+            pintar(fila, 9, 9, None, alineacion=al_der)
+            pintar(fila, 10, 10, None, alineacion=al_der)
         ws.row_dimensions[fila].height = 20
         fila += 1
 
-    pintar(fila, 1, 2, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
-    pintar(fila, 3, 4, total_cheques, fuente=f_total, alineacion=al_der,
+    pintar(fila, 1, 4, "TOTAL CHEQUES", fuente=f_total, alineacion=al_der)
+    pintar(fila, 5, 6, total_cheques, fuente=f_total, alineacion=al_der,
            formato=FORMATO_MONEDA)
-    pintar(fila, 5, 6, "TOTAL", fuente=f_total, fondo=fondo_verde,
+    pintar(fila, 7, 8, "TOTAL", fuente=f_total, fondo=fondo_verde,
            alineacion=al_der)
-    pintar(fila, 7, 8, total_billetes_de(datos), fuente=f_efectivo,
+    pintar(fila, 9, 10, total_billetes_de(datos), fuente=f_efectivo,
            fondo=fondo_verde, alineacion=al_der, formato=FORMATO_MONEDA)
     ws.row_dimensions[fila].height = 30
     fila += 1
@@ -910,7 +929,7 @@ def exportar_rendicion(datos, destino):
     fila += 1
 
     # ---------------- Observaciones ----------------
-    pintar(fila, 1, 8, "OBSERVACIONES", fuente=f_seccion, fondo=fondo_rotulo,
+    pintar(fila, 1, 10, "OBSERVACIONES", fuente=f_seccion, fondo=fondo_rotulo,
            alineacion=al_izq)
     ws.row_dimensions[fila].height = 24
     fila += 1
@@ -926,7 +945,7 @@ def exportar_rendicion(datos, destino):
     u = db.usuario_sesion() or {}
     pie = datetime_texto() + (f"  —  Generado por: {u.get('usuario', '—')}"
                               if u else "")
-    pintar(fila, 1, 8, pie, fuente=f_pie, alineacion=al_der, bordear=False)
+    pintar(fila, 1, 10, pie, fuente=f_pie, alineacion=al_der, bordear=False)
     ws.row_dimensions[fila].height = 16
     ultima_fila = fila
 
@@ -958,7 +977,7 @@ def exportar_rendicion(datos, destino):
     ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.3, bottom=0.3,
                                   header=0.2, footer=0.2)
     ws.print_options.horizontalCentered = True
-    ws.print_area = f"A1:H{ultima_fila}"
+    ws.print_area = f"A1:J{ultima_fila}"
 
     wb.save(destino)
     return ultima_fila

@@ -1668,6 +1668,12 @@ check((_pn(pr.secciones["tarjetas"].get()) or 0) == _tarj_esp,
 check((_pn(pr.secciones["transferencias"].get()) or 0)
       == _res_r["transferencias"],
       "rendición: TRANSFERENCIAS también se precarga del día")
+_espera_det = sum(1 for _i in _res_r["por_producto"].values()
+                  if int(_i["cantidad"]) > 0)
+check(_espera_det > 0 and len(pr.detalle) == _espera_det
+      and all(int(_i["cantidad"]) > 0 for _i in pr.detalle),
+      f"rendición: el DETALLE se precarga con las ventas del día por "
+      f"producto (obtuvo {len(pr.detalle)} filas, esperaba {_espera_det})")
 pr.secciones["gastos"].set("15000")        # lo demás lo carga el usuario
 check(pr.secciones["gastos"].get() == "15000",
       "rendición: cualquier sección se puede cargar a mano")
@@ -1696,33 +1702,46 @@ check(pr.var_efectivo.get() == "$42.300",
       f"(obtuvo {pr.var_efectivo.get()})")
 
 # Detalle de la planilla: Tipo · Cantidad · Importe · Total
+_n_det_prev = len(pr.detalle)
+_tot_det_prev = _pn(pr.lbl_total_detalle.cget("text")) or 0
 pr.combo_tipo.set("Garrafa 10 kg")
 pr.var_cant_det.set("3")
 pr.var_imp_det.set("23000")
 pr._agregar_item()
 app6.update()
-check(len(pr.detalle) == 1 and pr.lbl_total_detalle.cget("text") == "$69.000",
+check(len(pr.detalle) == _n_det_prev + 1
+      and abs((_pn(pr.lbl_total_detalle.cget("text")) or 0)
+              - (_tot_det_prev + 69000)) < 0.01,
       f"rendición: la fila entra al detalle y suma el total "
       f"(obtuvo {pr.lbl_total_detalle.cget('text')})")
 
-# Cheques: cliente, número, banco e importe
+# Cheques: cliente, número, banco, importe y fechas de emisión/cobro
 pr.var_cheque_cliente.set("Juan Pérez")
 pr.var_cheque_numero.set("000123")
 pr.var_cheque_banco.set("Nación")
 pr.var_cheque_importe.set("50000")
+pr.var_cheque_emision.set("01/10/2026")
+pr.var_cheque_cobro.set("15/10/2026")
 pr._agregar_cheque()
 check(pr.lbl_total_cheques.cget("text") == "$50.000",
       f"rendición: total de cheques "
       f"(obtuvo {pr.lbl_total_cheques.cget('text')})")
+check(pr.cheques[0].get("emision") == "2026-10-01"
+      and pr.cheques[0].get("cobro") == "2026-10-15",
+      f"rendición: el cheque guarda emisión y cobro normalizadas "
+      f"(obtuvo {pr.cheques[0].get('emision')}/"
+      f"{pr.cheques[0].get('cobro')})")
 
 pr.var_chofer.set("Gómez")
 check(pr._guardar() is not None, "rendición: se guarda desde la interfaz")
 _g = db.rendicion_de(db.hoy())
-check(_g["chofer"] == "Gómez" and len(_g["detalle"]) == 1
-      and len(_g["cheques"]) == 1 and abs(_g["total_billetes"] - 42300) < 0.01,
+check(_g["chofer"] == "Gómez" and len(_g["detalle"]) == _n_det_prev + 1
+      and len(_g["cheques"]) == 1
+      and _g["cheques"][0].get("cobro") == "2026-10-15"
+      and abs(_g["total_billetes"] - 42300) < 0.01,
       "rendición: quedan guardados chofer, detalle, cheque y billetes")
 pr.refresh()
-check(pr.var_chofer.get() == "Gómez" and len(pr.detalle) == 1,
+check(pr.var_chofer.get() == "Gómez" and len(pr.detalle) == _n_det_prev + 1,
       "rendición: al refrescar la pantalla no se pisa lo cargado")
 
 # Planilla A4: una sola hoja, con todos los campos del formulario
@@ -1740,7 +1759,7 @@ check(str(_wsp.page_setup.paperSize) == str(_wsp.PAPERSIZE_A4),
 check(_wsp.page_setup.fitToWidth == 1 and _wsp.page_setup.fitToHeight == 1
       and _wsp.sheet_properties.pageSetUpPr.fitToPage is True,
       "rendición A4: entra en UNA sola hoja (no se divide en dos)")
-check(_wsp.print_area == f"'{_wsp.title}'!$A$1:$H${_ult}",
+check(_wsp.print_area == f"'{_wsp.title}'!$A$1:$J${_ult}",
       f"rendición A4: el área de impresión cubre toda la planilla "
       f"(obtuvo {_wsp.print_area})")
 
@@ -1748,8 +1767,9 @@ _txt_r = [str(c.value) for f in _wsp.iter_rows() for c in f
           if c.value is not None]
 for _campo in ("PLANILLA DE RENDICIÓN", "FECHA", "CHOFER",
                "CANTIDAD", "IMPORTE", "TOTAL", "GASTOS", "CAJA",
-               "TARJETAS", "TRANSFERENCIAS", "RECIBOS", "CLIENTE",
-               "N.º CHEQUE", "BANCO", "BILLETE", "TOTAL DE BILLETES",
+               "TARJETAS", "TRANSFERENCIAS", "CLIENTE",
+               "N.º CHEQUE", "BANCO", "F. EMISIÓN", "F. COBRO",
+               "BILLETE", "TOTAL DE BILLETES",
                "OBSERVACIONES"):
     check(any(_campo in t for t in _txt_r),
           f"rendición A4: conserva el campo {_campo}")
@@ -1770,16 +1790,18 @@ check(not any("DETALLE" in t for t in _txt_r),
       "rendición A4: se fue la sección de DETALLE (no discrimina productos)")
 check(not any("ENVÍO" in t for t in _txt_r),
       "rendición A4: se fue la sección de ENVIOS")
+check(not any("RECIBOS" in t for t in _txt_r),
+      "rendición A4: se fue la sección de RECIBOS")
 check(not any(abs(n - 69000) < 0.01 for n in _num_r),
       "rendición A4: ya no se imprime el importe por producto")
 
 # El conteo por denominación: cuántos billetes de cada uno y cuánto suman
 _conteo_billetes = {}
 for _fila_xl in _wsp.iter_rows(min_row=1, max_row=_wsp.max_row):
-    _denom_xl = _fila_xl[4].value                # columna E: BILLETE (E:F)
+    _denom_xl = _fila_xl[6].value                # columna G: BILLETE (G:H)
     if isinstance(_denom_xl, (int, float)):
-        _conteo_billetes[int(_denom_xl)] = (_fila_xl[6].value,     # G: cantidad
-                                            _fila_xl[7].value)     # H: importe
+        _conteo_billetes[int(_denom_xl)] = (_fila_xl[8].value,     # I: cantidad
+                                            _fila_xl[9].value)     # J: importe
 _esperados = {100: 3, 200: 0, 500: 0, 1000: 2, 2000: 0, 10000: 0,
               20000: 2}
 for _denom_xl, _cant_esperada in _esperados.items():
@@ -1790,7 +1812,7 @@ for _denom_xl, _cant_esperada in _esperados.items():
           and abs((_imp_xl or 0) - _denom_xl * _cant_esperada) < 0.01,
           f"rendición A4: el billete de ${_denom_xl} se cuenta y suma "
           f"({_cant_esperada} x ${_denom_xl} = {_imp_xl})")
-check(not any(_r.min_col == 5 and _r.max_col == 8
+check(not any(_r.min_col == 7 and _r.max_col == 10
               and (_r.max_row - _r.min_row) >= 3
               for _r in _wsp.merged_cells.ranges),
       "rendición A4: el total de billetes va discriminado, no en un bloque")

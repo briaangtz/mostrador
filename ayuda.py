@@ -325,7 +325,7 @@ TEMAS = [
         titulo="Planilla de rendición por buzón y calculadora de billetes",
         claves="rendicion rendir buzón buzon planilla rendiciones carga "
                "calculadora billete billetes conteo arqueo efectivo cheques "
-               "cheque gastos envios envíos recibos tarjetas transferencias "
+               "cheque gastos emision emisión cobro tarjetas transferencias "
                "chofer observaciones secciones seccion detalle importe "
                "cantidad total imprimir a4 guardar",
         frases=["planilla de rendicion", "rendicion por buzon",
@@ -338,11 +338,14 @@ TEMAS = [
             "En la pestaña 1 se carga la planilla completa: **FECHA** y "
             "**CHOFER**, el **DETALLE** con sus columnas Tipo · Cantidad · "
             "Importe · Total (agregás filas con + AGREGAR), las "
-            "**SECCIONES** GASTOS, CAJA, ENVÍOS, TARJETAS, TRANSFERENCIAS "
-            "y RECIBOS, los **CHEQUES** (cliente, N.º de cheque, banco e "
+            "**SECCIONES** GASTOS, CAJA, TARJETAS y TRANSFERENCIAS, los "
+            "**CHEQUES** (cliente, N.º de cheque, banco, fecha de "
+            "emisión, fecha de cobro e "
             "importe) y las **OBSERVACIONES**.",
             "**TARJETAS y TRANSFERENCIAS se precargan solas** con las "
             "ventas del día y cualquier campo se corrige a mano; "
+            "**el DETALLE también se precarga** con lo vendido por "
+            "producto (cantidad y precio unitario); "
             "**PRECARGAR DEL DÍA** las vuelve a traer y **LIMPIAR TODO** "
             "arranca de cero.",
             "En la pestaña 2 contás los billetes de $100 a $20.000: cada "
@@ -355,10 +358,10 @@ TEMAS = [
             "duplica) y **GENERAR PLANILLA A4** para obtener el archivo "
             "con las secciones, los cheques, el conteo de billetes y las "
             "observaciones, listo para imprimir en **una sola hoja A4 "
-            "vertical** y llenando la hoja de punta a punta. El **detalle "
-            "de venta** y los **ENVÍOS** no se imprimen: siguen "
+            "horizontal** y llenando la hoja de punta a punta. El **detalle "
+            "de venta** no se imprime: sigue "
             "cargándose y guardándose en la pantalla, pero en el papel no "
-            "aparecen.",
+            "aparece.",
         ],
         seccion="sección 21 del manual",
         ejemplos=["¿Cómo cargo la rendición?",

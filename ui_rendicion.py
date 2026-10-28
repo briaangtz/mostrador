@@ -29,10 +29,8 @@ from util import (money, parse_numero, parse_entero, fecha_a_iso,
 SECCIONES = [
     ("gastos", "GASTOS"),
     ("caja", "CAJA"),
-    ("envios", "ENVÍOS"),
     ("tarjetas", "TARJETAS"),
     ("transferencias", "TRANSFERENCIAS"),
-    ("recibos", "RECIBOS"),
 ]
 
 PESO_ANCHO = 16
@@ -261,13 +259,15 @@ class RendicionPanel(tk.Frame):
     def _cargar_cheques(self, padre):
         marco = self._tarjeta(padre, "Cheques", "card")
 
-        cols = ("cliente", "numero", "banco", "importe")
+        cols = ("cliente", "numero", "banco", "emision", "cobro", "importe")
         self.tree_cheques = ttk.Treeview(marco, columns=cols, show="headings",
                                          height=4, selectmode="browse")
-        for col, txt, ancho, alinea in (("cliente", "CLIENTE", 320, "w"),
-                                        ("numero", "N.º DE CHEQUE", 160, "w"),
-                                        ("banco", "BANCO", 200, "w"),
-                                        ("importe", "IMPORTE", 150, "e")):
+        for col, txt, ancho, alinea in (("cliente", "CLIENTE", 230, "w"),
+                                        ("numero", "N.º DE CHEQUE", 130, "w"),
+                                        ("banco", "BANCO", 150, "w"),
+                                        ("emision", "F. EMISIÓN", 105, "c"),
+                                        ("cobro", "F. COBRO", 105, "c"),
+                                        ("importe", "IMPORTE", 130, "e")):
             self.tree_cheques.heading(col, text=txt, anchor=alinea)
             self.tree_cheques.column(col, width=ancho, anchor=alinea,
                                      stretch=(col == "cliente"))
@@ -293,10 +293,25 @@ class RendicionPanel(tk.Frame):
             if texto == "Importe":
                 e.bind("<Return>", lambda _e: self._agregar_cheque())
                 var.trace_add("write", lambda *_: self._total_cheques())
-        Btn(alta, text="+ AGREGAR", command=self._agregar_cheque, bg=st.ACENTO,
+
+        # Segunda fila: fechas de emisión y cobro + acciones
+        alta2 = tk.Frame(marco, bg=st.TARJETA)
+        alta2.pack(fill="x", pady=(8, 0))
+        self.var_cheque_emision = tk.StringVar()
+        self.var_cheque_cobro = tk.StringVar()
+        for texto, var, ancho in (("F. emisión", self.var_cheque_emision, 10),
+                                  ("F. cobro", self.var_cheque_cobro, 10)):
+            tk.Label(alta2, text=texto, bg=st.TARJETA, fg=st.TEXTO_SUAVE,
+                     font=(st.FUENTE, 9)).pack(side="left", padx=(0, 4))
+            e = uc.entrada(alta2, var, width=ancho, font=(st.FUENTE, 10))
+            e.pack(side="left", padx=(0, 10), ipady=4)
+            e.bind("<Return>", lambda _e: self._agregar_cheque())
+        tk.Label(alta2, text="dd/mm/aaaa", bg=st.TARJETA, fg=st.TEXTO_SUAVE,
+                 font=(st.FUENTE, 8)).pack(side="left", padx=(0, 14))
+        Btn(alta2, text="+ AGREGAR", command=self._agregar_cheque, bg=st.ACENTO,
             fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=16, pady=7
             ).pack(side="left", padx=(4, 8))
-        self._boton_suave(alta, "Quitar", self._quitar_cheque).pack(side="left")
+        self._boton_suave(alta2, "Quitar", self._quitar_cheque).pack(side="left")
 
         tk.Frame(marco, bg=st.BORDE, height=1).pack(fill="x", pady=(12, 8))
         pie = tk.Frame(marco, bg=st.TARJETA)
@@ -436,10 +451,24 @@ class RendicionPanel(tk.Frame):
             messagebox.showwarning("Cheques", "Cargá un importe válido.",
                                    parent=self)
             return
+        # Fechas opcionales: si vienen, tienen que ser válidas (dd/mm/aaaa)
+        emision_txt = self.var_cheque_emision.get().strip()
+        cobro_txt = self.var_cheque_cobro.get().strip()
+        for texto, etiqueta in ((emision_txt, "emisión"),
+                                (cobro_txt, "cobro")):
+            if texto and not fecha_a_iso(texto):
+                messagebox.showwarning(
+                    "Cheques",
+                    f"La fecha de {etiqueta} no es válida "
+                    f"(usá dd/mm/aaaa).",
+                    parent=self)
+                return
         self.cheques.append({
             "cliente": cliente,
             "numero": self.var_cheque_numero.get().strip(),
             "banco": self.var_cheque_banco.get().strip(),
+            "emision": fecha_a_iso(emision_txt) or "",
+            "cobro": fecha_a_iso(cobro_txt) or "",
             "importe": float(importe),
         })
         self._pintar_cheques()
@@ -447,6 +476,8 @@ class RendicionPanel(tk.Frame):
         self.var_cheque_numero.set("")
         self.var_cheque_banco.set("")
         self.var_cheque_importe.set("")
+        self.var_cheque_emision.set("")
+        self.var_cheque_cobro.set("")
         self.entry_cheque_cliente.focus_set()
 
     def _quitar_cheque(self):
@@ -462,7 +493,10 @@ class RendicionPanel(tk.Frame):
         self.tree_cheques.delete(*self.tree_cheques.get_children())
         for c in self.cheques:
             self.tree_cheques.insert("", "end", values=(
-                c["cliente"], c["numero"], c["banco"], money(c["importe"])))
+                c["cliente"], c["numero"], c["banco"],
+                fecha_corta(c.get("emision") or ""),
+                fecha_corta(c.get("cobro") or ""),
+                money(c["importe"])))
         self.lbl_total_cheques.config(text=money(self._total_cheques()))
 
     def _total_cheques(self):
@@ -504,6 +538,8 @@ class RendicionPanel(tk.Frame):
             "cheques": [{"cliente": str(c["cliente"]),
                          "numero": str(c["numero"]),
                          "banco": str(c["banco"]),
+                         "emision": str(c.get("emision") or ""),
+                         "cobro": str(c.get("cobro") or ""),
                          "importe": float(c["importe"])}
                         for c in self.cheques],
             "billetes": {str(d): parse_entero(self.celdas_billetes[d].get()) or 0
@@ -527,6 +563,8 @@ class RendicionPanel(tk.Frame):
         self.cheques = [{"cliente": str(c.get("cliente", "")),
                          "numero": str(c.get("numero", "")),
                          "banco": str(c.get("banco", "")),
+                         "emision": str(c.get("emision") or ""),
+                         "cobro": str(c.get("cobro") or ""),
                          "importe": float(c.get("importe", 0) or 0)}
                         for c in (datos.get("cheques") or [])
                         if c.get("cliente")]
@@ -606,8 +644,9 @@ class RendicionPanel(tk.Frame):
     def _precargar_click(self):
         if not messagebox.askyesno(
                 "Precargar del día",
-                "Se completan TARJETAS y TRANSFERENCIAS con las ventas del día "
-                "y se limpia lo demás.\n\n¿Continuar?", parent=self):
+                "Se completan DETALLE, TARJETAS y TRANSFERENCIAS con las "
+                "ventas del día y se limpia lo demás.\n\n¿Continuar?",
+                parent=self):
             return
         self._precargar_del_dia(self.var_fecha.get() or self.app.caja_fecha)
 
@@ -632,6 +671,19 @@ class RendicionPanel(tk.Frame):
             if float(r["transferencias"]):
                 self.secciones["transferencias"].set(
                     money(r["transferencias"]))
+            # Detalle por producto: lo que se vendió en el día
+            # (unidad = cantidad vendida, importe = precio unitario).
+            for info in r["por_producto"].values():
+                cant = int(info["cantidad"])
+                if cant <= 0:
+                    continue
+                total = float(info["total"])
+                self.detalle.append({
+                    "tipo": info["nombre"],
+                    "cantidad": cant,
+                    "importe": float(round(total / cant)),
+                })
+            self._pintar_detalle()
 
     def _recargar_si_cambio(self):
         """Si cambiaron la fecha a mano, se trae la rendición de ese día."""

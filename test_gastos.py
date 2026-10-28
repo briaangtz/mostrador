@@ -34,20 +34,20 @@ def exportar(datos):
 
 
 def valor_efectivo(ws):
-    """Valor de la fila EFECTIVO (BILLETES) (rótulo en A, importe en E)."""
+    """Valor de la fila EFECTIVO (BILLETES) (rótulo en A, importe en F)."""
     for f in ws.iter_rows():
         for c in f:
             if c.value == "EFECTIVO (BILLETES)":
-                return ws.cell(row=c.row, column=5).value
+                return ws.cell(row=c.row, column=6).value
     return None
 
 
 def valor_total_tabla(ws):
-    """TOTAL de la tabla de denominaciones (rótulo en E, importe en G)."""
+    """TOTAL de la tabla de denominaciones (rótulo en G, importe en I)."""
     for f in ws.iter_rows():
         for c in f:
-            if c.column == 5 and c.value == "TOTAL":
-                return ws.cell(row=c.row, column=7).value
+            if c.column == 7 and c.value == "TOTAL":
+                return ws.cell(row=c.row, column=9).value
     return None
 
 
