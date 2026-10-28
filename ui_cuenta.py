@@ -7,6 +7,9 @@ from tkinter import messagebox, filedialog
 
 import database as db
 import estilos as st
+import iconos as ic
+import ui_comun as uc
+from widgets_figma import Btn
 
 
 class CuentaPanel(tk.Frame):
@@ -19,96 +22,96 @@ class CuentaPanel(tk.Frame):
         self._construir()
 
     def _construir(self):
+        PX = 28
+        MUTED = st.TEXTO_SUAVE
         # ---------------- Cabecera ----------------
         cab = tk.Frame(self, bg=st.FONDO)
-        cab.pack(fill="x", padx=24, pady=(20, 4))
-        tk.Label(cab, text="MI CUENTA", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 22, "bold")).pack(anchor="w")
+        cab.pack(fill="x", padx=PX, pady=(22, 4))
+        tk.Label(cab, text="Mi cuenta", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
         tk.Label(cab, text="Tu perfil, tu foto y tu contraseña.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                 font=(st.FUENTE, 11)).pack(anchor="w")
+                 bg=st.FONDO, fg=MUTED, font=(st.FUENTE, 11)
+                 ).pack(anchor="w", pady=(2, 0))
 
         cuerpo = tk.Frame(self, bg=st.FONDO)
-        cuerpo.pack(fill="both", expand=True, padx=24, pady=(14, 24))
+        cuerpo.pack(fill="both", expand=True, padx=PX, pady=(14, 24))
+
+        def entrada(parent, var, ancho, **kw):
+            return uc.entrada(parent, var, width=ancho, **kw)
 
         # ---------------- Columna izquierda: foto ----------------
-        marco_foto = st.labelframe(cuerpo, " FOTO DE PERFIL ", padx=16, pady=14)
-        marco_foto.pack(side="left", fill="y", anchor="n")
+        t_foto, marco_foto, _h = uc.tarjeta(cuerpo, "Foto de perfil", "user",
+                                            padx=20, pady=16)
+        t_foto.configure(width=270)
+        t_foto.pack(side="left", anchor="n")
 
-        self.lbl_foto = tk.Label(marco_foto, text="Sin foto\n(Elegí una imagen)",
-                                 bg="#1e293b", fg="#9fb0cc",
-                                 font=(st.FUENTE, 10), width=20, height=9,
-                                 justify="center")
-        self.lbl_foto.pack(pady=(0, 12))
+        self.lbl_foto = tk.Label(marco_foto, text="", bg=st.TARJETA)
+        self.lbl_foto.pack(pady=(4, 14))
 
         self._boton(marco_foto, "Elegir imagen…", st.ACENTO,
                     self._elegir_imagen).pack(fill="x", pady=(0, 6))
-        self._boton(marco_foto, "Quitar foto", "#64748b",
+        self._boton(marco_foto, "Quitar foto", "#e5eaf1",
                     self._quitar_foto).pack(fill="x")
 
         tk.Label(marco_foto,
                  text="Podés elegir una imagen\ndel Escritorio (JPG, PNG,\n"
                       "BMP o ICO).",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 8),
-                 justify="left").pack(anchor="w", pady=(10, 0))
+                 bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9),
+                 justify="left").pack(anchor="w", pady=(12, 0))
 
         # ---------------- Columna derecha: datos ----------------
         der = tk.Frame(cuerpo, bg=st.FONDO)
-        der.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        der.pack(side="left", fill="both", expand=True, padx=(14, 0))
 
-        marco_datos = st.labelframe(der, " TUS DATOS ", padx=16, pady=14)
-        marco_datos.pack(fill="x")
+        t_datos, marco_datos, _h = uc.tarjeta(der, "Tus datos", "doc")
+        t_datos.pack(fill="x")
 
         self.datos = {}
         for clave, etiqueta in (("usuario", "Usuario"),
                                 ("rango", "Rango"),
                                 ("ultimo_acceso", "Último acceso"),
                                 ("creado", "Miembro desde")):
-            fila = tk.Frame(marco_datos, bg=st.FONDO)
-            fila.pack(fill="x", pady=3)
-            tk.Label(fila, text=etiqueta + ":", bg=st.FONDO, fg=st.TEXTO_SUAVE,
-                     font=(st.FUENTE, 10, "bold"), width=16, anchor="w").pack(
-                side="left")
-            lbl = tk.Label(fila, text="—", bg=st.FONDO, fg=st.TEXTO,
-                           font=(st.FUENTE, 11), anchor="w")
-            lbl.pack(side="left", fill="x", expand=True)
+            f, lbl = uc.fila(marco_datos, etiqueta, "—", tam=11)
+            # En esta pantalla el valor va pegado al rótulo (a la izquierda)
+            lbl.pack_forget()
+            lbl.configure(anchor="w", justify="left", font=(st.FUENTE, 11, "bold"))
+            lbl.pack(side="left", padx=(0, 0))
+            f.winfo_children()[0].configure(width=16, fg=MUTED,
+                                            font=(st.FUENTE, 10, "bold"))
             self.datos[clave] = lbl
 
         # ---------------- Cambiar contraseña ----------------
-        marco_seg = st.labelframe(der, " CAMBIAR MI CONTRASEÑA ", padx=16, pady=14)
-        marco_seg.pack(fill="x", pady=(14, 0))
+        t_seg, marco_seg, _h = uc.tarjeta(der, "Cambiar mi contraseña", "lock")
+        t_seg.pack(fill="x", pady=(14, 0))
 
-        fila_seg = tk.Frame(marco_seg, bg=st.FONDO)
+        fila_seg = tk.Frame(marco_seg, bg=st.TARJETA)
         fila_seg.pack(fill="x")
 
         def campo(texto):
-            c = tk.Frame(fila_seg, bg=st.FONDO)
-            tk.Label(c, text=texto, bg=st.FONDO, fg=st.TEXTO_SUAVE,
+            c = tk.Frame(fila_seg, bg=st.TARJETA)
+            tk.Label(c, text=texto, bg=st.TARJETA, fg=MUTED,
                      font=(st.FUENTE, 9, "bold")).pack(anchor="w")
             var = tk.StringVar()
-            tk.Entry(c, textvariable=var, show="•", width=18,
-                     font=(st.FUENTE, 11), relief="solid", bd=1).pack(
-                pady=(3, 0), ipady=3)
+            entrada(c, var, 18, show="•").pack(anchor="w", pady=(3, 0), ipady=5)
             return var, c
 
-        self.var_actual, f1 = campo("Contraseña actual")
-        self.var_nueva, f2 = campo("Nueva contraseña")
-        self.var_repetir, f3 = campo("Repetir nueva contraseña")
+        self.var_actual, f1 = campo("CONTRASEÑA ACTUAL")
+        self.var_nueva, f2 = campo("NUEVA CONTRASEÑA")
+        self.var_repetir, f3 = campo("REPETIR NUEVA CONTRASEÑA")
         f1.pack(side="left")
         f2.pack(side="left", padx=(16, 0))
         f3.pack(side="left", padx=(16, 0))
 
-        cbtn = tk.Frame(fila_seg, bg=st.FONDO)
-        cbtn.pack(side="left", padx=(20, 0), anchor="s")
-        tk.Label(cbtn, text="", bg=st.FONDO).pack()
+        cbtn = tk.Frame(marco_seg, bg=st.TARJETA)
+        cbtn.pack(fill="x", pady=(14, 0))
         self._boton(cbtn, "Guardar contraseña", st.VERDE,
-                    self._cambiar_password).pack(pady=(16, 0))
+                    self._cambiar_password).pack(side="left")
 
         tk.Label(marco_seg,
                  text="Es la contraseña con la que te identificás: se te pide "
                       "para iniciar sesión, cerrar o reabrir una caja.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
-                 ).pack(anchor="w", pady=(8, 0))
+                 bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9),
+                 ).pack(anchor="w", pady=(10, 0))
 
         # ---------------- Cierre de sesión ----------------
         fila_salir = tk.Frame(der, bg=st.FONDO)
@@ -118,9 +121,10 @@ class CuentaPanel(tk.Frame):
 
     # ------------------------------------------------------------- helpers
     def _boton(self, parent, texto, color, comando):
-        return tk.Button(parent, text=texto, command=comando, relief="flat",
-                         bg=color, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-                         padx=14, pady=8, cursor="hand2")
+        gris = color == "#e5eaf1"
+        return Btn(parent, text=texto, command=comando, bg=color,
+                   fg=st.TEXTO if gris else "#ffffff",
+                   font=(st.FUENTE, 10, "bold"), padx=16, pady=9)
 
     # ------------------------------------------------------------- acciones
     def _elegir_imagen(self):
@@ -199,24 +203,21 @@ class CuentaPanel(tk.Frame):
 
     # ------------------------------------------------------------- refresco
     def _pintar_foto(self):
+        """Foto de perfil en círculo; si no hay, un círculo con la inicial."""
         ruta = db.foto_perfil()
-        if not ruta:
-            self.lbl_foto.config(image="", text="Sin foto\n(Elegí una imagen)")
-            self._foto_ref = None
-            return
-        try:
-            from PIL import Image, ImageTk
-            img = Image.open(ruta).convert("RGB")
-            w, h = img.size
-            lado = min(w, h)
-            img = img.crop(((w - lado) // 2, (h - lado) // 2,
-                            (w + lado) // 2, (h + lado) // 2))
-            img = img.resize((160, 160), Image.LANCZOS)
-            foto = ImageTk.PhotoImage(img)
-        except Exception:
-            self.lbl_foto.config(image="", text="No se pudo\nmostrar la foto")
-            self._foto_ref = None
-            return
+        foto = None
+        if ruta:
+            try:
+                foto = ic.foto_circular(ruta, 160)
+            except Exception:
+                foto = None
+        if foto is None:
+            try:
+                u = db.usuario_sesion()
+                inicial = (u["usuario"][:1] or "?").upper()
+            except Exception:
+                inicial = "?"
+            foto = ic.avatar(inicial, 160, "#2B4A7A", "#FFFFFF", 0.42)
         self._foto_ref = foto
         self.lbl_foto.config(image=foto, text="")
 

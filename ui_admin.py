@@ -14,6 +14,8 @@ from tkinter import ttk, messagebox
 import database as db
 import estilos as st
 import permisos as perms
+import ui_comun as uc
+from widgets_figma import Btn, Aviso
 
 # Alfabeto sin caracteres confusos (0/O, 1/l/I) para contraseñas generadas
 ALFABETO = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -41,31 +43,36 @@ class AdminPanel(tk.Frame):
 
     # ------------------------------------------------------------------ UI
     def _construir(self):
+        PX = 28
+        MUTED = st.TEXTO_SUAVE
+        INTERNO = "#F8FAFC"
         # Contenido con scroll: nada queda cortado en pantallas chicas
         contenido = st.contenido_scrollable(self)
 
         cab = tk.Frame(contenido, bg=st.FONDO)
-        cab.pack(fill="x", padx=24, pady=(20, 4))
-        tk.Label(cab, text="PANEL DE ADMINISTRACIÓN", bg=st.FONDO, fg=st.TEXTO,
-                 font=(st.FUENTE, 22, "bold")).pack(anchor="w")
+        cab.pack(fill="x", padx=PX, pady=(22, 4))
+        tk.Label(cab, text="Panel de control", bg=st.FONDO, fg=st.TEXTO,
+                 font=(st.FUENTE, 24, "bold")).pack(anchor="w")
         tk.Label(cab,
                  text="Usuarios, rangos, contraseñas y registro de actividad "
                       "del sistema.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 11)).pack(
-            anchor="w")
+                 bg=st.FONDO, fg=MUTED, font=(st.FUENTE, 11)
+                 ).pack(anchor="w", pady=(2, 0))
 
-        self.lbl_sin_permiso = tk.Label(
-            contenido, text="No tenés permisos para acceder al panel de administración.",
-            bg=st.ROJO_CLARO, fg=st.ROJO, font=(st.FUENTE, 12, "bold"),
-            padx=16, pady=20)
+        self.lbl_sin_permiso = Aviso(contenido)
+        self.lbl_sin_permiso.set(
+            text="No tenés permisos para acceder al panel de administración.")
+
+        def entrada(parent, var, ancho):
+            return uc.entrada(parent, var, width=ancho)
 
         # ---------------- Usuarios ----------------
-        self.marco_usuarios = st.labelframe(contenido, " USUARIOS DEL SISTEMA ",
-                                            padx=12, pady=10)
-        self.marco_usuarios.pack(fill="x", padx=24, pady=(14, 0))
+        self.marco_usuarios, cuerpo_u, _h = uc.tarjeta(
+            contenido, "Usuarios del sistema", "user")
+        self.marco_usuarios.pack(fill="x", padx=PX, pady=(14, 0))
 
         columnas = ("usuario", "rango", "estado", "creado", "acceso")
-        self.tree = ttk.Treeview(self.marco_usuarios, columns=columnas,
+        self.tree = ttk.Treeview(cuerpo_u, columns=columnas,
                                  show="headings", height=5, selectmode="browse")
         for clave, texto, ancho, alin in (
             ("usuario", "Usuario", 170, "w"),
@@ -80,73 +87,76 @@ class AdminPanel(tk.Frame):
         self.tree.pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", self._seleccionar)
 
-        form = tk.Frame(self.marco_usuarios, bg=st.FONDO)
-        form.pack(fill="x", pady=(12, 0))
+        form = tk.Frame(cuerpo_u, bg=st.TARJETA)
+        form.pack(fill="x", pady=(14, 0))
 
         def campo(parent, texto, ancho=16):
-            c = tk.Frame(parent, bg=st.FONDO)
-            tk.Label(c, text=texto, bg=st.FONDO, fg=st.TEXTO_SUAVE,
+            c = tk.Frame(parent, bg=st.TARJETA)
+            tk.Label(c, text=texto, bg=st.TARJETA, fg=MUTED,
                      font=(st.FUENTE, 9, "bold"), justify="left",
-                     wraplength=150).pack(anchor="w")
+                     wraplength=170).pack(anchor="w")
             var = tk.StringVar()
-            tk.Entry(c, textvariable=var, width=ancho, font=(st.FUENTE, 11),
-                     relief="solid", bd=1).pack(pady=(3, 0), ipady=3)
+            entrada(c, var, ancho).pack(anchor="w", pady=(3, 0), ipady=5)
             return var, c
 
         self.var_usuario, f1 = campo(form, "NOMBRE DE USUARIO", 18)
         self.var_password, f2 = campo(form, "CONTRASEÑA (se muestra para poder "
                                             "pasársela al usuario)", 18)
 
-        c_rango = tk.Frame(form, bg=st.FONDO)
-        tk.Label(c_rango, text="RANGO", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+        c_rango = tk.Frame(form, bg=st.TARJETA)
+        tk.Label(c_rango, text="RANGO", bg=st.TARJETA, fg=MUTED,
                  font=(st.FUENTE, 9, "bold")).pack(anchor="w")
         self.combo_rango = ttk.Combobox(c_rango, state="readonly", width=16,
                                         values=perms.RANGOS, font=(st.FUENTE, 11))
-        self.combo_rango.pack(pady=(3, 0), ipady=3)
+        self.combo_rango.pack(pady=(3, 0))
         self.combo_rango.set(perms.RANGOS[-1])
 
-        c_activo = tk.Frame(form, bg=st.FONDO)
-        tk.Label(c_activo, text="ESTADO", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+        c_activo = tk.Frame(form, bg=st.TARJETA)
+        tk.Label(c_activo, text="ESTADO", bg=st.TARJETA, fg=MUTED,
                  font=(st.FUENTE, 9, "bold")).pack(anchor="w")
         self.var_activo = tk.BooleanVar(value=True)
         chk = tk.Checkbutton(c_activo, text="Usuario activo (puede ingresar)",
-                             variable=self.var_activo, bg=st.FONDO, fg=st.TEXTO,
-                             font=(st.FUENTE, 10), anchor="w",
-                             selectcolor="#ffffff", activebackground=st.FONDO)
-        chk.pack(pady=(6, 0), anchor="w")
+                             variable=self.var_activo, bg=st.TARJETA, fg=st.TEXTO,
+                             font=(st.FUENTE, 10), anchor="w", cursor="hand2",
+                             selectcolor="#ffffff", activebackground=st.TARJETA)
+        chk.pack(pady=(8, 0), anchor="w")
 
-        c_ayuda = tk.Frame(form, bg=st.FONDO)
-        tk.Label(c_ayuda, text="", bg=st.FONDO).pack()
-        tk.Label(c_ayuda, text="Seleccioná una fila de la lista\npara editarla.",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
-                 justify="left").pack(pady=(10, 0))
-
-        for w in (f1, f2, c_rango, c_activo, c_ayuda):
-            w.pack(side="left", padx=(0, 16))
+        for w in (f1, f2, c_rango, c_activo):
+            w.pack(side="left", anchor="n", padx=(0, 16))
+        tk.Label(cuerpo_u, text="Seleccioná una fila de la lista para editarla.",
+                 bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9)
+                 ).pack(anchor="w", pady=(8, 0))
 
         # ---------------- Permisos individuales del usuario ----------------
-        self.marco_permisos = st.labelframe(
-            self.marco_usuarios, " PERMISOS DE ESTE USUARIO ", padx=12, pady=8)
-        self.marco_permisos.pack(fill="x", pady=(12, 0))
+        self.marco_permisos, cuerpo_p, _h = uc.tarjeta(
+            cuerpo_u, "Permisos de este usuario", "lock", padx=14, pady=10)
+        self.marco_permisos.pack(fill="x", pady=(14, 0))
+        # tarjeta interna: fondo suave
+        self.marco_permisos.pintar(fondo=INTERNO, exterior=st.TARJETA)
+        for w in (cuerpo_p, _h) + tuple(_h.winfo_children()):
+            try:
+                w.configure(bg=INTERNO)
+            except tk.TclError:
+                pass
 
         self.lbl_nota_permisos = tk.Label(
-            self.marco_permisos, text="", bg=st.FONDO, fg=st.TEXTO_SUAVE,
+            cuerpo_p, text="", bg=INTERNO, fg=MUTED,
             font=(st.FUENTE, 9), justify="left")
         self.lbl_nota_permisos.pack(anchor="w")
 
         self.chk_permisos = {}          # permiso -> (BooleanVar, Checkbutton)
         for nombre_grupo, claves in perms.GRUPOS:
-            tk.Label(self.marco_permisos, text=nombre_grupo, bg=st.FONDO,
+            tk.Label(cuerpo_p, text=nombre_grupo.upper(), bg=INTERNO,
                      fg=st.ACENTO, font=(st.FUENTE, 8, "bold")).pack(
-                anchor="w", pady=(6, 0))
-            fila = tk.Frame(self.marco_permisos, bg=st.FONDO)
+                anchor="w", pady=(8, 0))
+            fila = tk.Frame(cuerpo_p, bg=INTERNO)
             fila.pack(fill="x")
             for i, p in enumerate(claves):
                 var = tk.BooleanVar(value=False)
                 chk = tk.Checkbutton(
                     fila, text=perms.ETIQUETAS.get(p, p), variable=var,
-                    bg=st.FONDO, fg=st.TEXTO, font=(st.FUENTE, 9), anchor="w",
-                    selectcolor="#ffffff", activebackground=st.FONDO,
+                    bg=INTERNO, fg=st.TEXTO, font=(st.FUENTE, 9), anchor="w",
+                    selectcolor="#ffffff", activebackground=INTERNO,
                     padx=2, pady=1, cursor="hand2")
                 fil, col = divmod(i, 3)
                 fila.columnconfigure(col, weight=1)
@@ -156,21 +166,21 @@ class AdminPanel(tk.Frame):
         self.combo_rango.bind("<<ComboboxSelected>>", lambda e: self._pintar_permisos())
         self._pintar_permisos()
 
-        acciones = tk.Frame(self.marco_usuarios, bg=st.FONDO)
-        acciones.pack(fill="x", pady=(12, 0))
+        acciones = tk.Frame(cuerpo_u, bg=st.TARJETA)
+        acciones.pack(fill="x", pady=(14, 0))
 
         self._btn(acciones, "Crear usuario", st.VERDE, self._crear).pack(
             side="left", padx=(0, 6))
         self._btn(acciones, "Guardar cambios", st.ACENTO, self._guardar).pack(
             side="left", padx=(0, 6))
-        self._btn(acciones, "Activar / Desactivar", st.AMBAR,
+        self._btn(acciones, "Activar / Desactivar", "#D97706",
                   self._activar_desactivar).pack(side="left", padx=(0, 6))
         self._btn(acciones, "Cambiar contraseña", "#7c3aed",
                   self._cambiar_password).pack(side="left", padx=(0, 6))
         self._btn(acciones, "Eliminar", st.ROJO, self._eliminar).pack(
             side="left")
 
-        acciones2 = tk.Frame(self.marco_usuarios, bg=st.FONDO)
+        acciones2 = tk.Frame(cuerpo_u, bg=st.TARJETA)
         acciones2.pack(fill="x", pady=(8, 0))
         self._btn(acciones2, "Generar usuario", "#e5eaf1",
                   self._generar_usuario, texto_oscuro=True).pack(
@@ -182,25 +192,24 @@ class AdminPanel(tk.Frame):
                   self._ver_permisos, texto_oscuro=True).pack(side="left")
         tk.Label(acciones2, text="Las contraseñas se guardan cifradas "
                                  "(nunca en texto plano).",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9),
+                 bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9),
                  justify="left", wraplength=260).pack(side="right")
 
         # ---------------- Registro de actividad ----------------
-        self.marco_actividad = st.labelframe(
-            contenido, " REGISTRO DE ACTIVIDAD — QUIÉN HIZÓ QUÉ ", padx=12, pady=10)
-        self.marco_actividad.pack(fill="both", expand=True, padx=24,
+        self.marco_actividad, cuerpo_a, enc = uc.tarjeta(
+            contenido, "Registro de actividad — quién hizo qué", "history")
+        self.marco_actividad.pack(fill="both", expand=True, padx=PX,
                                   pady=(14, 24))
-
-        fila_act = tk.Frame(self.marco_actividad, bg=st.FONDO)
-        fila_act.pack(fill="x")
-        tk.Label(fila_act, text="Últimas acciones del sistema:",
-                 bg=st.FONDO, fg=st.TEXTO_SUAVE, font=(st.FUENTE, 9)).pack(
-            side="left")
-        self._btn(fila_act, "Actualizar", st.ACENTO,
+        self._btn(enc, "Actualizar", st.ACENTO,
                   self._refrescar_actividad).pack(side="right")
+        tk.Label(cuerpo_a, text="Últimas acciones del sistema:",
+                 bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9)
+                 ).pack(anchor="w", pady=(0, 6))
 
+        zona = tk.Frame(cuerpo_a, bg=st.TARJETA)
+        zona.pack(fill="both", expand=True)
         columnas_act = ("fecha", "hora", "usuario", "accion", "detalle")
-        self.tree_act = ttk.Treeview(self.marco_actividad, columns=columnas_act,
+        self.tree_act = ttk.Treeview(zona, columns=columnas_act,
                                      show="headings", height=7,
                                      selectmode="browse")
         for clave, texto, ancho, alin in (
@@ -213,18 +222,16 @@ class AdminPanel(tk.Frame):
             self.tree_act.heading(clave, text=texto)
             self.tree_act.column(clave, width=ancho, anchor=alin,
                                  stretch=(clave == "detalle"))
-        scroll = ttk.Scrollbar(self.marco_actividad, orient="vertical",
+        scroll = ttk.Scrollbar(zona, orient="vertical",
                                command=self.tree_act.yview)
         self.tree_act.configure(yscrollcommand=scroll.set)
-        self.tree_act.pack(side="left", fill="both", expand=True, pady=(8, 0))
-        scroll.pack(side="right", fill="y", pady=(8, 0))
+        scroll.pack(side="right", fill="y")
+        self.tree_act.pack(side="left", fill="both", expand=True)
 
     def _btn(self, parent, texto, color, comando, texto_oscuro=False):
-        return tk.Button(parent, text=texto, command=comando, relief="flat",
-                         bg=color,
-                         fg=st.TEXTO if texto_oscuro else "#ffffff",
-                         font=(st.FUENTE, 9, "bold"), padx=12, pady=7,
-                         cursor="hand2")
+        return Btn(parent, text=texto, command=comando, bg=color,
+                   fg=st.TEXTO if texto_oscuro else "#ffffff",
+                   font=(st.FUENTE, 9, "bold"), padx=14, pady=8)
 
     # ------------------------------------------------------------- acciones
     def _bloqueado(self):
@@ -424,7 +431,8 @@ class AdminPanel(tk.Frame):
                  font=(st.FUENTE, 10), justify="left").pack(anchor="w")
         var = tk.StringVar()
         ent = tk.Entry(cont, textvariable=var, width=26, font=(st.FUENTE, 13),
-                       relief="solid", bd=1)
+                       relief="flat", bd=0, highlightthickness=1,
+                       highlightbackground="#D9E0EC", highlightcolor=st.ACENTO)
         ent.pack(fill="x", pady=(10, 6), ipady=4)
 
         valor = {}
@@ -442,10 +450,10 @@ class AdminPanel(tk.Frame):
 
         fila = tk.Frame(cont, bg=st.FONDO)
         fila.pack(fill="x", pady=(8, 0))
-        tk.Button(fila, text="Cancelar", command=cancelar, relief="flat",
+        Btn(fila, text="Cancelar", command=cancelar, relief="flat",
                   bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 10), padx=14,
                   pady=7, cursor="hand2").pack(side="left")
-        tk.Button(fila, text="Guardar", command=ok, relief="flat", bg=st.VERDE,
+        Btn(fila, text="Guardar", command=ok, relief="flat", bg=st.VERDE,
                   fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=16, pady=7,
                   cursor="hand2").pack(side="right")
 
@@ -501,7 +509,7 @@ class AdminPanel(tk.Frame):
                      font=(st.FUENTE, 10), anchor="w", justify="left").pack(
                 side="left", fill="x", expand=True)
 
-        tk.Button(cont, text="Cerrar", command=dlg.destroy, relief="flat",
+        Btn(cont, text="Cerrar", command=dlg.destroy, relief="flat",
                   bg="#e5eaf1", fg=st.TEXTO, font=(st.FUENTE, 10), padx=18,
                   pady=8, cursor="hand2").pack(anchor="e", pady=(12, 0))
 
@@ -519,11 +527,11 @@ class AdminPanel(tk.Frame):
         if not db.puede("panel_admin"):
             self.marco_usuarios.pack_forget()
             self.marco_actividad.pack_forget()
-            self.lbl_sin_permiso.pack(fill="x", padx=24, pady=40)
+            self.lbl_sin_permiso.pack(fill="x", padx=28, pady=(14, 0))
             return
         self.lbl_sin_permiso.pack_forget()
-        self.marco_usuarios.pack(fill="x", padx=24, pady=(14, 0))
-        self.marco_actividad.pack(fill="both", expand=True, padx=24,
+        self.marco_usuarios.pack(fill="x", padx=28, pady=(14, 0))
+        self.marco_actividad.pack(fill="both", expand=True, padx=28,
                                   pady=(14, 24))
 
         # Listado de usuarios

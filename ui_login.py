@@ -5,6 +5,8 @@ import tkinter as tk
 
 import database as db
 import estilos as st
+import iconos as ic
+from widgets_figma import Btn
 
 
 class LoginDialog(tk.Toplevel):
@@ -13,16 +15,17 @@ class LoginDialog(tk.Toplevel):
     def __init__(self, master):
         super().__init__(master)
         self.resultado = None
+        FONDO = st.SIDEBAR
 
         self.title("Iniciar sesión")
-        self.configure(bg=st.BARRA)
+        self.configure(bg=FONDO)
         self.resizable(False, False)
         # NOTA: no usar transient(master): la raíz está oculta (withdraw)
         # esperando el login y Windows no dibuja una ventana transient
         # cuyo dueño está oculta. La modalidad la da wait_window + grab.
         self.protocol("WM_DELETE_WINDOW", self._salir)
 
-        ancho, alto = 430, 380
+        ancho, alto = 440, 560
         self.geometry(f"{ancho}x{alto}")
         self.update_idletasks()
         x = max(0, (self.winfo_screenwidth() - ancho) // 2)
@@ -31,47 +34,66 @@ class LoginDialog(tk.Toplevel):
         self.lift()
         self.focus_force()
 
-        cont = tk.Frame(self, bg=st.BARRA)
-        cont.pack(fill="both", expand=True, padx=36, pady=(34, 26))
+        cont = tk.Frame(self, bg=FONDO)
+        cont.pack(fill="both", expand=True, padx=44, pady=(40, 30))
 
-        tk.Label(cont, text="MOSTRADOR", bg=st.BARRA, fg="#ffffff",
-                 font=(st.FUENTE, 26, "bold")).pack(anchor="w")
-        tk.Label(cont, text="DOBLE G SRL — inicio de sesión",
-                 bg=st.BARRA, fg="#9fb0cc", font=(st.FUENTE, 10)).pack(
-            anchor="w", pady=(0, 24))
+        # Marca: llama sobre cuadro azul + nombre
+        marca = tk.Frame(cont, bg=FONDO)
+        marca.pack(anchor="w")
+        tk.Label(marca, bg=FONDO, image=ic.cuadro(
+            "flame", 54, "#FFFFFF", st.ACENTO, 13, 30, 1.8)
+        ).pack(side="left", padx=(0, 14))
+        col = tk.Frame(marca, bg=FONDO)
+        col.pack(side="left")
+        tk.Label(col, text="GARRAFAS", bg=FONDO, fg="#ffffff",
+                 font=(st.FUENTE, 22)).pack(anchor="w")
+        tk.Label(col, text="Control de caja diaria", bg=FONDO, fg="#9fb0cc",
+                 font=(st.FUENTE, 10)).pack(anchor="w")
 
-        def campo(texto, mostrar=""):
-            tk.Label(cont, text=texto, bg=st.BARRA, fg="#c7d2e4",
+        tk.Label(cont, text="Iniciar sesión", bg=FONDO, fg="#ffffff",
+                 font=(st.FUENTE, 16, "bold")).pack(anchor="w", pady=(30, 0))
+        tk.Label(cont, text="DOBLE G SRL — ingresá tus datos", bg=FONDO,
+                 fg="#9fb0cc", font=(st.FUENTE, 10), anchor="w", justify="left",
+                 wraplength=350).pack(fill="x", anchor="w", pady=(2, 20))
+
+        def campo(texto, icono, mostrar=""):
+            tk.Label(cont, text=texto, bg=FONDO, fg="#c7d2e4",
                      font=(st.FUENTE, 9, "bold")).pack(anchor="w")
+            fila = tk.Frame(cont, bg="#FFFFFF", highlightthickness=1,
+                            highlightbackground="#2A4376",
+                            highlightcolor=st.ACENTO)
+            fila.pack(fill="x", pady=(5, 16))
+            tk.Label(fila, bg="#FFFFFF", image=ic.icono(icono, 18, "#64748B", 1.8)
+                     ).pack(side="left", padx=(12, 6))
             var = tk.StringVar()
-            ent = tk.Entry(cont, textvariable=var, font=(st.FUENTE, 13),
-                           relief="solid", bd=1, show=mostrar)
-            ent.pack(fill="x", pady=(4, 14), ipady=5)
+            ent = tk.Entry(fila, textvariable=var, font=(st.FUENTE, 13),
+                           relief="flat", bd=0, show=mostrar, bg="#FFFFFF",
+                           fg=st.TEXTO, insertbackground=st.TEXTO,
+                           highlightthickness=0)
+            ent.pack(side="left", fill="x", expand=True, ipady=9, padx=(0, 10))
             return var, ent
 
-        self.var_usuario, self.ent_usuario = campo("USUARIO")
-        self.var_password, self.ent_password = campo("CONTRASEÑA", mostrar="•")
+        self.var_usuario, self.ent_usuario = campo("USUARIO", "user")
+        self.var_password, self.ent_password = campo("CONTRASEÑA", "lock",
+                                                     mostrar="•")
 
-        self.lbl_error = tk.Label(cont, text="", bg=st.BARRA, fg="#fca5a5",
+        self.lbl_error = tk.Label(cont, text="", bg=FONDO, fg="#fca5a5",
                                   font=(st.FUENTE, 9), anchor="w", justify="left")
         self.lbl_error.pack(fill="x")
 
-        fila = tk.Frame(cont, bg=st.BARRA)
-        fila.pack(fill="x", pady=(16, 0))
+        fila = tk.Frame(cont, bg=FONDO)
+        fila.pack(fill="x", pady=(18, 0))
+        fila.columnconfigure(0, weight=1, uniform="b")
+        fila.columnconfigure(1, weight=1, uniform="b")
 
-        btnSalir = tk.Button(fila, text="SALIR", command=self._salir,
-                             relief="flat", bg="#3b4a6b", fg="#ffffff",
-                             font=(st.FUENTE, 11, "bold"), padx=18, pady=11,
-                             cursor="hand2")
-        btnSalir.pack(side="left", fill="x", expand=True)
-
-        btnIngresar = tk.Button(fila, text="INGRESAR", command=self._ingresar,
-                                relief="flat", bg=st.VERDE, fg="#ffffff",
-                                font=(st.FUENTE, 11, "bold"), padx=18, pady=11,
-                                cursor="hand2")
-        btnIngresar.pack(side="left", fill="x", expand=True, padx=(10, 0))
-        btnIngresar.bind("<Enter>", lambda e: btnIngresar.config(bg=st.VERDE_OSCURO))
-        btnIngresar.bind("<Leave>", lambda e: btnIngresar.config(bg=st.VERDE))
+        btn_salir = Btn(fila, text="SALIR", command=self._salir, bg="#3b4a6b",
+                        fg="#ffffff", font=(st.FUENTE, 11, "bold"),
+                        padx=18, pady=12)
+        btn_salir.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        btn_ingresar = Btn(fila, text="INGRESAR", command=self._ingresar,
+                           bg=st.VERDE, fg="#ffffff",
+                           font=(st.FUENTE, 11, "bold"), padx=18, pady=12)
+        btn_ingresar.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         self.bind("<Return>", lambda e: self._ingresar())
         self.bind("<Escape>", lambda e: self._salir())

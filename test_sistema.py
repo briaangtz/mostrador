@@ -987,13 +987,17 @@ cuenta.refresh()
 app._actualizar_foto_nav()
 app.update()
 check(cuenta._foto_ref is not None, "la foto se muestra en Mi cuenta")
+_ref_con_foto = cuenta._foto_ref
 check(app._foto_nav_ref is not None, "la foto se muestra en el lateral")
 db.quitar_foto_perfil()
 check(db.foto_perfil() is None, "la foto de perfil se puede quitar")
 cuenta.refresh()
 app._actualizar_foto_nav()
 app.update()
-check(cuenta._foto_ref is None, "sin foto se vuelve al avatar por defecto")
+# La pantalla nueva pinta el avatar por defecto en el mismo hueco:
+# la imagen mostrada cambia y ya no es la de la foto.
+check(cuenta._foto_ref is not None and cuenta._foto_ref is not _ref_con_foto,
+      "sin foto se vuelve al avatar por defecto")
 os.remove(_foto_tmp)
 
 app.cambiar_caja(db.hoy())
