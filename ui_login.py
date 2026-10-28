@@ -45,7 +45,7 @@ class LoginDialog(tk.Toplevel):
         ).pack(side="left", padx=(0, 14))
         col = tk.Frame(marca, bg=FONDO)
         col.pack(side="left")
-        tk.Label(col, text="GARRAFAS", bg=FONDO, fg="#ffffff",
+        tk.Label(col, text="DOBLE G SRL", bg=FONDO, fg="#ffffff",
                  font=(st.FUENTE, 22)).pack(anchor="w")
         tk.Label(col, text="Control de caja diaria", bg=FONDO, fg="#9fb0cc",
                  font=(st.FUENTE, 10)).pack(anchor="w")
