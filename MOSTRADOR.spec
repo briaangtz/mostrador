@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('icono.ico', '.'), ('iconos.py', '.'), ('widgets_figma.py', '.')],
+    datas=[('icono.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -26,7 +26,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -36,4 +36,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['icono.ico'],
+    manifest='app.manifest',
 )

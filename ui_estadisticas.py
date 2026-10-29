@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox, filedialog
 from datetime import date, timedelta
 
 import database as db
+import errores
 import estilos as st
 import excel
 import iconos as ic
@@ -265,9 +266,12 @@ class EstadisticasPanel(tk.Frame):
         try:
             cantidad, monto = excel.exportar_movimientos(desde, hasta, destino)
         except Exception as exc:
-            messagebox.showerror("Error al exportar",
-                                 f"No se pudo generar el archivo:\n{exc}",
-                                 parent=self)
+            errores.mostrar(
+                "Error al exportar", exc, parent=self,
+                contexto="exportar movimientos a Excel",
+                mensaje="No se pudo generar el archivo de Excel.\n"
+                        "Cerrá el planilla si está abierta y probá de "
+                        "nuevo.")
             return
         db.log_actividad(
             "Exportación a Excel",

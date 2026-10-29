@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 
 import database as db
+import errores
 import estilos as st
 import iconos as ic
 import ui_comun as uc
@@ -148,8 +149,11 @@ class CuentaPanel(tk.Frame):
         try:
             db.set_foto_perfil(ruta)
         except Exception as exc:
-            messagebox.showerror("No se pudo cargar la imagen", str(exc),
-                                 parent=self)
+            errores.mostrar(
+                "No se pudo cargar la imagen", exc, parent=self,
+                contexto="cargar foto de perfil",
+                mensaje="No se pudo cargar la imagen.\n"
+                        "Probá con un PNG o JPG más liviano.")
             return
         self.refresh()
         self.app.refrescar_todo()      # actualiza la foto del lateral

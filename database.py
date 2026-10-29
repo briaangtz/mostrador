@@ -9,8 +9,10 @@ import os
 import sys
 import sqlite3
 import hashlib
+import hmac
 import secrets
 import json
+import time
 from contextlib import contextmanager
 from datetime import datetime, date
 
@@ -125,36 +127,68 @@ def set_fondo_inicial(valor):
 
 # ---------------------------------------------------------------------------
 # Contraseña (guardada con sal, nunca en texto plano)
+#
+# Formato actual:  pbkdf2_sha256$<iteraciones>$<sal>$<hash>   (PBKDF2-HMAC-SHA256)
+# Formato viejo:   <sal>$<sha256(sal+texto)>                  (se acepta y se
+#                  migra solo, en el próximo inicio de sesión)
 # ---------------------------------------------------------------------------
 
+KDF_ITERACIONES = 600_000          # recomendación OWASP para PBKDF2-SHA256
+HASH_PREFIJO = "pbkdf2_sha256"
+
+
 def _hash(sal, texto):
+    """Hash viejo (una sola ronda): solo para validar/claves ya guardadas."""
     return hashlib.sha256((sal + texto).encode("utf-8")).hexdigest()
 
 
+def _kdf(texto, sal, iteraciones):
+    return hashlib.pbkdf2_hmac("sha256", texto.encode("utf-8"),
+                               sal.encode("utf-8"), iteraciones).hex()
+
+
 def set_password(nueva):
-    sal = secrets.token_hex(8)
-    set_config("password", sal + "$" + _hash(sal, nueva))
+    set_config("password", _nuevo_hash(nueva))
 
 
 def check_password(intento):
-    guardado = get_config("password")
-    if not guardado or "$" not in guardado:
-        return False
-    sal, h = guardado.split("$", 1)
-    return _hash(sal, intento) == h
+    return _password_ok(get_config("password"), intento)
 
 
-def _nuevo_hash(texto):
-    """Genera un hash nuevo con sal aleatoria (formato sal$hash)."""
-    sal = secrets.token_hex(8)
-    return sal + "$" + _hash(sal, texto)
+def _nuevo_hash(texto, iteraciones=KDF_ITERACIONES):
+    """Hash nuevo con sal aleatoria y PBKDF2 (fuerza bruta offline lenta)."""
+    sal = secrets.token_hex(16)
+    return "%s$%d$%s$%s" % (HASH_PREFIJO, iteraciones, sal,
+                            _kdf(texto, sal, iteraciones))
+
+
+def _es_legacy(guardado):
+    """¿Está en el formato viejo (sha256 de una sola ronda)?"""
+    return bool(guardado) and not str(guardado).startswith(HASH_PREFIJO + "$")
 
 
 def _password_ok(guardado, intento):
+    """Valida contra el formato nuevo o el viejo, en tiempo constante."""
     if not guardado or "$" not in guardado:
         return False
-    sal, h = guardado.split("$", 1)
-    return _hash(sal, intento) == h
+    partes = str(guardado).split("$")
+    if len(partes) == 4 and partes[0] == HASH_PREFIJO:
+        try:
+            calc = _kdf(intento or "", partes[2], int(partes[1]))
+        except (ValueError, TypeError):
+            return False
+        return hmac.compare_digest(calc, partes[3])
+    if len(partes) == 2:                       # legacy: sal$sha256
+        return hmac.compare_digest(_hash(partes[0], intento or ""), partes[1])
+    return False
+
+
+def es_password_inicial(guardado):
+    """¿La contraseña guardada sigue siendo la de fábrica ('admin')?
+
+    Se usa para forzar el cambio en el primer inicio de sesión (no
+    dejar credenciales por defecto instaladas)."""
+    return _password_ok(guardado, PASSWORD_POR_DEFECTO)
 
 
 # ---------------------------------------------------------------------------
@@ -303,14 +337,65 @@ def eliminar_usuario(uid):
                   f"{u['usuario']} — rango {u['rango']}")
 
 
+# ---------------------------------------------------------------------------
+# Freno de intentos de login (hallazgo AppSec #11)
+#
+# Cada intento fallido consecutivo del MISMO usuario suma una pausa
+# progresiva (0,5 s · n, tope 3 s) antes de revalidar. Un login correcto
+# pone el contador en cero. Es solo memoria de proceso: al reiniciar el
+# programa vuelve a arrancar, pero alcanza para frenar fuerza bruta
+# guiada mientras la sesión de la ventana está abierta.
+# ---------------------------------------------------------------------------
+
+_INTENTOS_FALLIDOS = {}          # usuario en minúsculas -> fallos seguidos
+_TOPE_ESPERA = 3.0               # segundos de pausa máxima
+_TOPE_LOG = 10                   # a partir de acá, se deja constancia
+
+
+def _esperar_si_fuerza_bruta(usuario):
+    """Pausa progresiva si ese usuario viene fallando seguido."""
+    clave = (usuario or "").strip().lower()
+    n = _INTENTOS_FALLIDOS.get(clave, 0)
+    if n:
+        time.sleep(min(0.5 * n, _TOPE_ESPERA))
+
+
+def _sumar_fallo(usuario):
+    clave = (usuario or "").strip().lower()
+    if not clave:
+        return
+    n = _INTENTOS_FALLIDOS[clave] = _INTENTOS_FALLIDOS.get(clave, 0) + 1
+    if n == _TOPE_LOG:
+        log_actividad("Posible fuerza bruta: intentos fallidos seguidos",
+                      f"Usuario: {clave} ({n} seguidos)",
+                      {"id": None, "usuario": "sistema"})
+
+
+def limpiar_fallos(usuario):
+    """Reinicia el contador (login correcto o reinicio de la app)."""
+    clave = (usuario or "").strip().lower()
+    _INTENTOS_FALLIDOS.pop(clave, None)
+
+
 def iniciar_sesion(usuario, password):
     """Valida credenciales, guarda la sesión y devuelve el usuario, o None."""
+    _esperar_si_fuerza_bruta(usuario)
     u = validar_credenciales(usuario, password)
     if not u:
+        _sumar_fallo(usuario)
         log_actividad("Inicio de sesión rechazado",
                       f"Usuario intentado: {(usuario or '').strip()}",
                       {"id": None, "usuario": "sistema"})
         return None
+    limpiar_fallos(usuario)
+    # Migración transparente: quien tenía el hash viejo (sha256 de una
+    # sola ronda) pasa a PBKDF2 apenas entra, sin que tenga que hacer nada.
+    if _es_legacy(u["password"]):
+        with db() as con:
+            con.execute("UPDATE usuarios SET password = ? WHERE id = ?",
+                        (_nuevo_hash(password), u["id"]))
+        log_actividad("Contraseña actualizada al formato nuevo",
+                      f"Usuario: {u['usuario']}", u)
     set_config("sesion", str(u["id"]))
     with db() as con:
         con.execute("UPDATE usuarios SET ultimo_acceso = ? WHERE id = ?",
@@ -1107,16 +1192,13 @@ def _items_de(con, venta_ids):
     if not ids:
         return {}
     comodines = ",".join("?" * len(ids))
-    filas = con.execute(
-        f"""
-        SELECT i.*, p.nombre AS producto
-        FROM venta_items i
-        LEFT JOIN productos p ON p.id = i.producto_id
-        WHERE i.venta_id IN ({comodines})
-        ORDER BY i.id
-        """,
-        ids,
-    ).fetchall()
+    # Falso positivo de bandit (B608): 'comodines' es solo "?" repetidos y
+    # los IDs van como parámetros (2.º argumento de execute), nunca como
+    # texto dentro de la consulta. Por eso la línea lleva "# nosec B608".
+    consulta = (f"SELECT i.*, p.nombre AS producto FROM venta_items i "
+                f"LEFT JOIN productos p ON p.id = i.producto_id "
+                f"WHERE i.venta_id IN ({comodines}) ORDER BY i.id")  # nosec B608
+    filas = con.execute(consulta, ids).fetchall()
     salida = {}
     for fila in filas:
         salida.setdefault(fila["venta_id"], []).append(dict(fila))
@@ -1130,7 +1212,7 @@ def _pagos_de(con, venta_ids):
         return {}
     comodines = ",".join("?" * len(ids))
     filas = con.execute(
-        f"SELECT * FROM venta_pagos WHERE venta_id IN ({comodines}) ORDER BY id",
+        f"SELECT * FROM venta_pagos WHERE venta_id IN ({comodines}) ORDER BY id",  # nosec B608
         ids,
     ).fetchall()
     salida = {}
@@ -1379,18 +1461,22 @@ def eliminar_ventas(venta_ids):
     if not ids:
         return 0
     comodines = ",".join("?" * len(ids))
+    # Falso positivo de bandit (B608): placeholders "?" + IDs por parámetro
+    # (enteros, forzados con int() en el llamador).
     with db() as con:
         filas = con.execute(
-            f"SELECT * FROM ventas WHERE id IN ({comodines})", ids
+            f"SELECT * FROM ventas WHERE id IN ({comodines})",  # nosec B608
+            ids
         ).fetchall()
         borradas = [f["id"] for f in filas]
         items = _items_de(con, borradas)
         pagos = _pagos_de(con, borradas)
-        con.execute(f"DELETE FROM venta_items WHERE venta_id IN ({comodines})",
+        con.execute(f"DELETE FROM venta_items WHERE venta_id IN ({comodines})",  # nosec B608
                     ids)
-        con.execute(f"DELETE FROM venta_pagos WHERE venta_id IN ({comodines})",
+        con.execute(f"DELETE FROM venta_pagos WHERE venta_id IN ({comodines})",  # nosec B608
                     ids)
-        con.execute(f"DELETE FROM ventas WHERE id IN ({comodines})", ids)
+        con.execute(f"DELETE FROM ventas WHERE id IN ({comodines})",  # nosec B608
+                    ids)
 
     for f in filas:
         ticket = _armar_ticket(f, items.get(f["id"], []), pagos.get(f["id"], []))

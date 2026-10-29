@@ -1,4 +1,10 @@
 # Dependencias del programa (Python 3.10+)
 # Instalar con:  python -m pip install -r requirements.txt
-openpyxl>=3.1    # exportación de transferencias a Excel (.xlsx)
-pillow>=10.0     # foto de perfil e ícono del programa
+#
+# Versiones FIJAS a propósito (hallazgo AppSec #5): con ">=x" una
+# instalación nueva bajaría cualquier versión futura, sin probar. El
+# mismo código con otras versiones puede romper o cambiar comportamiento
+# en una PC de la clientela. Para subir de versión: probar, actualizar
+# acá, correr las 4 suites y recién ahí publicar.
+openpyxl==3.1.5  # exportación de transferencias a Excel (.xlsx)
+pillow==13.0.0   # foto de perfil e ícono del programa (12.3.0 tenía 39 CVE)

@@ -18,6 +18,7 @@ from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
 
 import database as db
+import errores
 import estilos as st
 import excel
 import ui_comun as uc
@@ -629,8 +630,12 @@ class RendicionPanel(tk.Frame):
         try:
             excel.exportar_rendicion(datos, destino)
         except Exception as exc:
-            messagebox.showerror("No se pudo generar la planilla",
-                                 f"Ocurrió un error:\n{exc}", parent=self)
+            errores.mostrar(
+                "No se pudo generar la planilla", exc, parent=self,
+                contexto="exportar planilla de rendición",
+                mensaje="No se pudo generar la planilla de rendición.\n"
+                        "Cerrá el archivo si está abierto en Excel y "
+                        "probá de nuevo.")
             return
         db.log_actividad("Planilla de rendición",
                          f"Rendición del {db.fecha_larga(fecha)} — {destino}")

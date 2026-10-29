@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog
 
 import database as db
+import errores
 import estilos as st
 import iconos as ic
 from util import money, parse_numero, fecha_larga, fecha_corta
@@ -316,8 +317,12 @@ class InicioPanel(tk.Frame):
             AbrirCajaDialog(self.app, caja,
                             on_abierto=lambda: self.app.refrescar_todo())
         except Exception as e:
-            messagebox.showerror("No se pudo abrir la caja", str(e),
-                                 parent=self)
+            errores.mostrar(
+                "No se pudo abrir la caja", e, parent=self,
+                contexto="abrir la caja del día",
+                mensaje="No se pudo abrir la caja del día.\n"
+                        "Probá de nuevo; si sigue fallando, reiniciá el "
+                        "programa.")
 
     def _reabrir_caja(self):
         """Reabre la caja del día si está cerrada (solo DESARROLLADOR,
@@ -370,8 +375,11 @@ class InicioPanel(tk.Frame):
                 parent=self)
             self.app.refrescar_todo()
         except Exception as e:
-            messagebox.showerror("No se pudo reabrir la caja", str(e),
-                                 parent=self)
+            errores.mostrar(
+                "No se pudo reabrir la caja", e, parent=self,
+                contexto="reabrir la caja",
+                mensaje="No se pudo reabrir la caja.\n"
+                        "La caja sigue cerrada; probá de nuevo.")
 
     def _abrir_cierre(self):
         if not db.puede("cerrar_caja"):
@@ -414,7 +422,11 @@ class InicioPanel(tk.Frame):
                     billetes={}, n_transferencias=0,
                 )
             except Exception as e:
-                messagebox.showerror("No se pudo cerrar", str(e), parent=self)
+                errores.mostrar(
+                    "No se pudo cerrar", e, parent=self,
+                    contexto="guardar el cierre de caja",
+                    mensaje="No se pudo guardar el cierre.\n"
+                            "La caja NO se cerró: probá de nuevo.")
                 return
             try:
                 db.respaldar("cierre de caja")
@@ -698,8 +710,11 @@ class AbrirCajaDialog(tk.Toplevel):
         try:
             db.registrar_apertura(self.caja["id"], monto)
         except Exception as e:
-            messagebox.showerror("No se pudo abrir la caja", str(e),
-                                 parent=self)
+            errores.mostrar(
+                "No se pudo abrir la caja", e, parent=self,
+                contexto="registrar apertura de caja",
+                mensaje="No se pudo registrar la apertura de la caja.\n"
+                        "Los datos cargados se conservan; probá de nuevo.")
             return
         if self.on_abierto:
             self.on_abierto()

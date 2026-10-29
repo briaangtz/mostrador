@@ -11,6 +11,7 @@ Hace todo de una:
 Uso: doble clic en "Publicar actualización.bat".
 """
 
+import hashlib
 import os
 import re
 import subprocess
@@ -67,16 +68,44 @@ def main():
     escribir_version(nueva)
     print("version.py -> %s\n" % nueva)
 
-    # 1) Compilar los dos ejecutables
+    # 1) Compilar los dos ejecutables.
+    #    --manifest app.manifest: sin elevación (asInvoker) y texto nítido
+    #    en pantallas de alta resolución (hallazgo AppSec #6).
+    #    --noupx: NO comprimir con UPX: los antivirus suelen tomar los
+    #    binarios UPX como sospechosos (falsos positivos en la clientela).
     correr([sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile",
-            "--windowed", "--name", "MOSTRADOR", "--icon", "icono.ico",
+            "--windowed", "--noupx", "--name", "MOSTRADOR",
+            "--icon", "icono.ico", "--manifest", "app.manifest",
             "--add-data", "icono.ico;.", "main.py"], cwd=RAIZ)
     correr([sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile",
-            "--windowed", "--name", "Actualizador", "actualizador.py"], cwd=RAIZ)
+            "--windowed", "--noupx", "--name", "Actualizador",
+            "--manifest", "app.manifest", "actualizador.py"], cwd=RAIZ)
+
+    # 1b) Revisión de las mitigaciones PE (ASLR/DEP) antes de publicar
+    correr([sys.executable, os.path.join("tools", "pe_check.py"),
+            os.path.join(DIST, "MOSTRADOR.exe"),
+            os.path.join(DIST, "Actualizador.exe")], cwd=RAIZ)
 
     # 2) version.txt que viaja junto a la instalación
     with open(os.path.join(DIST, "version.txt"), "w", encoding="utf-8") as f:
         f.write(nueva + "\n")
+
+    # 2b) SHA256SUMS.txt: el actualizador EXIGE este asset para instalar
+    #     (sin él, o con el hash distinto, no reemplaza el programa).
+    def _sha256(ruta):
+        h = hashlib.sha256()
+        with open(ruta, "rb") as f:
+            for bloque in iter(lambda: f.read(1 << 20), b""):
+                h.update(bloque)
+        return h.hexdigest()
+
+    nombres = ("MOSTRADOR.exe", "Actualizador.exe")
+    lineas = ["%s  %s" % (_sha256(os.path.join(DIST, n)), n)
+              for n in nombres if os.path.exists(os.path.join(DIST, n))]
+    with open(os.path.join(DIST, "SHA256SUMS.txt"), "w",
+              encoding="ascii", newline="\n") as f:
+        f.write("\n".join(lineas) + "\n")
+    hash_programa = lineas[0].split()[0] if lineas else "?"
 
     # 3) Guardar TODOS los cambios en el repo del código (privado)
     try:
@@ -88,13 +117,16 @@ def main():
 
     # 4) Crear la release en el repo público
     tag = "v" + nueva
+    notas = ("Versión %s de MOSTRADOR.\n\n"
+             "SHA256 de MOSTRADOR.exe: `%s`\n" % (nueva, hash_programa))
     correr(["gh", "release", "create", tag,
             os.path.join("dist", "MOSTRADOR.exe"),
             os.path.join("dist", "Actualizador.exe"),
             os.path.join("dist", "version.txt"),
+            os.path.join("dist", "SHA256SUMS.txt"),
             "--repo", RELEASES_REPO,
             "--title", "MOSTRADOR %s" % nueva,
-            "--notes", "Versión %s de MOSTRADOR." % nueva], cwd=RAIZ)
+            "--notes", notas], cwd=RAIZ)
 
     print("\nLISTO: publicada la versión %s." % nueva)
     print("Las PC se actualizan solas la próxima vez que abran el programa.")

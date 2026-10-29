@@ -6,10 +6,13 @@ Va colocado junto a ``MOSTRADOR.exe`` (compilado como ``Actualizador.exe``).
 Al abrirlo:
 
   1. Consulta en GitHub cuál es la última versión publicada.
-  2. Si hay una más nueva, descarga SOLO el ejecutable del programa.
-  3. Respalda ``garrafas.db`` en ``respaldos/`` (por las dudas).
-  4. Reemplaza ``MOSTRADOR.exe``.
-  5. Abre el programa.
+  2. Verifica la INTEGRIDAD de la descarga contra ``SHA256SUMS.txt``
+     (asset de la release). Sin ese archivo o con el hash distinto,
+     NO instala nada y se queda la versión actual.
+  3. Si hay una más nueva, descarga SOLO el ejecutable del programa.
+  4. Respalda ``garrafas.db`` en ``respaldos/`` (por las dudas).
+  5. Reemplaza ``MOSTRADOR.exe``.
+  6. Abre el programa.
 
 La base de datos, los respaldos y las fotos NUNCA forman parte de la
 actualización: se quedan intactos en cada PC.
@@ -19,6 +22,8 @@ no al programa directamente.
 """
 
 import ctypes
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -26,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -34,6 +40,7 @@ EXE_NAME = "MOSTRADOR.exe"
 VERSION_FILE = "version.txt"
 LAST_INSTALLED_FILE = "last_installed.txt"
 LOG_FILE = "actualizaciones.log"
+SUMS_FILE = "SHA256SUMS.txt"
 
 API_URL = "https://api.github.com/repos/" + RELEASES_REPO + "/releases/latest"
 TIMEOUT = 20
@@ -117,21 +124,75 @@ def es_mas_nueva(remota, local):
     return a > b
 
 
+def url_segura(url):
+    """¿La URL es https y de un host de confianza (GitHub)?
+
+    Bandit marca todo ``urlopen`` (B310). Acá no alcanza con confiar en la
+    API: la URL de descarga viene de la respuesta JSON, así que se valida
+    esquema y host ANTES de tocar la red. Si mañana GitHub sirviera las
+    descargas de otro host, hay que sumarlo a esta lista.
+    """
+    u = urllib.parse.urlparse(str(url))
+    host = (u.hostname or "").lower()
+    return (u.scheme == "https"
+            and (host == "github.com"
+                 or host.endswith(".github.com")
+                 or host.endswith(".githubusercontent.com")))
+
+
 def pedir_json(url):
+    if not url_segura(url):
+        raise ValueError("URL no permitida: %s" % url)
     req = urllib.request.Request(url, headers={
         "User-Agent": "MOSTRADOR-Actualizador",
         "Accept": "application/vnd.github+json",
     })
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:   # nosec B310
         return json.loads(r.read().decode("utf-8"))
 
 
 def bajar(url, destino):
+    if not url_segura(url):
+        raise ValueError("URL no permitida: %s" % url)
     req = urllib.request.Request(
         url, headers={"User-Agent": "MOSTRADOR-Actualizador"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_DESCARGA) as r, \
-            open(destino, "wb") as f:
+    r = urllib.request.urlopen(req, timeout=TIMEOUT_DESCARGA)   # nosec B310
+    with r, open(destino, "wb") as f:
         shutil.copyfileobj(r, f)
+
+
+def bajar_texto(url):
+    """Descarga un archivo chico como texto (SHA256SUMS.txt)."""
+    if not url_segura(url):
+        raise ValueError("URL no permitida: %s" % url)
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "MOSTRADOR-Actualizador"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:   # nosec B310
+        return r.read().decode("utf-8", "replace")
+
+
+def sha256_de(ruta):
+    """Hash SHA-256 del contenido de un archivo (en bloques de 1 MB)."""
+    h = hashlib.sha256()
+    with open(ruta, "rb") as f:
+        for bloque in iter(lambda: f.read(1 << 20), b""):
+            h.update(bloque)
+    return h.hexdigest()
+
+
+def hash_esperado(texto_sums, nombre):
+    """Devuelve el hash de 'nombre' dentro de un SHA256SUMS.txt, o None.
+
+    Formato admitido (estilo coreutils):  <hex>  <archivo>
+    también acepta el modo binario:      <hex> *<archivo>
+    """
+    objetivo = nombre.lower()
+    for linea in texto_sums.splitlines():
+        partes = linea.split()
+        if len(partes) >= 2 and re.fullmatch(r"[0-9a-fA-F]{64}", partes[0]):
+            if partes[-1].lstrip("*").lower() == objetivo:
+                return partes[0].lower()
+    return None
 
 
 def respaldar_base():
@@ -194,9 +255,35 @@ def actualizar():
         log("Sin novedades (instalada %s, remota %s)." % (last_installed, remota))
         return False
 
-    asset = buscar_asset(rel.get("assets") or [])
+    assets = rel.get("assets") or []
+    asset = buscar_asset(assets)
     if not asset:
         log("La versión nueva no trae el ejecutable.")
+        return False
+
+    # --- Integridad: sin SHA256SUMS.txt (o con hash distinto) NO se instala ---
+    sums = next((a for a in assets
+                 if str(a.get("name", "")).lower() == SUMS_FILE.lower()), None)
+    if not sums:
+        log("La release no trae %s: actualizacion CANCELADA por seguridad."
+            % SUMS_FILE)
+        aviso("MOSTRADOR",
+              "No se pudo verificar la integridad de la actualización.\n"
+              "Se mantiene la versión actual.", 0x30)
+        return False
+    try:
+        texto_sums = bajar_texto(sums["browser_download_url"])
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        log("No se pudo leer %s (%s): actualizacion cancelada."
+            % (SUMS_FILE, e))
+        return False
+    esperado = hash_esperado(texto_sums, EXE_NAME)
+    if not esperado:
+        log("%s no incluye %s: actualizacion CANCELADA."
+            % (SUMS_FILE, EXE_NAME))
+        aviso("MOSTRADOR",
+              "No se pudo verificar la integridad de la actualización.\n"
+              "Se mantiene la versión actual.", 0x30)
         return False
 
     log("Actualizando %s -> %s" % (local, remota))
@@ -204,11 +291,37 @@ def actualizar():
     nuevo = os.path.join(BASE, EXE_NAME + ".nuevo")
     try:
         bajar(asset["browser_download_url"], temp)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        log("Error descargando: %s" % e)
+        for p in (temp, nuevo):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return False
+
+    # El binario descargado tiene que coincidir byte a byte con el hash publicado
+    obtenido = sha256_de(temp)
+    if not hmac.compare_digest(esperado, obtenido.lower()):
+        log("Hash de %s NO coincide (esperado %s…, obtenido %s…): "
+            "actualizacion CANCELADA."
+            % (EXE_NAME, esperado[:12], obtenido[:12]))
+        try:
+            os.remove(temp)
+        except OSError:
+            pass
+        aviso("MOSTRADOR",
+              "La descarga no coincide con el hash publicado.\n"
+              "Actualización cancelada; se mantiene la versión actual.",
+              0x30)
+        return False
+
+    try:
         if os.path.exists(nuevo):
             os.remove(nuevo)
         os.replace(temp, nuevo)
-    except (urllib.error.URLError, OSError) as e:
-        log("Error descargando: %s" % e)
+    except OSError as e:
+        log("No se pudo preparar el reemplazo: %s" % e)
         for p in (temp, nuevo):
             try:
                 os.remove(p)

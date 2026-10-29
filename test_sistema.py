@@ -66,6 +66,19 @@ check(len(db.productos()) == 10,
 check(db.check_password("admin"), "contraseña por defecto 'admin' funciona")
 check(not db.check_password("mala"), "contraseña incorrecta rechazada")
 
+# Seguridad de contraseñas (hallazgo AppSec #3): PBKDF2 + compatibilidad
+import hashlib as _hashlib
+check(db.get_config("password").startswith("pbkdf2_sha256$"),
+      "la contraseña maestra se guarda con PBKDF2 (no sha256 de una ronda)")
+check(db.es_password_inicial(db.get_config("password")),
+      "recién instalada, la contraseña maestra sigue siendo la inicial")
+_sal_l = "salita1234567890"
+_legacy = _sal_l + "$" + _hashlib.sha256(
+    (_sal_l + "zapas77").encode("utf-8")).hexdigest()
+check(db._password_ok(_legacy, "zapas77")
+      and not db._password_ok(_legacy, "zapata77"),
+      "las contraseñas viejas (sha256 + sal) siguen validando")
+
 # ---------------- Usuarios, rangos, sesión y permisos ----------------
 usuarios = db.listar_usuarios()
 check(len(usuarios) == 1 and usuarios[0]["usuario"] == "admin"
@@ -86,10 +99,33 @@ check(db.puede("panel_admin") and db.puede("configuracion")
       and db.puede("reabrir_caja"),
       "DESARROLLADOR tiene todos los permisos administrativos")
 
+# Freno de intentos fallidos (hallazgo AppSec #11)
+import time as _time
+db.limpiar_fallos("admin")                       # medir desde cero
+check(db.iniciar_sesion("admin", "mala1") is None,
+      "1.er intento fallido rechazado (sin freno todavía)")
+_t0 = _time.perf_counter()
+check(db.iniciar_sesion("admin", "mala2") is None,
+      "2.º intento fallido seguido rechazado")
+_dt = _time.perf_counter() - _t0
+check(_dt >= 0.45,
+      f"el 2.º fallo seguido se frena (~0,5 s; tardó {_dt:.2f} s)")
+check(db.iniciar_sesion("admin", "admin") is not None,
+      "aun con el freno activo, la contraseña correcta entra")
+check("admin" not in db._INTENTOS_FALLIDOS,
+      "el login correcto reinicia el contador de fallos")
+db.limpiar_fallos("admin")
+
 db.crear_usuario("operario", "clave123", "USUARIO")
 u_op = db.usuario_por_nombre("operario")
 check(u_op is not None and u_op["rango"] == "USUARIO",
       "alta de usuario con rango USUARIO")
+check(u_op["password"].startswith("pbkdf2_sha256$"),
+      "los usuarios nuevos guardan la contraseña con PBKDF2")
+check(not db.es_password_inicial(u_op["password"]),
+      "una contraseña propia no se confunde con la inicial")
+check(db.es_password_inicial(db.usuario_por_nombre("admin")["password"]),
+      "la contraseña de admin sigue siendo la inicial (habrá que cambiarla)")
 check(not perms.puede("panel_admin", "USUARIO")
       and not perms.puede("configuracion", "USUARIO")
       and not perms.puede("estadisticas", "USUARIO")
@@ -278,7 +314,29 @@ check(len(db.historial_cierres()) == 1, "al cerrar de nuevo vuelve al historial"
 # Cambio de contraseña
 db.set_password("nueva123")
 check(db.check_password("nueva123"), "cambio de contraseña funciona")
+check(db.get_config("password").startswith("pbkdf2_sha256$"),
+      "la contraseña maestra nueva se guarda con PBKDF2")
 db.set_password("admin")
+
+# Un hash viejo (sha256 de una sola ronda) se migra solo, en el próximo login
+_uop = db.usuario_por_nombre("operario")
+_sal_o = "saldeoperario1234"
+_legacy_o = _sal_o + "$" + _hashlib.sha256(
+    (_sal_o + "clave123").encode("utf-8")).hexdigest()
+with db.db() as _con:
+    _con.execute("UPDATE usuarios SET password = ? WHERE id = ?",
+                 (_legacy_o, _uop["id"]))
+check(db._es_legacy(db.usuario_por_nombre("operario")["password"])
+      and db._password_ok(db.usuario_por_nombre("operario")["password"],
+                          "clave123"),
+      "el hash viejo puesto a mano sigue validando (compatibilidad)")
+check(db.iniciar_sesion("operario", "clave123") is not None,
+      "la contraseña vieja deja entrar igual")
+check(not db._es_legacy(db.usuario_por_nombre("operario")["password"]),
+      "al entrar, el hash viejo se migra a PBKDF2 solo")
+db.iniciar_sesion("admin", "admin")      # la prueba seguía como DESARROLLADOR
+check(db.usuario_sesion()["usuario"] == "admin",
+      "se restaura la sesión del DESARROLLADOR para lo que sigue")
 
 # ---------------------------------------------------------------- interfaz
 import tkinter as tk
@@ -292,6 +350,30 @@ mb.showinfo = lambda *a, **k: None
 mb.showwarning = lambda *a, **k: ERRORES.append(a)
 mb.showerror = lambda *a, **k: ERRORES.append(a)
 mb.askyesno = lambda *a, **k: True
+
+# Errores inesperados: cartel genérico + detalle al archivo (AppSec #10)
+import errores as _er
+_er.RUTA_LOG = os.path.join(tempfile.gettempdir(), "errores_test.log")
+if os.path.exists(_er.RUTA_LOG):
+    os.remove(_er.RUTA_LOG)
+ERRORES.clear()
+try:
+    raise _sqlite.OperationalError(
+        "no such table: tabla_secreta_ruta C:\\Users\\dueno\\Documents")
+except Exception as _exc:
+    _er.mostrar("Prueba de error", _exc, contexto="prueba unitaria")
+check(len(ERRORES) == 1, "un error inesperado muestra exactamente un cartel")
+_cartel = str(ERRORES[0])
+check("tabla_secreta" not in _cartel and "C:\\Users" not in _cartel,
+      "el cartel NO filtra el detalle interno de la excepción")
+check("errores.log" in _cartel,
+      "el cartel indica al usuario dónde está el detalle")
+check(os.path.exists(_er.RUTA_LOG), "el detalle se guardó en errores.log")
+with open(_er.RUTA_LOG, encoding="utf-8") as _f:
+    _detalle = _f.read()
+check("tabla_secreta" in _detalle and "Traceback" in _detalle,
+      "errores.log guarda el error completo con la traza")
+ERRORES.clear()
 
 # El login del cierre/reapertura pide contraseña: se responde con la de admin
 import tkinter.simpledialog as _sd

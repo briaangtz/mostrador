@@ -1,0 +1,75 @@
+# CI de seguridad: corre en cada push/PR y antes de cada tag.
+#
+# Qué controla (auditoría AppSec, hallazgo #4):
+#   1. Dependencias con vulnerabilidades conocidas (pip-audit).
+#   2. Código con patrones peligrosos (bandit, severidad media+).
+#   3. Las 4 suites de pruebas (lógica, gastos, permisos, actualizador).
+#   4. CodeQL: análisis estático de GitHub.
+#
+# Si algo acá falla, NO se publica nada.
+
+name: seguridad
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # chequeo semanal aunque no haya cambios
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: pruebas + bandit + pip-audit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install bandit pip-audit
+
+      - name: Dependencias con vulnerabilidades conocidas (pip-audit)
+        run: python -m pip_audit -r requirements.txt
+
+      - name: Análisis estático (bandit, severidad media+)
+        run: python -m bandit -r . -x "./figma_design,./figma_design_v2,./.git" -ll -ii
+
+      - name: Suite de pruebas (base de datos, permisos, gastos, actualizador)
+        run: |
+          python test_sistema.py
+          python test_gastos.py
+          python test_permisos.py
+          python test_actualizador.py
+
+      - name: Mitigaciones PE de los ejecutables (si se compiló en este run)
+        shell: pwsh
+        run: |
+          if (Test-Path "dist/MOSTRADOR.exe") {
+            python tools/pe_check.py dist/MOSTRADOR.exe dist/Actualizador.exe
+          } else {
+            Write-Output "No hay ejecutables compilados en este run: se omite pe_check."
+          }
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3

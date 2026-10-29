@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 import database as db
+import errores
 import estilos as st
 import iconos as ic
 from util import money
@@ -554,10 +555,12 @@ class CierreDialog(tk.Toplevel):
                 gastos=self.gastos,
             )
         except Exception as e:
-            messagebox.showerror(
-                "Error al cerrar",
-                f"No se pudo guardar el cierre:\n\n{e}",
-                parent=self)
+            errores.mostrar(
+                "Error al cerrar", e, parent=self,
+                contexto="guardar el cierre de caja",
+                mensaje="No se pudo guardar el cierre.\n"
+                        "La caja NO se cerró: los datos cargados siguen "
+                        "ahí. Probá de nuevo.")
             return
 
         # Respaldo automático en el momento crítico: cierre de caja
@@ -573,7 +576,9 @@ class CierreDialog(tk.Toplevel):
             try:
                 self.on_cerrado()
             except Exception as e:
-                messagebox.showerror(
-                    "Error al actualizar",
-                    f"El cierre se guardó, pero falló la actualización de la pantalla:\n\n{e}",
-                    parent=self)
+                errores.mostrar(
+                    "Error al actualizar", e, parent=self,
+                    contexto="refrescar la pantalla tras el cierre",
+                    mensaje="El cierre se guardó bien, pero la pantalla no "
+                            "se actualizó.\nAbrí Inicio de nuevo para ver "
+                            "los datos.")

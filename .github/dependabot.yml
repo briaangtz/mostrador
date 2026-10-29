@@ -1,0 +1,18 @@
+# Dependabot: avisa (como PR) cuando sale una versión nueva de las
+# dependencias o de las actions de GitHub. Es el que mantiene vivo el
+# pin de requirements.txt (hallazgo AppSec #5): sin esto, los pins se
+# ven viejos a los meses y nadie se entera.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday

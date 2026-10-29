@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 import database as db
+import errores
 import estilos as st
 import ui_comun as uc
 from util import money, parse_numero
@@ -259,8 +260,10 @@ class ConfigPanel(tk.Frame):
         try:
             ruta = db.respaldar("manual desde configuración")
         except Exception as exc:
-            messagebox.showerror("Respaldo", f"No se pudo generar el respaldo:\n{exc}",
-                                 parent=self)
+            errores.mostrar(
+                "Respaldo", exc, parent=self, contexto="generar respaldo",
+                mensaje="No se pudo generar el respaldo.\n"
+                        "Revisá que el disco tenga espacio libre.")
             return
         kb = max(1, os.path.getsize(ruta) // 1024)
         messagebox.showinfo(
@@ -281,8 +284,11 @@ class ConfigPanel(tk.Frame):
         try:
             os.startfile(carpeta)          # abre el explorador de Windows
         except OSError as exc:
-            messagebox.showerror("Respaldos", f"No se pudo abrir la carpeta:\n{exc}",
-                                 parent=self)
+            errores.mostrar(
+                "Respaldos", exc, parent=self,
+                contexto="abrir carpeta de respaldos",
+                mensaje="No se pudo abrir la carpeta de respaldos en el "
+                        "explorador de Windows.")
 
     def _restaurar_respaldo(self):
         if not db.puede("configuracion"):
@@ -312,8 +318,10 @@ class ConfigPanel(tk.Frame):
             db.respaldar("antes de restaurar")
             shutil.copy2(ruta, db.DB_PATH)
         except Exception as exc:
-            messagebox.showerror("Restaurar", f"No se pudo restaurar:\n{exc}",
-                                 parent=self)
+            errores.mostrar(
+                "Restaurar", exc, parent=self, contexto="restaurar respaldo",
+                mensaje="No se pudo restaurar el respaldo.\n"
+                        "La base de datos actual no se tocó.")
             return
         db.log_actividad("Respaldo restaurado", os.path.basename(ruta))
         messagebox.showinfo(

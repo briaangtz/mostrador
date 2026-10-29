@@ -65,7 +65,7 @@ con = sqlite3.connect(TMP)
 con.execute(
     "INSERT INTO usuarios (usuario, password, rango, activo, creado, "
     "permisos, permisos_v) VALUES ('sin_bono', 'x', 'USUARIO', 1, "
-    f"'2026-10-25', 'abrir_caja,pago_efectivo', {PERMISOS_VERSION})")
+    f"'2026-10-25', 'abrir_caja,pago_efectivo', {PERMISOS_VERSION})")  # nosec B608
 con.commit()
 con.close()
 v2 = db.usuario_por_nombre("sin_bono")["id"]

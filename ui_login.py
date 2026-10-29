@@ -127,12 +127,112 @@ class LoginDialog(tk.Toplevel):
         self.destroy()
 
 
+def cambiar_password_inicial(parent, usuario):
+    """Cambio obligatorio de la contraseña de fábrica ('admin').
+
+    Nadie debería seguir con la contraseña que viene de instalación
+    (hallazgo AppSec #3). Devuelve True si el usuario creó una nueva
+    y False si prefirió salir sin cambiarla."""
+    dlg = tk.Toplevel(parent)
+    dlg.title("Cambio de contraseña obligatorio")
+    FONDO = st.SIDEBAR
+    dlg.configure(bg=FONDO)
+    dlg.resizable(False, False)
+    # Sin transient: la raíz sigue oculta esperando el login (igual que
+    # LoginDialog); la modalidad la dan grab_set + wait_window.
+    dlg.protocol("WM_DELETE_WINDOW", lambda: _cerrar(False))
+
+    ancho, alto = 430, 360
+    dlg.geometry(f"{ancho}x{alto}")
+    dlg.update_idletasks()
+    x = max(0, (dlg.winfo_screenwidth() - ancho) // 2)
+    y = max(0, (dlg.winfo_screenheight() - alto) // 2 - 40)
+    dlg.geometry(f"+{x}+{y}")
+    dlg.lift()
+    dlg.focus_force()
+
+    cont = tk.Frame(dlg, bg=FONDO)
+    cont.pack(fill="both", expand=True, padx=36, pady=(34, 28))
+
+    tk.Label(cont, text="Creá tu contraseña nueva", bg=FONDO, fg="#ffffff",
+             font=(st.FUENTE, 16, "bold")).pack(anchor="w")
+    tk.Label(cont, text=(
+        "Ingresaste con la contraseña inicial de instalación. "
+        "Para seguir, elegí una propia (mínimo 4 caracteres)."),
+        bg=FONDO, fg="#9fb0cc", font=(st.FUENTE, 10), justify="left",
+        wraplength=350).pack(anchor="w", pady=(8, 18))
+
+    def campo(texto):
+        tk.Label(cont, text=texto, bg=FONDO, fg="#c7d2e4",
+                 font=(st.FUENTE, 9, "bold")).pack(anchor="w")
+        caja = tk.Frame(cont, bg="#FFFFFF", highlightthickness=1,
+                        highlightbackground="#2A4376",
+                        highlightcolor=st.ACENTO)
+        caja.pack(fill="x", pady=(3, 14))
+        var = tk.StringVar()
+        tk.Entry(caja, textvariable=var, font=(st.FUENTE, 13),
+                 relief="flat", bd=0, show="•", bg="#FFFFFF", fg=st.TEXTO,
+                 insertbackground=st.TEXTO, highlightthickness=0
+                 ).pack(fill="x", ipady=9, padx=(12, 12))
+        return var
+
+    var_nueva = campo("CONTRASEÑA NUEVA")
+    var_repetir = campo("REPETÍ LA CONTRASEÑA")
+
+    lbl_error = tk.Label(cont, text="", bg=FONDO, fg="#fca5a5",
+                         font=(st.FUENTE, 9), anchor="w", justify="left")
+    lbl_error.pack(fill="x")
+
+    def _cerrar(valor):
+        dlg.resultado = valor
+        dlg.destroy()
+
+    def guardar():
+        nueva = var_nueva.get()
+        if len(nueva) < 4:
+            lbl_error.config(text="La contraseña debe tener al menos 4 caracteres.")
+            return
+        if nueva != var_repetir.get():
+            lbl_error.config(text="Las contraseñas no coinciden.")
+            return
+        if nueva == db.PASSWORD_POR_DEFECTO:
+            lbl_error.config(
+                text="Elegí una contraseña distinta de la inicial.")
+            return
+        db.cambiar_password(usuario["id"], nueva)
+        _cerrar(True)
+
+    fila = tk.Frame(cont, bg=FONDO)
+    fila.pack(fill="x", pady=(6, 0))
+    Btn(fila, text="SALIR SIN CAMBIAR", command=lambda: _cerrar(False),
+        bg="#3b4a6b", fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+        padx=14, pady=11).pack(side="left")
+    Btn(fila, text="GUARDAR", command=guardar, bg=st.VERDE, fg="#ffffff",
+        font=(st.FUENTE, 10, "bold"), padx=24, pady=11).pack(side="right")
+
+    dlg.bind("<Return>", lambda e: guardar())
+    try:
+        dlg.grab_set()
+    except tk.TclError:
+        pass
+    parent.wait_window(dlg)
+    return bool(getattr(dlg, "resultado", False))
+
+
 def pedir_login(master):
-    """Muestra el login y devuelve el usuario conectado, o None si se cancela."""
+    """Muestra el login y devuelve el usuario conectado, o None si se cancela.
+
+    Si la contraseña con la que entró es la de fábrica ('admin'), antes de
+    dejar pasar al usuario hay que crear una propia (hallazgo AppSec #3):
+    si elige salir sin cambiarla, se cancela el ingreso."""
     dlg = LoginDialog(master)
     try:
         dlg.grab_set()          # modal: la ventana queda "agarrada"
     except tk.TclError:
         pass                    # si aún no se mapeó, wait_window alcanza
     master.wait_window(dlg)
-    return dlg.resultado
+    usuario = dlg.resultado
+    if usuario is not None and db.es_password_inicial(usuario["password"]):
+        if not cambiar_password_inicial(master, usuario):
+            return None         # prefirió salir: no entra con "admin"
+    return usuario
