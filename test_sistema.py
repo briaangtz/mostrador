@@ -1918,6 +1918,88 @@ for _pregunta_r in ("planilla de rendicion", "calculadora de billetes",
           f"soporte: responde rendición ante «{_pregunta_r}»")
 app6.destroy()
 
+# ------------------------------------------------------------------------
+# PORTABILIDAD: los datos viven en %LOCALAPPDATA%\Garrafas, no junto al .exe
+# (con PyInstaller --onefile la carpeta del .exe es frágil: puede ser de
+# solo lectura, un pendrive, o ser reemplazada por el actualizador).
+# ------------------------------------------------------------------------
+import shutil as _shutil_p
+import sqlite3 as _sqlite_p
+
+_raiz_datos = tempfile.mkdtemp(prefix="portapp_")
+LOCALAPPDATA_VIEJO = os.environ.get("LOCALAPPDATA")
+os.environ["LOCALAPPDATA"] = _raiz_datos
+
+_dir_datos = db.carpeta_datos()
+check(os.path.isabs(_dir_datos) and os.path.isdir(_dir_datos),
+      "carpeta_datos() crea sola la carpeta de datos")
+check(_raiz_datos.lower() in _dir_datos.lower(),
+      "la carpeta de datos queda dentro de LOCALAPPDATA (no junto al .exe)")
+
+# Preparo una "PC vieja": base de datos con datos JUNTO AL PROGRAMA
+_prog_viejo = tempfile.mkdtemp(prefix="portprog_")
+_ruta_db_ok, _ruta_base_ok = db.DB_PATH, db.BASE_DIR
+db.BASE_DIR = _prog_viejo
+db.DB_PATH = os.path.join(_prog_viejo, "garrafas.db")
+db.init()
+db.crear_usuario("anterior", "clave99", "USUARIO")
+check(db.usuario_por_nombre("anterior") is not None,
+      "preparación: la base vieja tiene datos de prueba")
+
+# La carpeta de datos está vacía -> hay que detectar la base vieja
+db.DB_PATH = os.path.join(_raiz_datos, "Garrafas", "garrafas.db")
+check(db.base_vieja_detectada() == os.path.join(_prog_viejo, "garrafas.db"),
+      "detecta la base vieja junto al programa")
+
+db.importar_base_vieja()
+check(os.path.exists(db.DB_PATH),
+      "la importación crea la base dentro de la carpeta de datos")
+check(db.usuario_por_nombre("anterior") is not None,
+      "los datos viajan intactos (usuarios)")
+check(db.base_vieja_detectada() is None,
+      "marcada la migración, no vuelve a preguntar")
+check(os.path.exists(os.path.join(_prog_viejo, "garrafas.db")),
+      "la base vieja original queda intacta (se copia, no se mueve)")
+
+db.init()                                   # el flujo real: importar y luego init
+check(db.usuario_por_nombre("anterior") is not None
+      and db.producto_por_nombre("Garrafa ME") is not None,
+      "init() sobre la base importada conserva datos y completa productos")
+
+# Si el destino YA tiene base, jamás se ofrece importar (no pisa datos)
+_prog_dos = tempfile.mkdtemp(prefix="portprog2_")
+_sqlite_p.connect(os.path.join(_prog_dos, "garrafas.db")).close()
+db.BASE_DIR = _prog_dos
+if os.path.exists(db.ruta_marcador_migracion()):
+    os.remove(db.ruta_marcador_migracion())          # para probar sin testigo
+check(db.base_vieja_detectada() is None,
+      "con datos ya cargados NO se ofrece importar (no pisa nada)")
+
+# Aunque no haya testigo, si el destino está vacío pero no hay vieja: nada
+_prog_tres = tempfile.mkdtemp(prefix="portprog3_")
+db.BASE_DIR = _prog_tres
+check(db.base_vieja_detectada() is None,
+      "sin base vieja junto al programa no hay nada que importar")
+
+db.descartar_base_vieja()                   # el usuario eligió empezar de cero
+check(db.base_vieja_detectada() is None,
+      "si el usuario dijo que no, no se vuelve a preguntar")
+
+# Las carpetas derivadas siguen a la base de datos
+check(db.dir_respaldos().startswith(os.path.dirname(db.DB_PATH)),
+      "los respaldos quedan junto a la base de datos")
+check(db.dir_perfiles().startswith(os.path.dirname(db.DB_PATH)),
+      "las fotos de perfil quedan junto a la base de datos")
+
+# Restauro el entorno de la prueba
+db.BASE_DIR, db.DB_PATH = _ruta_base_ok, _ruta_db_ok
+if LOCALAPPDATA_VIEJO is None:
+    os.environ.pop("LOCALAPPDATA", None)
+else:
+    os.environ["LOCALAPPDATA"] = LOCALAPPDATA_VIEJO
+for _p in (_prog_viejo, _prog_dos, _prog_tres, _raiz_datos):
+    _shutil_p.rmtree(_p, ignore_errors=True)
+
 os.remove(TMP)
 import shutil as _shutil
 _shutil.rmtree(db.dir_respaldos(), ignore_errors=True)

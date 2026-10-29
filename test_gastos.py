@@ -14,6 +14,14 @@ if hasattr(sys.stdout, "reconfigure"):
 from openpyxl import load_workbook
 import excel as xl
 
+# Base temporal: la prueba no debe tocar la base real del usuario
+import database as db
+_TMP_DB = os.path.join(tempfile.gettempdir(), "garrafas_gastos_test.db")
+if os.path.exists(_TMP_DB):
+    os.remove(_TMP_DB)
+db.DB_PATH = _TMP_DB
+db.init()
+
 ok = 0
 
 
@@ -97,5 +105,6 @@ check(abs(valor_efectivo(ws) - 50) < 0.01,
       "caso del pedido: 100 de ingresos − 50 de gastos = 50")
 
 os.remove(os.path.join(tempfile.gettempdir(), "planilla_gastos_test.xlsx"))
+os.remove(_TMP_DB)
 print(f"\nTODAS LAS PRUEBAS DE GASTOS EN LA PLANILLA PASARON "
       f"({ok} verificaciones)")

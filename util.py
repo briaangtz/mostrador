@@ -109,3 +109,22 @@ def ruta_recurso(nombre):
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, nombre)
+
+
+def carpeta_datos():
+    """Carpeta FIJA donde viven los datos del programa (portabilidad).
+
+    Con PyInstaller --onefile, todo lo que se escriba junto al .exe es
+    frágil: el .exe puede estar en una carpeta de solo lectura, en un
+    pendrive o puede ser reemplazado por el actualizador. Por eso la
+    base de datos, los respaldos, las fotos de perfil y los logs van
+    a %LOCALAPPDATA%\\Garrafas, que siempre existe y siempre es del
+    usuario.
+
+    Se crea sola la primera vez. Funciona igual con ``python main.py``
+    o con el .exe compilado.
+    """
+    raiz = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    ruta = os.path.join(raiz, "Garrafas")
+    os.makedirs(ruta, exist_ok=True)
+    return ruta

@@ -2,11 +2,13 @@
 """
 Capa de datos del sistema de control de caja de garrafas.
 Usa SQLite (incluido en Python) y guarda todo en el archivo garrafas.db,
-junto al programa.
+dentro de la carpeta de datos del usuario (%LOCALAPPDATA%\\Garrafas),
+que no se toca al actualizar ni al reinstalar el programa.
 """
 
 import os
 import sys
+import shutil
 import sqlite3
 import hashlib
 import hmac
@@ -20,13 +22,24 @@ from permisos import (puede as _puede_permiso, RANGOS,
                       PERMISOS as PERMISOS_BASE,
                       permisos_de as _permisos_de_rango,
                       PERMISOS_VERSION, pendientes as _pendientes)
+from util import carpeta_datos
 
-# Carpeta de datos: junto al .exe si está compilado, o junto al código
+# Carpeta del PROGRAMA (la de la instalación / del .exe). Ahí NO se
+# guardan datos: solo se usa para encontrar una base VIEJA que quedó en
+# el formato anterior (junto al programa) y ofrecer importarla una vez.
 if getattr(sys, "frozen", False):
     BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "garrafas.db")
+
+# Los datos viven SIEMPRE en la carpeta del usuario. Así el .exe puede
+# estar en una carpeta de solo lectura, en un pendrive o puede ser
+# reemplazado por el actualizador sin perder nada.
+DB_PATH = os.path.join(carpeta_datos(), "garrafas.db")
+
+# Testigo de la importación de una base vieja: si existe, no se vuelve
+# a preguntar (ni a importar) nunca más en esta PC.
+MARCADOR_MIGRACION = "base_vieja_importada.txt"
 
 # ---------------------------------------------------------------------------
 # Constantes del negocio
@@ -100,8 +113,16 @@ def db():
 # ---------------------------------------------------------------------------
 
 def get_config(clave, defecto=None):
-    with db() as con:
-        fila = con.execute("SELECT valor FROM config WHERE clave = ?", (clave,)).fetchone()
+    try:
+        with db() as con:
+            fila = con.execute("SELECT valor FROM config WHERE clave = ?",
+                                (clave,)).fetchone()
+    except sqlite3.OperationalError:
+        # Base recién creada sin tablas todavía (init() aún no corrió):
+        # se respeta el contrato del parámetro y se devuelve el defecto.
+        # Un archivo corrupto ("file is not a database") NO entra acá:
+        # ese error sigue saltando a la vista.
+        return defecto
     return fila["valor"] if fila else defecto
 
 
@@ -578,7 +599,7 @@ def apertura_de(caja_id):
 
 def dir_perfiles():
     """Carpeta de fotos de perfil: siempre junto a garrafas.db."""
-    ruta = os.path.join(BASE_DIR, "perfiles")
+    ruta = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "perfiles")
     os.makedirs(ruta, exist_ok=True)
     return ruta
 
@@ -681,10 +702,102 @@ def quitar_foto_perfil(uid=None):
 
 
 # ---------------------------------------------------------------------------
+# Portabilidad: importación de una base VIEJA (junto al programa)
+#
+# Versiones anteriores guardaban garrafas.db junto al .exe. Ahora los
+# datos viven en %LOCALAPPDATA%\Garrafas. La primera vez que el programa
+# corre en una PC donde la carpeta de datos todavía no tiene base, pero
+# sí hay una base vieja junto al programa, se ofrece importarla UNA vez.
+#
+# Reglas:
+#   * se COPIA (no se mueve): la base vieja queda intacta por las dudas;
+#   * NUNCA se importa si el destino ya tiene datos;
+#   * el testigo MARCADOR_MIGRACION se escribe tanto si se importó como
+#     si el usuario dijo que no, para no volver a preguntar.
+# ---------------------------------------------------------------------------
+
+def ruta_marcador_migracion():
+    """Archivo testigo de que la base vieja ya se gestionó en esta PC."""
+    return os.path.join(carpeta_datos(), MARCADOR_MIGRACION)
+
+
+def _marcar_migracion():
+    try:
+        with open(ruta_marcador_migracion(), "w", encoding="utf-8") as f:
+            f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
+    except OSError:
+        pass                        # sin permisos: se volverá a preguntar
+
+
+def base_vieja_detectada():
+    """Ruta de una base vieja junto al programa, o None.
+
+    Devuelve la ruta solo si conviene importarla: que todavía no exista
+    una base en la carpeta de datos (importar podría pisar datos ya
+    cargados) y que no se haya gestionado antes.
+    """
+    if os.path.exists(ruta_marcador_migracion()):
+        return None                     # ya se preguntó una vez
+    if os.path.exists(DB_PATH):
+        return None                     # el destino ya tiene datos
+    vieja = os.path.join(BASE_DIR, "garrafas.db")
+    if os.path.abspath(vieja) == os.path.abspath(DB_PATH):
+        return None                     # misma carpeta: no hay nada que mover
+    return vieja if os.path.exists(vieja) else None
+
+
+def importar_base_vieja():
+    """Copia la base vieja (y sus respaldos y fotos) a la carpeta de datos.
+
+    Usa la copia de SQLite, que es consistente aunque la base esté en uso.
+    Marca la migración para no volver a preguntar. Lanza OSError si algo
+    falla (lo maneja quien llama, que muestra el cartel).
+    """
+    origen_vieja = os.path.join(BASE_DIR, "garrafas.db")
+    if not os.path.exists(origen_vieja):
+        raise OSError("No se encontró la base de datos vieja junto al programa.")
+
+    carpeta = os.path.dirname(os.path.abspath(DB_PATH))
+    os.makedirs(carpeta, exist_ok=True)
+
+    # 1) La base de datos, con copia de SQLite (segura y consistente)
+    origen = sqlite3.connect(origen_vieja)
+    try:
+        with sqlite3.connect(DB_PATH) as destino:
+            origen.backup(destino)
+    finally:
+        origen.close()
+
+    # 2) Los respaldos viejos (por si algún día hace falta mirar atrás)
+    resp_old = os.path.join(BASE_DIR, "respaldos")
+    resp_new = os.path.join(carpeta, "respaldos")
+    if os.path.isdir(resp_old):
+        shutil.copytree(resp_old, resp_new, dirs_exist_ok=True)
+
+    # 3) Las fotos de perfil viejas
+    per_old = os.path.join(BASE_DIR, "perfiles")
+    per_new = os.path.join(carpeta, "perfiles")
+    if os.path.isdir(per_old):
+        shutil.copytree(per_old, per_new, dirs_exist_ok=True)
+
+    _marcar_migracion()
+    log_actividad("Importación de base de datos vieja",
+                  f"Desde: {origen_vieja} — hacia: {DB_PATH}")
+    return DB_PATH
+
+
+def descartar_base_vieja():
+    """El usuario eligió empezar de cero: no volver a preguntar."""
+    _marcar_migracion()
+
+
+# ---------------------------------------------------------------------------
 # Inicialización
 # ---------------------------------------------------------------------------
 
 def init():
+    # La carpeta de datos puede no existir todavía (PC recién instalada)
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     with db() as con:
         con.executescript(
             """

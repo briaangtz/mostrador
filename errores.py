@@ -26,15 +26,12 @@ Uso en un ``except``::
 import logging
 import logging.handlers
 import os
-import sys
 
-# Carpeta de datos: junto al .exe si está compilado, o junto al código
-if getattr(sys, "frozen", False):
-    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from util import carpeta_datos
 
-RUTA_LOG = os.path.join(BASE_DIR, "errores.log")
+# El log va junto a los datos del usuario (%LOCALAPPDATA%\Garrafas):
+# la carpeta del programa puede ser de solo lectura o cambiar al actualizar.
+RUTA_LOG = os.path.join(carpeta_datos(), "errores.log")
 
 MENSAJE_GENERICO = ("No se pudo completar la operación.\n\n"
                     "El detalle quedó guardado en errores.log (junto al "

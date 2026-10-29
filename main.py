@@ -11,14 +11,14 @@ Ejecutar con:  python main.py
 
 import datetime
 import os
-import sys
 import tkinter as tk
 from tkinter import messagebox
 
 import database as db
+import errores
 import estilos as st
 import iconos as ic
-from util import fecha_corta
+from util import fecha_corta, ruta_recurso
 from version import VERSION
 from ui_login import pedir_login
 from ui_inicio import InicioPanel, _num_caja
@@ -60,6 +60,8 @@ BLANCO = "#FFFFFF"
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.withdraw()                     # nada visible mientras se habla
+        self._ofrecer_importar_base()       # portabilidad: base vieja junto al .exe
         db.init()
 
         self.title(f"DOBLE G SRL — MOSTRADOR  ·  v{VERSION}")
@@ -75,13 +77,9 @@ class App(tk.Tk):
         self.cancelado = False
 
         # Icono de la ventana (barra de tareas / título). En el .exe compilado
-        # icono.ico queda extraído en sys._MEIPASS.
+        # icono.ico queda extraído en sys._MEIPASS (lo resuelve ruta_recurso).
         try:
-            if getattr(sys, "frozen", False):
-                ruta_icono = os.path.join(sys._MEIPASS, "icono.ico")
-            else:
-                ruta_icono = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                          "icono.ico")
+            ruta_icono = ruta_recurso("icono.ico")
             if os.path.exists(ruta_icono):
                 self.iconbitmap(ruta_icono)
         except tk.TclError:
@@ -130,6 +128,43 @@ class App(tk.Tk):
                 "Podés abrirlas desde Inicio o desde Historial de cierres.",
                 parent=self,
             ))
+
+    # ------------------------------------------------------- datos portables
+    def _ofrecer_importar_base(self):
+        """Portabilidad: si hay una base VIEJA junto al .exe, ofrece traerla.
+
+        Las versiones anteriores guardaban garrafas.db junto al programa.
+        Ahora los datos viven en %LOCALAPPDATA%\\Garrafas. Se pregunta solo
+        la primera vez (hay un archivo testigo); si el usuario dice que
+        no, se empieza de cero y no se vuelve a preguntar.
+        """
+        ruta = db.base_vieja_detectada()
+        if not ruta:
+            return
+        if messagebox.askyesno(
+            "Encontramos tus datos anteriores",
+            "Encontramos una base de datos de una versión anterior, "
+            "guardada junto al programa.\n\n"
+            "¿Querés importarla? (Se conserva la original en su lugar.)\n\n"
+            "• SÍ: pasan todos tus datos: ventas, cierres, usuarios y "
+            "respaldos.\n"
+            "• NO: empezás de cero con una base vacía.",
+            parent=self,
+        ):
+            try:
+                db.importar_base_vieja()
+            except Exception as exc:
+                errores.registrar(exc, "importar base de datos vieja")
+                messagebox.showerror(
+                    "No se pudo importar",
+                    "No se pudo importar la base de datos anterior.\n\n"
+                    "El programa continúa con una base vacía; tu base "
+                    "original quedó intacta junto al programa.\n\n"
+                    "El detalle del error quedó en errores.log.",
+                    parent=self,
+                )
+        else:
+            db.descartar_base_vieja()
 
     # ------------------------------------------------------------------ UI
     def _construir(self):

@@ -456,7 +456,8 @@ TEMAS = [
             "foto**), tus datos (usuario, rango, último acceso y fecha de "
             "creación), el cambio de contraseña y **Cerrar sesión**.",
             "**Cada usuario tiene su propia foto**: se guarda en la carpeta "
-            "`perfiles/` con un archivo por usuario, así que no se pisa con "
+            "de datos del programa (`%LOCALAPPDATA%\\Garrafas`, dentro de "
+            "`perfiles/`) con un archivo por usuario, así que no se pisa con "
             "la de nadie. Si tenés foto también se ve en el lateral.",
             "La contraseña se pide **actual, nueva y su repetición** "
             "(mínimo 4 caracteres). Si la olvidaste, un DESARROLLADOR te "
@@ -476,8 +477,9 @@ TEMAS = [
                 "carpeta de respaldos", "perdi los datos"],
         parrafos=[
             "Los respaldos se guardan solos en la carpeta **respaldos/**, "
-            "junto al programa: al abrir el programa (uno por día), al "
-            "cerrarlo si falta y **en cada cierre de caja**. Se conservan "
+            "dentro de la carpeta de datos del programa "
+            "(`%LOCALAPPDATA%\\Garrafas`): al abrir el programa (uno por día), "
+            "al cerrarlo si falta y **en cada cierre de caja**. Se conservan "
             "los últimos **60**.",
             "En **Configuración → Respaldo de la base de datos** hay "
             "**Respaldar ahora**, **Abrir carpeta de respaldos** y "
