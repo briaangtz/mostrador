@@ -43,8 +43,16 @@ class EstadisticasPanel(tk.Frame):
         self.lbl_periodo.pack(anchor="w", pady=(2, 0))
 
         # ---------------- Filtros por fecha ----------------
-        t, filtros, _h = uc.tarjeta(cont, "Período de consulta", "calendar")
+        t, filtros, encabezado = uc.tarjeta(cont, "Período de consulta",
+                                            "calendar")
         t.pack(fill="x", padx=PX, pady=(14, 0))
+
+        # El EXPORTAR vive en el encabezado: en la fila de filtros, con la
+        # ventana angosta, los botones de período lo empujaban al derecho y
+        # Tk lo aplastaba hasta hacerlo invisible.
+        Btn(encabezado, text="EXPORTAR A EXCEL", command=self._exportar_excel,
+            bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=7).pack(side="right")
         fila_f = tk.Frame(filtros, bg=st.TARJETA)
         fila_f.pack(fill="x")
 
@@ -74,10 +82,6 @@ class EstadisticasPanel(tk.Frame):
             side="left", padx=(0, 10))
         self._btn(fila_botones, "Actualizar", self._aplicar_fechas,
                   color=st.ACENTO).pack(side="left")
-
-        Btn(fila_f, text="EXPORTAR", command=self._exportar_excel, bg=st.VERDE,
-            fg="#ffffff", font=(st.FUENTE, 10, "bold"), padx=20, pady=9
-            ).pack(side="right", anchor="s")
 
         # ---------------- Indicadores ----------------
         marco_cards = tk.Frame(cont, bg=st.FONDO)

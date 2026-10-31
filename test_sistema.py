@@ -708,6 +708,35 @@ panel_stats._aplicar_fechas()
 check(panel_stats.cards["ventas"].cget("text") == "9",
       "filtro por fecha de un día específico")
 
+# El botón de exportar no puede quedar aplastado con la ventana angosta:
+# estando en la fila de filtros, los botones de período le robaban el
+# ancho y Tk lo dejaba en 44 px (invisible). Ahora va en el encabezado.
+def _buscar_botonExportar(w, texto="EXPORTAR"):
+    for h in w.winfo_children():
+        try:
+            if texto in str(h.cget("text") or ""):
+                return h
+        except tk.TclError:
+            pass
+        hallado = _buscar_botonExportar(h, texto)
+        if hallado is not None:
+            return hallado
+    return None
+
+
+_ancho_antes = app.winfo_width()
+for _ancho_ventana in (1400, 900, 852):
+    app.geometry(f"{_ancho_ventana}x760")
+    app.update()
+    _btn_xl = _buscar_botonExportar(panel_stats)
+    check(_btn_xl is not None
+          and _btn_xl.winfo_ismapped()
+          and _btn_xl.winfo_width() >= _btn_xl.winfo_reqwidth(),
+          f"estadísticas: el EXPORTAR a Excel se ve entero con la ventana "
+          f"de {_ancho_ventana} px (ancho {_btn_xl.winfo_width() if _btn_xl else 0})")
+app.geometry(f"{_ancho_antes}x{app.winfo_height()}")
+app.update()
+
 # ---------------- Exportación a Excel (plantilla imprimible A4) ----------------
 import os as _os
 import tempfile as _tempfile
