@@ -39,6 +39,28 @@ cerrar cajas).
 * Los intentos fallidos de ingreso quedan registrados.
 * Para salir de una cuenta: botón **Cerrar sesión** (lateral izquierdo, abajo).
 
+### Si se olvidó el usuario o la contraseña
+
+Las contraseñas **no se pueden ver ni recuperar**: se guardan con hash
+(PBKDF2-SHA256 con sal, 600.000 vueltas) y nunca en texto plano. Lo que sí
+se puede es **ver los nombres de usuario** y **poner una contraseña nueva**
+desde la herramienta de desarrollo `tools/recuperar_clave.py`:
+
+```
+python tools/recuperar_clave.py --listar                      # los usuarios
+python tools/recuperar_clave.py --probar admin --password X   # probar una
+python tools/recuperar_clave.py --usuario admin --password NUEVA
+```
+
+1. Primero conviene probar **admin** / **admin** (la contraseña de
+   fábrica): si sigue vigente se entra y el programa obliga a crear una
+   propia en ese mismo momento.
+2. Si no, la base está en `%LOCALAPPDATA%\Garrafas\garrafas.db`. En **otra
+   PC** hay que copiar ese archivo a esta máquina (con el programa cerrado
+   allá), correr la herramienta con `--db "RUTA\garrafas.db"` y volver a
+   copiar el archivo. Antes de escribir deja una copia de seguridad al
+   lado (`garrafas.db.ante_cambio_AAAAMMDD_HHMMSS`).
+
 ---
 
 ## 1. Productos

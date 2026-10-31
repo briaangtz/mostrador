@@ -2000,6 +2000,63 @@ else:
 for _p in (_prog_viejo, _prog_dos, _prog_tres, _raiz_datos):
     _shutil_p.rmtree(_p, ignore_errors=True)
 
+# ---------------- Recuperación de usuario y contraseña ----------------
+# Las claves se guardan hasheadas: no se pueden leer, solo reponer con
+# tools/recuperar_clave.py (escribe el mismo hash que usa el programa).
+import subprocess as _subprocess_p
+
+_tool_clave = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "tools", "recuperar_clave.py")
+_copia_clave = os.path.join(tempfile.gettempdir(), "garrafas_recupero.db")
+for _n in os.listdir(tempfile.gettempdir()):
+    if _n.startswith("garrafas_recupero.db"):     # basura de corridas viejas
+        os.remove(os.path.join(tempfile.gettempdir(), _n))
+# El "with" de sqlite3 solo confirma la transacción y NO cierra: hay que
+# cerrar a mano o el archivo queda tomado y al final no se puede borrar.
+_origen_clave = _sqlite_p.connect(db.DB_PATH)
+_destino_clave = _sqlite_p.connect(_copia_clave)
+try:
+    _origen_clave.backup(_destino_clave)
+finally:
+    _destino_clave.close()
+    _origen_clave.close()
+
+_entorno_clave = dict(os.environ, PYTHONIOENCODING="utf-8")
+_tool = [sys.executable, _tool_clave, "--db", _copia_clave]
+
+_r = _subprocess_p.run(_tool + ["--listar"], capture_output=True, text=True,
+                       encoding="utf-8", env=_entorno_clave)
+check(_r.returncode == 0 and "admin" in (_r.stdout or ""),
+      "recuperación: --listar muestra los usuarios sin pedir contraseña")
+
+_r = _subprocess_p.run(_tool + ["--probar", "admin", "--password",
+                                "cualquiera"], capture_output=True,
+                       text=True, encoding="utf-8", env=_entorno_clave)
+check(_r.returncode != 0, "recuperación: --probar rechaza una clave errónea")
+
+_r = _subprocess_p.run(_tool + ["--usuario", "admin", "--password",
+                                "ClaveNueva2"], capture_output=True,
+                       text=True, encoding="utf-8", env=_entorno_clave)
+check(_r.returncode == 0,
+      f"recuperación: la herramienta repone la contraseña "
+      f"(código {_r.returncode}: "
+      f"{(_r.stderr or _r.stdout or '').strip()[-160:]})")
+
+_db_prueba_clave = db.DB_PATH
+db.DB_PATH = _copia_clave
+check(db.validar_credenciales("admin", "ClaveNueva2") is not None,
+      "recuperación: con la contraseña puesta desde la herramienta se entra")
+check(db.validar_credenciales("admin", "admin") is None,
+      "recuperación: la contraseña anterior deja de servir")
+db.DB_PATH = _db_prueba_clave
+check(any(_n.startswith("garrafas_recupero.db.ante_cambio")
+          for _n in os.listdir(tempfile.gettempdir())),
+      "recuperación: antes de tocar la base deja una copia de seguridad")
+
+for _n in os.listdir(tempfile.gettempdir()):      # y deja todo limpio
+    if _n.startswith("garrafas_recupero.db"):
+        os.remove(os.path.join(tempfile.gettempdir(), _n))
+
 os.remove(TMP)
 import shutil as _shutil
 _shutil.rmtree(db.dir_respaldos(), ignore_errors=True)
