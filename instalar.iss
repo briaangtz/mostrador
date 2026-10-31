@@ -13,7 +13,7 @@
 ; =========================================================================
 
 #define AppName "MOSTRADOR"
-#define AppVersion "1.3.5"
+#define AppVersion "1.3.6"
 #define AppPublisher "DOBLE G SRL"
 #define AppExeName "Actualizador.exe"
 
