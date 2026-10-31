@@ -1,8 +1,8 @@
 ; =========================================================================
 ;  Instalador de MOSTRADOR para Windows (Inno Setup).
 ;
-;  Compilar con Inno Setup 6 (https://jrsoftware.org/isinfo.php):
-;    abrir este archivo y presionar F9 (o Build ^ Compile).
+;  Compilar con Inno Setup 6 o 7 (https://jrsoftware.org/isinfo.php):
+;    abrir este archivo y presionar F9 (o Build > Compile).
 ;  Sale un Setup.exe listo para mandarle a la clientela.
 ;
 ;  IMPORTANTE sobre los datos del cliente:
@@ -13,7 +13,7 @@
 ; =========================================================================
 
 #define AppName "MOSTRADOR"
-#define AppVersion "1.3.3"
+#define AppVersion "1.3.5"
 #define AppPublisher "DOBLE G SRL"
 #define AppExeName "Actualizador.exe"
 
@@ -26,7 +26,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 UninstallDisplayName={#AppName}
 OutputDir=instalador
-OutputBaseFilename= MOSTRADOR-{#AppVersion}-instalador
+OutputBaseFilename=MOSTRADOR-{#AppVersion}-instalador
 Compression=lzma2/max
 SolidCompression=yes
 ; El .exe pide permisos solo cuando WINDOWS lo requiere (asInvoker),
