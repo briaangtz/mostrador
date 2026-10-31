@@ -17,6 +17,13 @@ Al abrirlo:
 La base de datos, los respaldos y las fotos NUNCA forman parte de la
 actualización: se quedan intactos en cada PC.
 
+OJO con los permisos: el programa suele estar en ``C:\\Program Files\\MOSTRADOR``
+y este actualizador corre SIN elevación (``app.manifest`` es asInvoker),
+así que ahí Windows no deja escribir nada. Por eso la descarga se hace en
+``%TEMP%`` y, si el destino no admite escritura, se vuelve a lanzarse a sí
+mismo pidiendo permiso de administrador (aviso de Control de Cuentas) para
+hacer el reemplazo. Sin esa elevación la actualización era imposible.
+
 En las PC, el acceso directo debe apuntar a ESTE archivo (``Actualizador.exe``),
 no al programa directamente.
 """
@@ -30,10 +37,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
+
+from util import carpeta_datos
 
 RELEASES_REPO = "briaangtz/mostrador-releases"
 EXE_NAME = "MOSTRADOR.exe"
@@ -65,6 +76,29 @@ def log(texto):
                                   texto))
     except OSError:
         pass
+
+
+def carpeta_temp():
+    """Carpeta donde SÍ se puede escribir sin permisos de administrador.
+
+    El programa suele estar en ``C:\\Program Files\\MOSTRADOR`` y el
+    actualizador corre SIN elevación (``app.manifest`` es asInvoker), así
+    que ahí Windows no deja ni crear archivos. Por eso la descarga se hace
+    en ``%TEMP%`` y recién después se intenta mover al destino.
+    """
+    return tempfile.gettempdir()
+
+
+def puede_escribir_en(ruta):
+    """¿Se puede crear/archivar un archivo en esa carpeta?"""
+    prueba = os.path.join(ruta, ".permiso_%d.tmp" % os.getpid())
+    try:
+        with open(prueba, "w"):
+            pass
+        os.remove(prueba)
+        return True
+    except OSError:
+        return False
 
 
 def aviso(titulo, mensaje, icono=0x40):
@@ -196,21 +230,31 @@ def hash_esperado(texto_sums, nombre):
 
 
 def respaldar_base():
-    origen = os.path.join(BASE, "garrafas.db")
-    if not os.path.exists(origen):
-        return None
-    carpeta = os.path.join(BASE, "respaldos")
-    try:
-        os.makedirs(carpeta, exist_ok=True)
-        destino = os.path.join(
-            carpeta,
-            "pre_actualizacion_%s.db" % datetime.now().strftime("%Y%m%d_%H%M%S"))
-        shutil.copy2(origen, destino)
-        log("Base respaldada en %s" % destino)
-        return destino
-    except OSError as e:
-        log("No se pudo respaldar la base: %s" % e)
-        return None
+    """Respalda la base ANTES de tocar el programa.
+
+    La base NO vive junto al .exe: está en %LOCALAPPDATA%\\Garrafas
+    (ver ``util.carpeta_datos``). Si la carpeta del .exe fuera de solo
+    lectura igual se intenta el respaldo ahí, por si acaso.
+    """
+    origenes = [os.path.join(carpeta_datos(), "garrafas.db"),
+                os.path.join(BASE, "garrafas.db")]
+    for origen in origenes:
+        if not os.path.exists(origen):
+            continue
+        carpeta = os.path.join(os.path.dirname(origen), "respaldos")
+        try:
+            os.makedirs(carpeta, exist_ok=True)
+            destino = os.path.join(
+                carpeta,
+                "pre_actualizacion_%s.db"
+                % datetime.now().strftime("%Y%m%d_%H%M%S"))
+            shutil.copy2(origen, destino)
+            log("Base respaldada en %s" % destino)
+            return destino
+        except OSError as e:
+            log("No se pudo respaldar la base de %s: %s" % (origen, e))
+    log("No se encontró ninguna base para respaldar.")
+    return None
 
 
 def buscar_asset(assets):
@@ -287,8 +331,10 @@ def actualizar():
         return False
 
     log("Actualizando %s -> %s" % (local, remota))
-    temp = os.path.join(BASE, EXE_NAME + ".download")
-    nuevo = os.path.join(BASE, EXE_NAME + ".nuevo")
+    # La descarga va a %TEMP%: en Program Files Windows no deja escribir
+    # al actualizador (corre sin elevación), y ahí se rompía siempre.
+    temp = os.path.join(carpeta_temp(), EXE_NAME + ".download")
+    nuevo = os.path.join(carpeta_temp(), EXE_NAME + ".nuevo")
     try:
         bajar(asset["browser_download_url"], temp)
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -332,6 +378,19 @@ def actualizar():
     respaldar_base()
 
     exe = os.path.join(BASE, EXE_NAME)
+    if not puede_escribir_en(BASE):
+        # Caso típico: el programa está en Program Files y este proceso
+        # corre sin permisos de administrador. Se pide elevación (UAC) y
+        # un proceso hermano, YA elevado, hace el reemplazo.
+        log("Sin permiso de escritura en %s: pidiendo elevación." % BASE)
+        ok_elevado = pedir_elevacion(nuevo, exe, remota)
+        if not ok_elevado:
+            try:
+                os.remove(nuevo)
+            except OSError:
+                pass
+        return ok_elevado
+
     try:
         os.replace(nuevo, exe)          # reemplazo atómico
     except OSError as e:
@@ -352,7 +411,75 @@ def actualizar():
     return True
 
 
+MODO_REEMPLAZAR = "--reemplazar"
+
+
+def aplicar_reemplazo(nuevo, exe, version):
+    """Mueve el .exe nuevo sobre el viejo. Corre ELEVADO (ver main)."""
+    try:
+        if os.path.exists(exe):
+            os.replace(nuevo, exe)
+        else:
+            shutil.move(nuevo, exe)
+    except OSError as e:
+        log("Elevado: no se pudo reemplazar %s: %s" % (EXE_NAME, e))
+        return 1
+    guardar_version_local(version)
+    guardar_last_installed(version)
+    log("Actualizado a %s (con permisos de administrador)." % version)
+    return 0
+
+
+def _codigo_elevacion(args):
+    """Lanza este mismo ejecutable elevado (UAC) y devuelve el código.
+
+    Separado de ``pedir_elevacion`` para poder probarlo sin invocar de
+    verdad el aviso de Control de Cuentas.
+    """
+    return ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", sys.executable, args, None, 1)
+
+
+def pedir_elevacion(nuevo, exe, version):
+    """Vuelve a lanzarse a sí mismo pidiendo permiso de administrador.
+
+    Windows muestra el aviso de Control de Cuentas (UAC); si el usuario
+    acepta, el proceso hermano corre elevado y ejecuta
+    ``aplicar_reemplazo``. Se espera hasta 120 s a que consuma el archivo.
+
+    Ojo: si el usuario CANCELA el aviso, ``ShellExecuteW`` devuelve 1223
+    (ERROR_CANCELLED), que es mayor que 32, así que hay que chequearlo a
+    parte del "menor o igual a 32" de las fallas normales.
+    """
+    if not getattr(sys, "frozen", False):
+        log("Sin compilar no se puede pedir elevación.")
+        return False
+    args = '"%s" %s "%s" "%s" "%s"' % (
+        sys.executable, MODO_REEMPLAZAR, nuevo, exe, version)
+    try:
+        codigo = int(_codigo_elevacion(args))
+    except Exception as e:                      # pragma: no cover
+        log("No se pudo pedir elevación: %s" % e)
+        return False
+    if codigo <= 32 or codigo == 1223:          # 1223 = ERROR_CANCELLED
+        log("El usuario canceló el aviso de permisos (código %s)." % codigo)
+        aviso("MOSTRADOR",
+              "Se necesita permiso de administrador para actualizar.\n"
+              "Se mantiene la versión actual.", 0x30)
+        return False
+
+    # El proceso elevado mueve el archivo: esperamos a que desaparezca.
+    for _ in range(240):
+        if not os.path.exists(nuevo):
+            return True
+        time.sleep(0.5)
+    log("El proceso elevado no completó el reemplazo a tiempo.")
+    return False
+
+
 def main():
+    if len(sys.argv) >= 5 and sys.argv[1] == MODO_REEMPLAZAR:
+        sys.exit(aplicar_reemplazo(sys.argv[2], sys.argv[3], sys.argv[4]))
     try:
         actualizar()
     except Exception as e:          # nunca frenar la apertura del programa

@@ -17,6 +17,11 @@ import actualizador as ac
 
 ok = 0
 
+# Guardo los originales: los tests de más abajo los reemplazan por dobles.
+_pedir_elevacion_real = ac.pedir_elevacion
+_codigo_elevacion_real = ac._codigo_elevacion
+_puede_escribir_real = ac.puede_escribir_en
+
 
 def check(cond, msg):
     global ok
@@ -55,12 +60,16 @@ def instalar_red(base, contenido_exe, texto_sums):
              if texto_sums is not None else []),
     }
 
+    descargas = []
+
     def _bajar(url, destino):
+        descargas.append(destino)
         with open(destino, "wb") as f:
             f.write(contenido_exe)
 
     ac.bajar = _bajar
     ac.bajar_texto = lambda url: texto_sums
+    ac.descargas = descargas
     aviso_llamado.clear()
     ac.aviso = lambda t, m, i=0x40: aviso_llamado.append((t, str(m), i))
 
@@ -172,6 +181,8 @@ check("NO coincide" in log_de(base),
       "el log registra el desajuste de hash")
 check(any("hash publicado" in m for _t, m, _i in aviso_llamado),
       "al usuario se lo avisa que la descarga no coincide")
+check(not os.path.exists(ac.descargas[0]),
+      "la descarga fallida se elimina de %TEMP%")
 shutil.rmtree(base, ignore_errors=True)
 
 # --------------------------------------------- actualizar() con hash OK
@@ -184,8 +195,104 @@ check(contenido_exe(base) == _bueno,
       "el ejecutable nuevo quedó reemplazado")
 with open(os.path.join(base, ac.VERSION_FILE), encoding="utf-8") as f:
     check(f.read().strip() == "9.9.9", "quedó registrada la versión nueva")
-check(not os.path.exists(os.path.join(base, "MOSTRADOR.exe.download")),
-      "no quedan archivos temporales colgados")
+check(not os.path.exists(ac.descargas[0]),
+      "no quedan archivos temporales colgados en %TEMP%")
+shutil.rmtree(base, ignore_errors=True)
+
+# --------------------------------- la descarga NO va en la carpeta del .exe
+# (Program Files no admite escritura y el actualizador corre sin elevación:
+#  ahí el actualizador viejo se rompía siempre.)
+base = entorno()
+_bueno2 = b"EXE NUEVO 2"
+instalar_red(base, _bueno2, "%s  MOSTRADOR.exe\n" % sha256_txt(_bueno2))
+check(ac.actualizar() is True, "actualización normal: se instala")
+check(os.path.dirname(ac.descargas[0]).lower()
+      == os.environ.get("TEMP", "").lower(),
+      "la descarga se hace en %TEMP%, no en la carpeta del .exe")
+check(ac.descargas[0] != os.path.join(base, "MOSTRADOR.exe.download"),
+      "el .download NO se crea junto al .exe (eso falla en Program Files)")
+shutil.rmtree(base, ignore_errors=True)
+
+# --------------------- carpeta de destino SIN escritura -> pide elevación
+base = entorno()
+_elevaciones = []
+
+
+def _fingir_elevacion(nuevo, exe, version):
+    """Simula al proceso hermano elevado: hace el reemplazo y registra."""
+    _elevaciones.append((nuevo, exe, version))
+    os.replace(nuevo, exe)
+    ac.guardar_version_local(version)
+    ac.guardar_last_installed(version)
+    return True
+
+
+_bueno3 = b"EXE NUEVO 3"
+instalar_red(base, _bueno3, "%s  MOSTRADOR.exe\n" % sha256_txt(_bueno3))
+ac.pedir_elevacion = _fingir_elevacion
+ac.puede_escribir_en = lambda ruta: False          # como en Program Files
+check(ac.actualizar() is True,
+      "con el destino de solo lectura la actualización igual se instala")
+check(len(_elevaciones) == 1 and _elevaciones[0][2] == "9.9.9",
+      "se pidió elevación pasando el archivo y la versión")
+check(contenido_exe(base) == _bueno3,
+      "el ejecutable quedó reemplazado por el proceso elevado")
+check("elevación" in log_de(base).lower(),
+      "el log deja constancia de que hizo falta elevar")
+shutil.rmtree(base, ignore_errors=True)
+
+# ----------------------- el usuario CANCELA el aviso de permisos (UAC)
+# Windows devuelve 1223 (ERROR_CANCELLED) al cancelar, que es MAYOR que 32:
+# hay que distinguirlo de una falla normal del lanzamiento.
+base = entorno()
+instalar_red(base, b"EXE NUEVO 4", "%s  MOSTRADOR.exe\n"
+             % sha256_txt(b"EXE NUEVO 4"))
+_frozen_antes = getattr(sys, "frozen", False)
+ac.puede_escribir_en = lambda ruta: False
+ac.pedir_elevacion = _pedir_elevacion_real     # el de verdad
+sys.frozen = True                     # para que pida elevación de verdad
+_codigos = [1223]
+ac._codigo_elevacion = lambda args: _codigos[0]
+check(ac.actualizar() is False,
+      "si el usuario cancela el aviso UAC (código 1223) NO se actualiza")
+check(contenido_exe(base) == b"EXE VIEJO",
+      "al cancelar la elevación el programa viejo queda intacto")
+check(any("permiso" in m.lower() for _t, m, _i in aviso_llamado),
+      "al usuario se le explica que hizo falta permiso de administrador")
+check("canceló" in log_de(base),
+      "el log registra la cancelación del aviso")
+
+# También hay que frenar ante una falla normal del lanzamiento (≤ 32)
+aviso_llamado.clear()
+_codigos[0] = 5                         # SE_ERR_ACCESSDENIED
+check(ac.pedir_elevacion("n.exe", "e.exe", "1.0.0") is False,
+      "un código de error ≤ 32 también se toma como cancelado")
+sys.frozen = _frozen_antes
+shutil.rmtree(base, ignore_errors=True)
+
+# ------------------------------------------ aplicar_reemplazo (modo elevado)
+# Acá se usa el código REAL, así que hay que devolver los dobles a su lugar.
+ac.pedir_elevacion = _pedir_elevacion_real
+ac._codigo_elevacion = _codigo_elevacion_real
+ac.puede_escribir_en = _puede_escribir_real
+
+base = entorno()
+ac.BASE = base
+_nuevo_tmp = os.path.join(tempfile.gettempdir(), "acctest_nuevo.exe")
+with open(_nuevo_tmp, "wb") as f:
+    f.write(b"EXE POR ELEVACION")
+check(ac.aplicar_reemplazo(_nuevo_tmp, ruta_exe(base), "2.0.0") == 0,
+      "aplicar_reemplazo devuelve 0 al completarse")
+check(contenido_exe(base) == b"EXE POR ELEVACION",
+      "aplicar_reemplazo mueve el archivo sobre el .exe viejo")
+check(not os.path.exists(_nuevo_tmp),
+      "aplicar_reemplazo consume el archivo temporal")
+with open(os.path.join(base, ac.VERSION_FILE), encoding="utf-8") as f:
+    check(f.read().strip() == "2.0.0",
+          "aplicar_reemplazo anota la versión nueva")
+check(ac.aplicar_reemplazo(os.path.join(tempfile.gettempdir(), "no_existe.exe"),
+                           ruta_exe(base), "3.0.0") == 1,
+      "aplicar_reemplazo devuelve 1 si el archivo no existe")
 shutil.rmtree(base, ignore_errors=True)
 
 print("\nTODAS LAS PRUEBAS DEL ACTUALIZADOR PASARON (%d verificaciones)"
