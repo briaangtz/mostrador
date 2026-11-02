@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Capa de datos del sistema de control de caja de garrafas.
 Usa SQLite (incluido en Python) y guarda todo en el archivo garrafas.db,
@@ -24,28 +24,28 @@ from permisos import (puede as _puede_permiso, RANGOS,
                       PERMISOS_VERSION, pendientes as _pendientes)
 from util import carpeta_datos
 
-# Carpeta del PROGRAMA (la de la instalación / del .exe). Ahí NO se
-# guardan datos: solo se usa para encontrar una base VIEJA que quedó en
+# Carpeta del PROGRAMA (la de la instalaciÃ³n / del .exe). AhÃ­ NO se
+# guardan datos: solo se usa para encontrar una base VIEJA que quedÃ³ en
 # el formato anterior (junto al programa) y ofrecer importarla una vez.
 if getattr(sys, "frozen", False):
     BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Los datos viven SIEMPRE en la carpeta del usuario. Así el .exe puede
+# Los datos viven SIEMPRE en la carpeta del usuario. AsÃ­ el .exe puede
 # estar en una carpeta de solo lectura, en un pendrive o puede ser
 # reemplazado por el actualizador sin perder nada.
 DB_PATH = os.path.join(carpeta_datos(), "garrafas.db")
 
-# Testigo de la importación de una base vieja: si existe, no se vuelve
-# a preguntar (ni a importar) nunca más en esta PC.
+# Testigo de la importaciÃ³n de una base vieja: si existe, no se vuelve
+# a preguntar (ni a importar) nunca mÃ¡s en esta PC.
 MARCADOR_MIGRACION = "base_vieja_importada.txt"
 
 # ---------------------------------------------------------------------------
 # Constantes del negocio
 # ---------------------------------------------------------------------------
 
-# Denominaciones de billetes para el conteo físico (arqueo)
+# Denominaciones de billetes para el conteo fÃ­sico (arqueo)
 DENOMINACIONES = [100, 200, 500, 1000, 2000, 10000, 20000]
 
 # Medios de pago
@@ -69,7 +69,7 @@ MEDIO_PERMISO = {
     "BONO": "pago_bono",
 }
 
-# Productos iniciales (precios de ejemplo, se pueden cambiar en Configuración).
+# Productos iniciales (precios de ejemplo, se pueden cambiar en ConfiguraciÃ³n).
 # Los 5 primeros son garrafas con gas; los "Envase ..." son envases sueltos,
 # que se venden por separado de la carga de gas.
 PRODUCTOS_BASE = [
@@ -94,7 +94,7 @@ PASSWORD_POR_DEFECTO = "admin"
 
 
 # ---------------------------------------------------------------------------
-# Conexión
+# ConexiÃ³n
 # ---------------------------------------------------------------------------
 
 @contextmanager
@@ -109,7 +109,7 @@ def db():
 
 
 # ---------------------------------------------------------------------------
-# Configuración general (clave/valor)
+# ConfiguraciÃ³n general (clave/valor)
 # ---------------------------------------------------------------------------
 
 def get_config(clave, defecto=None):
@@ -118,9 +118,9 @@ def get_config(clave, defecto=None):
             fila = con.execute("SELECT valor FROM config WHERE clave = ?",
                                 (clave,)).fetchone()
     except sqlite3.OperationalError:
-        # Base recién creada sin tablas todavía (init() aún no corrió):
-        # se respeta el contrato del parámetro y se devuelve el defecto.
-        # Un archivo corrupto ("file is not a database") NO entra acá:
+        # Base recién creada sin tablas todavÃ­a (init() aÃºn no corriÃ³):
+        # se respeta el contrato del parÃ¡metro y se devuelve el defecto.
+        # Un archivo corrupto ("file is not a database") NO entra acÃ¡:
         # ese error sigue saltando a la vista.
         return defecto
     return fila["valor"] if fila else defecto
@@ -147,14 +147,14 @@ def set_fondo_inicial(valor):
 
 
 # ---------------------------------------------------------------------------
-# Contraseña (guardada con sal, nunca en texto plano)
+# ContraseÃ±a (guardada con sal, nunca en texto plano)
 #
 # Formato actual:  pbkdf2_sha256$<iteraciones>$<sal>$<hash>   (PBKDF2-HMAC-SHA256)
 # Formato viejo:   <sal>$<sha256(sal+texto)>                  (se acepta y se
-#                  migra solo, en el próximo inicio de sesión)
+#                  migra solo, en el prÃ³ximo inicio de sesiÃ³n)
 # ---------------------------------------------------------------------------
 
-KDF_ITERACIONES = 600_000          # recomendación OWASP para PBKDF2-SHA256
+KDF_ITERACIONES = 600_000          # recomendaciÃ³n OWASP para PBKDF2-SHA256
 HASH_PREFIJO = "pbkdf2_sha256"
 
 
@@ -184,7 +184,7 @@ def _nuevo_hash(texto, iteraciones=KDF_ITERACIONES):
 
 
 def _es_legacy(guardado):
-    """¿Está en el formato viejo (sha256 de una sola ronda)?"""
+    """Â¿EstÃ¡ en el formato viejo (sha256 de una sola ronda)?"""
     return bool(guardado) and not str(guardado).startswith(HASH_PREFIJO + "$")
 
 
@@ -205,15 +205,15 @@ def _password_ok(guardado, intento):
 
 
 def es_password_inicial(guardado):
-    """¿La contraseña guardada sigue siendo la de fábrica ('admin')?
+    """Â¿La contraseÃ±a guardada sigue siendo la de fÃ¡brica ('admin')?
 
-    Se usa para forzar el cambio en el primer inicio de sesión (no
+    Se usa para forzar el cambio en el primer inicio de sesiÃ³n (no
     dejar credenciales por defecto instaladas)."""
     return _password_ok(guardado, PASSWORD_POR_DEFECTO)
 
 
 # ---------------------------------------------------------------------------
-# Usuarios, sesión, aperturas y registro de actividad
+# Usuarios, sesiÃ³n, aperturas y registro de actividad
 # ---------------------------------------------------------------------------
 
 def listar_usuarios():
@@ -241,7 +241,7 @@ def usuario_por_nombre(nombre):
 
 
 def validar_credenciales(usuario, password):
-    """Devuelve el usuario (dict) si las credenciales son válidas y está activo."""
+    """Devuelve el usuario (dict) si las credenciales son vÃ¡lidas y estÃ¡ activo."""
     u = usuario_por_nombre(usuario)
     if not u or not u["activo"]:
         return None
@@ -257,11 +257,11 @@ def crear_usuario(usuario, password, rango="USUARIO", permisos=None):
     """
     nombre = (usuario or "").strip()
     if not nombre:
-        raise ValueError("El nombre de usuario no puede estar vacío.")
+        raise ValueError("El nombre de usuario no puede estar vacÃ­o.")
     if rango not in RANGOS:
-        raise ValueError(f"Rango inválido: {rango}")
+        raise ValueError(f"Rango invÃ¡lido: {rango}")
     if not password or len(str(password)) < 4:
-        raise ValueError("La contraseña debe tener al menos 4 caracteres.")
+        raise ValueError("La contraseÃ±a debe tener al menos 4 caracteres.")
     if usuario_por_nombre(nombre):
         raise ValueError("Ya existe un usuario con ese nombre.")
     valor_permisos = _valor_permisos(permisos, rango)
@@ -274,9 +274,9 @@ def crear_usuario(usuario, password, rango="USUARIO", permisos=None):
              PERMISOS_VERSION),
         )
         nuevo_id = cur.lastrowid
-    detalle = f"{nombre} — rango {rango}"
+    detalle = f"{nombre} â€” rango {rango}"
     if valor_permisos:
-        detalle += f" — {len(valor_permisos.split(','))} permisos asignados"
+        detalle += f" â€” {len(valor_permisos.split(','))} permisos asignados"
     log_actividad("Usuario creado", detalle)
     return usuario_por_id(nuevo_id)
 
@@ -287,15 +287,15 @@ def actualizar_usuario(uid, usuario=None, rango=None, activo=None, permisos=None
     if not actual:
         raise ValueError("El usuario no existe.")
     if rango is not None and rango not in RANGOS:
-        raise ValueError(f"Rango inválido: {rango}")
-    # No permitir que el sistema quede sin ningún DESARROLLADOR activo
+        raise ValueError(f"Rango invÃ¡lido: {rango}")
+    # No permitir que el sistema quede sin ningÃºn DESARROLLADOR activo
     if (actual["rango"] == "DESARROLLADOR" and actual["activo"]
             and rango not in (None, "DESARROLLADOR")):
         otros = [x for x in listar_usuarios()
                  if x["id"] != uid and x["rango"] == "DESARROLLADOR" and x["activo"]]
         if not otros:
             raise ValueError("Debe existir al menos un DESARROLLADOR activo. "
-                             "Creá otro usuario DESARROLLADOR antes de cambiar este.")
+                             "CreÃ¡ otro usuario DESARROLLADOR antes de cambiar este.")
     nombre = (usuario or actual["usuario"]).strip()
     if usuario and usuario_por_nombre(nombre) and \
             usuario_por_nombre(nombre)["id"] != uid:
@@ -315,9 +315,9 @@ def actualizar_usuario(uid, usuario=None, rango=None, activo=None, permisos=None
                          PERMISOS_VERSION, uid))
     cambios = []
     if nombre != actual["usuario"]:
-        cambios.append(f"nombre → {nombre}")
+        cambios.append(f"nombre â†’ {nombre}")
     if rango and rango != actual["rango"]:
-        cambios.append(f"rango → {rango}")
+        cambios.append(f"rango â†’ {rango}")
     if activo is not None and int(activo) != actual["activo"]:
         cambios.append("activado" if activo else "desactivado")
     if permisos is not None and rango_final != "DESARROLLADOR":
@@ -330,47 +330,47 @@ def actualizar_usuario(uid, usuario=None, rango=None, activo=None, permisos=None
 
 def cambiar_password(uid, nueva):
     if not nueva or len(str(nueva)) < 4:
-        raise ValueError("La contraseña debe tener al menos 4 caracteres.")
+        raise ValueError("La contraseÃ±a debe tener al menos 4 caracteres.")
     u = usuario_por_id(uid)
     if not u:
         raise ValueError("El usuario no existe.")
     with db() as con:
         con.execute("UPDATE usuarios SET password = ? WHERE id = ?",
                     (_nuevo_hash(str(nueva)), uid))
-    log_actividad("Contraseña modificada", f"Usuario: {u['usuario']}")
+    log_actividad("ContraseÃ±a modificada", f"Usuario: {u['usuario']}")
 
 
 def eliminar_usuario(uid):
-    """Elimina un usuario. No permite borrarse a sí mismo ni al último DESARROLLADOR."""
+    """Elimina un usuario. No permite borrarse a sÃ­ mismo ni al Ãºltimo DESARROLLADOR."""
     u = usuario_por_id(uid)
     if not u:
         raise ValueError("El usuario no existe.")
     sesion = usuario_sesion()
     if sesion and sesion["id"] == uid:
-        raise ValueError("No podés eliminar el usuario con el que estás conectado.")
+        raise ValueError("No podés eliminar el usuario con el que estÃ¡s conectado.")
     activos = [x for x in listar_usuarios()
                if x["rango"] == "DESARROLLADOR" and x["activo"]]
     if u["rango"] == "DESARROLLADOR" and (len(activos) <= 1):
-        raise ValueError("No se puede eliminar el último DESARROLLADOR activo.")
+        raise ValueError("No se puede eliminar el Ãºltimo DESARROLLADOR activo.")
     with db() as con:
         con.execute("DELETE FROM usuarios WHERE id = ?", (uid,))
     log_actividad("Usuario eliminado",
-                  f"{u['usuario']} — rango {u['rango']}")
+                  f"{u['usuario']} â€” rango {u['rango']}")
 
 
 # ---------------------------------------------------------------------------
 # Freno de intentos de login (hallazgo AppSec #11)
 #
 # Cada intento fallido consecutivo del MISMO usuario suma una pausa
-# progresiva (0,5 s · n, tope 3 s) antes de revalidar. Un login correcto
+# progresiva (0,5 s Â· n, tope 3 s) antes de revalidar. Un login correcto
 # pone el contador en cero. Es solo memoria de proceso: al reiniciar el
 # programa vuelve a arrancar, pero alcanza para frenar fuerza bruta
-# guiada mientras la sesión de la ventana está abierta.
+# guiada mientras la sesiÃ³n de la ventana estÃ¡ abierta.
 # ---------------------------------------------------------------------------
 
-_INTENTOS_FALLIDOS = {}          # usuario en minúsculas -> fallos seguidos
-_TOPE_ESPERA = 3.0               # segundos de pausa máxima
-_TOPE_LOG = 10                   # a partir de acá, se deja constancia
+_INTENTOS_FALLIDOS = {}          # usuario en minÃºsculas -> fallos seguidos
+_TOPE_ESPERA = 3.0               # segundos de pausa mÃ¡xima
+_TOPE_LOG = 10                   # a partir de acÃ¡, se deja constancia
 
 
 def _esperar_si_fuerza_bruta(usuario):
@@ -399,29 +399,29 @@ def limpiar_fallos(usuario):
 
 
 def iniciar_sesion(usuario, password):
-    """Valida credenciales, guarda la sesión y devuelve el usuario, o None."""
+    """Valida credenciales, guarda la sesiÃ³n y devuelve el usuario, o None."""
     _esperar_si_fuerza_bruta(usuario)
     u = validar_credenciales(usuario, password)
     if not u:
         _sumar_fallo(usuario)
-        log_actividad("Inicio de sesión rechazado",
+        log_actividad("Inicio de sesiÃ³n rechazado",
                       f"Usuario intentado: {(usuario or '').strip()}",
                       {"id": None, "usuario": "sistema"})
         return None
     limpiar_fallos(usuario)
-    # Migración transparente: quien tenía el hash viejo (sha256 de una
+    # MigraciÃ³n transparente: quien tenÃ­a el hash viejo (sha256 de una
     # sola ronda) pasa a PBKDF2 apenas entra, sin que tenga que hacer nada.
     if _es_legacy(u["password"]):
         with db() as con:
             con.execute("UPDATE usuarios SET password = ? WHERE id = ?",
                         (_nuevo_hash(password), u["id"]))
-        log_actividad("Contraseña actualizada al formato nuevo",
+        log_actividad("ContraseÃ±a actualizada al formato nuevo",
                       f"Usuario: {u['usuario']}", u)
     set_config("sesion", str(u["id"]))
     with db() as con:
         con.execute("UPDATE usuarios SET ultimo_acceso = ? WHERE id = ?",
                     (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), u["id"]))
-    log_actividad("Inicio de sesión", f"Usuario: {u['usuario']} ({u['rango']})", u)
+    log_actividad("Inicio de sesiÃ³n", f"Usuario: {u['usuario']} ({u['rango']})", u)
     return usuario_por_id(u["id"])
 
 
@@ -429,7 +429,7 @@ def cerrar_sesion():
     u = usuario_sesion()
     set_config("sesion", "")
     if u:
-        log_actividad("Cierre de sesión", f"Usuario: {u['usuario']}", u)
+        log_actividad("Cierre de sesiÃ³n", f"Usuario: {u['usuario']}", u)
 
 
 def usuario_sesion():
@@ -449,9 +449,9 @@ def usuario_sesion():
 
 def puede(permiso, rango=None):
     """
-    True si la sesión actual (o el rango indicado) tiene el permiso.
+    True si la sesiÃ³n actual (o el rango indicado) tiene el permiso.
 
-    Con rango explícito responde como ese rango (para consultas de la UI).
+    Con rango explÃ­cito responde como ese rango (para consultas de la UI).
     Sin rango, aplica: DESARROLLADOR = siempre; si el usuario tiene permisos
     asignados uno por uno, esos; si no, los de su rango.
     """
@@ -513,7 +513,7 @@ def set_permisos_usuario(uid, permisos):
 
 
 def validar_password_sesion(password):
-    """Valida la contraseña del usuario conectado actualmente."""
+    """Valida la contraseÃ±a del usuario conectado actualmente."""
     u = usuario_sesion()
     if not u:
         return False
@@ -522,15 +522,15 @@ def validar_password_sesion(password):
 
 def log_actividad(accion, detalle="", usuario=None):
     """
-    Registra una acción importante en el registro de actividad.
-    usuario: dict de usuario, id numérico, o None (usa la sesión actual).
+    Registra una acciÃ³n importante en el registro de actividad.
+    usuario: dict de usuario, id numérico, o None (usa la sesiÃ³n actual).
     """
     if isinstance(usuario, dict):
         uid = usuario.get("id")
-        nombre = usuario.get("usuario") or "—"
+        nombre = usuario.get("usuario") or "â€”"
     elif usuario is None:
         u = usuario_sesion()
-        uid, nombre = (u["id"], u["usuario"]) if u else (None, "—")
+        uid, nombre = (u["id"], u["usuario"]) if u else (None, "â€”")
     else:
         u2 = usuario_por_id(usuario)
         uid = usuario
@@ -545,7 +545,7 @@ def log_actividad(accion, detalle="", usuario=None):
 
 
 def historial_actividad(limite=300):
-    """Últimas acciones registradas, ordenadas de más reciente a más antigua."""
+    """Ãšltimas acciones registradas, ordenadas de mÃ¡s reciente a mÃ¡s antigua."""
     with db() as con:
         filas = con.execute(
             "SELECT * FROM actividad ORDER BY id DESC LIMIT ?",
@@ -555,7 +555,7 @@ def historial_actividad(limite=300):
 
 
 def registrar_apertura(caja_id, monto_inicial=None):
-    """Registra la apertura de una caja con el usuario de la sesión actual."""
+    """Registra la apertura de una caja con el usuario de la sesiÃ³n actual."""
     caja = get_caja_por_id(caja_id)
     u = usuario_sesion()
     monto = get_fondo_inicial() if monto_inicial is None else float(monto_inicial)
@@ -569,7 +569,7 @@ def registrar_apertura(caja_id, monto_inicial=None):
         )
     log_actividad(
         "Apertura de caja",
-        f"Caja del {fecha_larga(caja['fecha']) if caja else '?'} — "
+        f"Caja del {fecha_larga(caja['fecha']) if caja else '?'} â€” "
         f"monto inicial ${monto:,.0f}".replace(",", "."),
         u,
     )
@@ -611,7 +611,7 @@ def _nombre_foto(uid):
 
 def migrar_foto_legada():
     """
-    Versiones anteriores tenían UNA sola foto para todos (config "foto_perfil").
+    Versiones anteriores tenÃ­an UNA sola foto para todos (config "foto_perfil").
     Se la asigna al primer usuario para que cada cuenta tenga la suya.
     """
     nombre_viejo = get_config("foto_perfil")
@@ -637,7 +637,7 @@ def migrar_foto_legada():
 
 
 def foto_perfil(uid=None):
-    """Ruta completa de la foto de perfil del usuario (por defecto: la sesión)."""
+    """Ruta completa de la foto de perfil del usuario (por defecto: la sesiÃ³n)."""
     if uid is None:
         u = usuario_sesion()
         uid = u["id"] if u else None
@@ -651,14 +651,14 @@ def foto_perfil(uid=None):
 
 
 def set_foto_perfil(ruta_origen, uid=None):
-    """Copia la imagen elegida (jpg/png/bmp/ico…) como foto del usuario."""
+    """Copia la imagen elegida (jpg/png/bmp/icoâ€¦) como foto del usuario."""
     from PIL import Image
 
     if uid is None:
         u = usuario_sesion()
         uid = u["id"] if u else None
     if uid is None:
-        raise ValueError("No hay ningún usuario conectado.")
+        raise ValueError("No hay ningÃºn usuario conectado.")
     u = usuario_por_id(uid)
     if not u:
         raise ValueError("El usuario no existe.")
@@ -678,7 +678,7 @@ def set_foto_perfil(ruta_origen, uid=None):
 
 
 def quitar_foto_perfil(uid=None):
-    """Elimina la foto de perfil del usuario (por defecto: de la sesión)."""
+    """Elimina la foto de perfil del usuario (por defecto: de la sesiÃ³n)."""
     if uid is None:
         u = usuario_sesion()
         uid = u["id"] if u else None
@@ -688,7 +688,7 @@ def quitar_foto_perfil(uid=None):
     if not u or not u.get("foto"):
         return
     nombre = os.path.basename(str(u["foto"]))
-    # Solo se borra el archivo si ningún otro usuario lo usa
+    # Solo se borra el archivo si ningÃºn otro usuario lo usa
     en_uso = any((x.get("foto") or "") == nombre
                  for x in listar_usuarios() if x["id"] != uid)
     if not en_uso:
@@ -702,22 +702,22 @@ def quitar_foto_perfil(uid=None):
 
 
 # ---------------------------------------------------------------------------
-# Portabilidad: importación de una base VIEJA (junto al programa)
+# Portabilidad: importaciÃ³n de una base VIEJA (junto al programa)
 #
 # Versiones anteriores guardaban garrafas.db junto al .exe. Ahora los
 # datos viven en %LOCALAPPDATA%\Garrafas. La primera vez que el programa
-# corre en una PC donde la carpeta de datos todavía no tiene base, pero
-# sí hay una base vieja junto al programa, se ofrece importarla UNA vez.
+# corre en una PC donde la carpeta de datos todavÃ­a no tiene base, pero
+# sÃ­ hay una base vieja junto al programa, se ofrece importarla UNA vez.
 #
 # Reglas:
 #   * se COPIA (no se mueve): la base vieja queda intacta por las dudas;
 #   * NUNCA se importa si el destino ya tiene datos;
-#   * el testigo MARCADOR_MIGRACION se escribe tanto si se importó como
+#   * el testigo MARCADOR_MIGRACION se escribe tanto si se importÃ³ como
 #     si el usuario dijo que no, para no volver a preguntar.
 # ---------------------------------------------------------------------------
 
 def ruta_marcador_migracion():
-    """Archivo testigo de que la base vieja ya se gestionó en esta PC."""
+    """Archivo testigo de que la base vieja ya se gestionÃ³ en esta PC."""
     return os.path.join(carpeta_datos(), MARCADOR_MIGRACION)
 
 
@@ -726,18 +726,18 @@ def _marcar_migracion():
         with open(ruta_marcador_migracion(), "w", encoding="utf-8") as f:
             f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
     except OSError:
-        pass                        # sin permisos: se volverá a preguntar
+        pass                        # sin permisos: se volverÃ¡ a preguntar
 
 
 def base_vieja_detectada():
     """Ruta de una base vieja junto al programa, o None.
 
-    Devuelve la ruta solo si conviene importarla: que todavía no exista
-    una base en la carpeta de datos (importar podría pisar datos ya
+    Devuelve la ruta solo si conviene importarla: que todavÃ­a no exista
+    una base en la carpeta de datos (importar podrÃ­a pisar datos ya
     cargados) y que no se haya gestionado antes.
     """
     if os.path.exists(ruta_marcador_migracion()):
-        return None                     # ya se preguntó una vez
+        return None                     # ya se preguntÃ³ una vez
     if os.path.exists(DB_PATH):
         return None                     # el destino ya tiene datos
     vieja = os.path.join(BASE_DIR, "garrafas.db")
@@ -750,12 +750,12 @@ def importar_base_vieja():
     """Copia la base vieja (y sus respaldos y fotos) a la carpeta de datos.
 
     Usa la copia de SQLite, que es consistente aunque la base esté en uso.
-    Marca la migración para no volver a preguntar. Lanza OSError si algo
+    Marca la migraciÃ³n para no volver a preguntar. Lanza OSError si algo
     falla (lo maneja quien llama, que muestra el cartel).
     """
     origen_vieja = os.path.join(BASE_DIR, "garrafas.db")
     if not os.path.exists(origen_vieja):
-        raise OSError("No se encontró la base de datos vieja junto al programa.")
+        raise OSError("No se encontrÃ³ la base de datos vieja junto al programa.")
 
     carpeta = os.path.dirname(os.path.abspath(DB_PATH))
     os.makedirs(carpeta, exist_ok=True)
@@ -768,7 +768,7 @@ def importar_base_vieja():
     finally:
         origen.close()
 
-    # 2) Los respaldos viejos (por si algún día hace falta mirar atrás)
+    # 2) Los respaldos viejos (por si algÃºn dÃ­a hace falta mirar atrÃ¡s)
     resp_old = os.path.join(BASE_DIR, "respaldos")
     resp_new = os.path.join(carpeta, "respaldos")
     if os.path.isdir(resp_old):
@@ -781,22 +781,22 @@ def importar_base_vieja():
         shutil.copytree(per_old, per_new, dirs_exist_ok=True)
 
     _marcar_migracion()
-    log_actividad("Importación de base de datos vieja",
-                  f"Desde: {origen_vieja} — hacia: {DB_PATH}")
+    log_actividad("ImportaciÃ³n de base de datos vieja",
+                  f"Desde: {origen_vieja} â€” hacia: {DB_PATH}")
     return DB_PATH
 
 
 def descartar_base_vieja():
-    """El usuario eligió empezar de cero: no volver a preguntar."""
+    """El usuario eligiÃ³ empezar de cero: no volver a preguntar."""
     _marcar_migracion()
 
 
 # ---------------------------------------------------------------------------
-# Inicialización
+# InicializaciÃ³n
 # ---------------------------------------------------------------------------
 
 def init():
-    # La carpeta de datos puede no existir todavía (PC recién instalada)
+    # La carpeta de datos puede no existir todavÃ­a (PC recién instalada)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     with db() as con:
         con.executescript(
@@ -864,10 +864,10 @@ def init():
                 reabierta          INTEGER NOT NULL DEFAULT 0
             );
 
-            -- Rendición por buzón: los datos cargados en la pestaña de la
+            -- RendiciÃ³n por buzÃ³n: los datos cargados en la pestaÃ±a de la
             -- planilla (detalle, secciones, cheques, observaciones) y el
             -- conteo de billetes de la calculadora. Se guarda un solo
-            -- registro por día; el contenido va en JSON para poder sumar
+            -- registro por dÃ­a; el contenido va en JSON para poder sumar
             -- campos sin migrar la tabla.
             CREATE TABLE IF NOT EXISTS rendiciones (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -921,7 +921,7 @@ def init():
             """
         )
 
-        # Migración de bases creadas con versiones anteriores: la tabla vieja
+        # MigraciÃ³n de bases creadas con versiones anteriores: la tabla vieja
         # guardaba UN producto y UN medio por venta. Ahora cada venta es un
         # TICKET con sus productos (venta_items) y sus formas de pago
         # (venta_pagos). Las ventas viejas se pasan al formato nuevo
@@ -986,9 +986,9 @@ def init():
             con.execute("ALTER TABLE usuarios ADD COLUMN foto TEXT")
         if "permisos" not in columnas_usuarios:
             con.execute("ALTER TABLE usuarios ADD COLUMN permisos TEXT")
-        # Versión de la lista de permisos de cada usuario: permite agregar
+        # VersiÃ³n de la lista de permisos de cada usuario: permite agregar
         # permisos nuevos (p. ej. pago_bono) a las listas guardadas en una
-        # versión anterior, sin pisar los permisos quitados a propósito.
+        # versiÃ³n anterior, sin pisar los permisos quitados a propÃ³sito.
         if "permisos_v" not in columnas_usuarios:
             con.execute("ALTER TABLE usuarios ADD COLUMN permisos_v INTEGER "
                         "DEFAULT 1")
@@ -1028,14 +1028,18 @@ def init():
                 "INSERT INTO productos (nombre, precio) VALUES (?, ?)", faltantes
             )
 
-    # Semilla de configuración
+        # ---------------- MigraciÃ³n: mÃ³dulo USUARIO ----------------
+        # Solo se AGREGAN columnas y tablas; nada existente se toca.
+        _migrar_modulo_usuario(con)
+
+    # Semilla de configuraciÃ³n
     if get_config("fondo_inicial") is None:
         set_config("fondo_inicial", "0")
     if get_config("password") is None:
         set_password(PASSWORD_POR_DEFECTO)
 
     # Semilla de usuarios: el primero nace como DESARROLLADOR.
-    # Si ya existía una contraseña de reapertura, se conserva tal cual (sal + hash).
+    # Si ya existÃ­a una contraseÃ±a de reapertura, se conserva tal cual (sal + hash).
     if not listar_usuarios():
         clave_vieja = get_config("password")
         hash_guardado = (clave_vieja if clave_vieja and "$" in clave_vieja
@@ -1050,15 +1054,55 @@ def init():
         log_actividad("Sistema", "Primer usuario creado: admin (DESARROLLADOR)",
                       {"id": None, "usuario": "sistema"})
 
-    # La foto única de versiones anteriores queda asignada al primer usuario
+    # La foto Ãºnica de versiones anteriores queda asignada al primer usuario
     migrar_foto_legada()
 
 
 # ---------------------------------------------------------------------------
-# Respaldos automáticos de la base de datos
+# MigraciÃ³n: mÃ³dulo USUARIO (solo AGREGAR)
 # ---------------------------------------------------------------------------
 
-# Cantidad de respaldos que se conservan (los más viejos se borran solos)
+def _migrar_modulo_usuario(con):
+    """Agrega columnas y tablas para el mÃ³dulo USUARIO sin tocar lo
+    existente. Ventas de MOSTRADOR quedan con modulo='MOSTRADOR'."""
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Columna modulo en ventas (MOSTRADOR por defecto para histÃ³rico)
+    columnas_ventas = {r["name"] for r in con.execute("PRAGMA table_info(ventas)")}
+    if "modulo" not in columnas_ventas:
+        con.execute("ALTER TABLE ventas ADD COLUMN modulo TEXT "
+                    "DEFAULT 'MOSTRADOR'")
+    if "token_venta" not in columnas_ventas:
+        con.execute("ALTER TABLE ventas ADD COLUMN token_venta TEXT")
+
+    # Tabla de auditorÃ­a de solo inserciÃ³n
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS auditoria (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora  TEXT    NOT NULL,
+            usuario_id  INTEGER,
+            usuario     TEXT,
+            accion      TEXT    NOT NULL,
+            entidad     TEXT,
+            valor_anterior TEXT,
+            valor_nuevo   TEXT,
+            modulo      TEXT,
+            resultado   TEXT    NOT NULL DEFAULT 'OK'
+        )
+    """)
+
+    # Interruptor de configuraciÃ³n del mÃ³dulo USUARIO
+    con.execute(
+        "INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)",
+        ("MODULO_USUARIO_ACTIVO", "0"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Respaldos automÃ¡ticos de la base de datos
+# ---------------------------------------------------------------------------
+
+# Cantidad de respaldos que se conservan (los mÃ¡s viejos se borran solos)
 RESPALDOS_CONSERVAR = 60
 
 
@@ -1068,7 +1112,7 @@ def dir_respaldos():
 
 
 def respaldos_existentes():
-    """Lista ordenada (más viejo primero) de los respaldos guardados."""
+    """Lista ordenada (mÃ¡s viejo primero) de los respaldos guardados."""
     carpeta = dir_respaldos()
     if not os.path.isdir(carpeta):
         return []
@@ -1097,18 +1141,18 @@ def respaldar(motivo="manual"):
     origen = sqlite3.connect(DB_PATH)
     try:
         with sqlite3.connect(destino) as respaldo:
-            origen.backup(respaldo)                # copia íntegra y consistente
+            origen.backup(respaldo)                # copia Ã­ntegra y consistente
     finally:
         origen.close()
 
     _podar_respaldos()
     log_actividad("Respaldo de base de datos",
-                  f"{motivo} — {os.path.basename(destino)}")
+                  f"{motivo} â€” {os.path.basename(destino)}")
     return destino
 
 
 def respaldar_si_toca(motivo=""):
-    """Respaldá solo si hoy todavía no hay ningún respaldo. Devuelve la ruta o None."""
+    """RespaldÃ¡ solo si hoy todavÃ­a no hay ningÃºn respaldo. Devuelve la ruta o None."""
     prefijo = "garrafas_" + date.today().isoformat()
     for ruta in respaldos_existentes():
         if os.path.basename(ruta).startswith(prefijo):
@@ -1117,7 +1161,7 @@ def respaldar_si_toca(motivo=""):
 
 
 def _podar_respaldos():
-    """Conserva solo los RESPALDOS_CONSERVAR respaldos más recientes."""
+    """Conserva solo los RESPALDOS_CONSERVAR respaldos mÃ¡s recientes."""
     archivos = respaldos_existentes()
     for ruta in archivos[:-RESPALDOS_CONSERVAR]:
         try:
@@ -1127,7 +1171,7 @@ def _podar_respaldos():
 
 
 def ultimo_respaldo():
-    """Datos del respaldo más reciente, o None si todavía no hay."""
+    """Datos del respaldo mÃ¡s reciente, o None si todavÃ­a no hay."""
     archivos = respaldos_existentes()
     if not archivos:
         return None
@@ -1193,7 +1237,7 @@ def crear_producto(nombre, precio):
 
 
 def eliminar_producto(pid):
-    """Marca el producto como inactivo (se conserva el histórico de ventas)."""
+    """Marca el producto como inactivo (se conserva el histÃ³rico de ventas)."""
     with db() as con:
         con.execute("UPDATE productos SET activo = 0 WHERE id = ?", (pid,))
 
@@ -1201,14 +1245,14 @@ def eliminar_producto(pid):
 def es_envase(nombre):
     """
     True si el producto es un envase suelto (se vende sin gas) y no una
-    garrafa con carga. Se decide por el nombre, así quien crea o renombra
-    un producto desde Configuración no tiene que tocar nada más.
+    garrafa con carga. Se decide por el nombre, asÃ­ quien crea o renombra
+    un producto desde ConfiguraciÃ³n no tiene que tocar nada mÃ¡s.
     """
     return (nombre or "").strip().lower().startswith("envase")
 
 
 def productos_por_tipo(solo_activos=True):
-    """(garrafas, envases) — dos listas de productos para informes."""
+    """(garrafas, envases) â€” dos listas de productos para informes."""
     garrafas, envases = [], []
     for p in productos(solo_activos):
         (envases if es_envase(p["nombre"]) else garrafas).append(p)
@@ -1216,7 +1260,7 @@ def productos_por_tipo(solo_activos=True):
 
 
 # ---------------------------------------------------------------------------
-# Cajas (una por día)
+# Cajas (una por dÃ­a)
 # ---------------------------------------------------------------------------
 
 def hoy():
@@ -1237,8 +1281,8 @@ def get_caja(fecha):
 
 
 def crear_caja(fecha):
-    """Crea la caja del día si no existe. La apertura se registra a mano
-    con abrir_caja() desde el botón ABRIR CAJA de la pantalla Inicio."""
+    """Crea la caja del dÃ­a si no existe. La apertura se registra a mano
+    con abrir_caja() desde el botÃ³n ABRIR CAJA de la pantalla Inicio."""
     existente = get_caja(fecha)
     if existente:
         return existente
@@ -1256,7 +1300,7 @@ def abrir_caja(caja_id, monto_inicial=None):
     if not caja:
         raise ValueError("La caja no existe.")
     if caja["estado"] != "abierta":
-        raise ValueError("La caja está cerrada: no se puede abrir.")
+        raise ValueError("La caja estÃ¡ cerrada: no se puede abrir.")
     if apertura_de(caja_id):
         raise ValueError("La caja ya fue abierta.")
     registrar_apertura(caja_id, monto_inicial)
@@ -1306,8 +1350,8 @@ def _items_de(con, venta_ids):
         return {}
     comodines = ",".join("?" * len(ids))
     # Falso positivo de bandit (B608): 'comodines' es solo "?" repetidos y
-    # los IDs van como parámetros (2.º argumento de execute), nunca como
-    # texto dentro de la consulta. Por eso la línea lleva "# nosec B608".
+    # los IDs van como parÃ¡metros (2.Âº argumento de execute), nunca como
+    # texto dentro de la consulta. Por eso la lÃ­nea lleva "# nosec B608".
     consulta = (f"SELECT i.*, p.nombre AS producto FROM venta_items i "
                 f"LEFT JOIN productos p ON p.id = i.producto_id "
                 f"WHERE i.venta_id IN ({comodines}) ORDER BY i.id")  # nosec B608
@@ -1335,14 +1379,14 @@ def _pagos_de(con, venta_ids):
 
 
 def texto_items(items):
-    """'1 × Garrafa 10 kg + 2 × Garrafa 15 kg'."""
+    """'1 Ã— Garrafa 10 kg + 2 Ã— Garrafa 15 kg'."""
     return " + ".join(
-        f"{i['cantidad']} × {i.get('producto') or 'Producto'}" for i in items
+        f"{i['cantidad']} Ã— {i.get('producto') or 'Producto'}" for i in items
     )
 
 
 def texto_pagos(pagos):
-    """'Efectivo'  ·  'Efectivo + Tarjeta de débito'."""
+    """'Efectivo'  Â·  'Efectivo + Tarjeta de débito'."""
     nombres = []
     for p in pagos:
         if p["medio"] not in nombres:
@@ -1351,7 +1395,7 @@ def texto_pagos(pagos):
 
 
 def medio_principal(pagos):
-    """Medio que aporta más importe (en empate, el primero cargado).
+    """Medio que aporta mÃ¡s importe (en empate, el primero cargado).
 
     Es el medio al que se le acreditan las UNIDADES de esa venta en los
     reportes; el dinero siempre se reparte exacto entre todos los medios.
@@ -1366,7 +1410,7 @@ def medio_principal(pagos):
 
 
 def comprobante_de(pagos, medio=None):
-    """N° de comprobante de un pago (si hay medio, el de ese medio)."""
+    """NÂ° de comprobante de un pago (si hay medio, el de ese medio)."""
     for p in pagos:
         if medio and p["medio"] != medio:
             continue
@@ -1408,7 +1452,7 @@ def _normalizar_items(items):
             cantidad = int(it["cantidad"])
             precio = float(it["precio_unitario"])
         except (TypeError, ValueError, KeyError):
-            raise ValueError("Revisá el producto, la cantidad y el precio.")
+            raise ValueError("RevisÃ¡ el producto, la cantidad y el precio.")
         prod = producto_por_id(pid)
         if not prod:
             raise ValueError("El producto seleccionado ya no existe.")
@@ -1433,7 +1477,7 @@ def _normalizar_items(items):
 
 
 def _normalizar_pagos(pagos, total):
-    """Valida las formas de pago: medios válidos, importes > 0,
+    """Valida las formas de pago: medios vÃ¡lidos, importes > 0,
     comprobante obligatorio en transferencia y SUMA = total."""
     salida = []
     for pg in pagos or []:
@@ -1444,15 +1488,15 @@ def _normalizar_pagos(pagos, total):
             importe = 0.0
         comprobante = (pg.get("comprobante") or "").strip() or None
         if medio not in MEDIOS_PAGO:
-            raise ValueError(f"Medio de pago no válido: {medio or '—'}.")
+            raise ValueError(f"Medio de pago no vÃ¡lido: {medio or 'â€”'}.")
         if importe <= 0:
             raise ValueError(f"El importe en {medio} tiene que ser mayor a cero.")
-        # El N° de comprobante de la transferencia es obligatorio y se pide
-        # en la pantalla de ventas (ui_ventas); acá solo se guarda.
+        # El NÂ° de comprobante de la transferencia es obligatorio y se pide
+        # en la pantalla de ventas (ui_ventas); acÃ¡ solo se guarda.
         salida.append({"medio": medio, "importe": importe,
                        "comprobante": comprobante})
     if not salida:
-        raise ValueError("Falta indicar cómo se pagó la venta.")
+        raise ValueError("Falta indicar cÃ³mo se pagÃ³ la venta.")
 
     pagado = sum(p["importe"] for p in salida)
     if abs(pagado - float(total)) >= 0.01:
@@ -1473,27 +1517,30 @@ def _normalizar_pagos(pagos, total):
 
 def _descripcion_ticket(t):
     """Texto de registro de actividad para una venta (ticket)."""
-    texto = (f"#{t['id']} — {texto_items(t['items'])} — {t['medios_txt']} — "
+    texto = (f"#{t['id']} â€” {texto_items(t['items'])} â€” {t['medios_txt']} â€” "
              f"${t['total']:,.0f}".replace(",", "."))
     if t.get("comprobante"):
-        texto += f" — Comprobante: {t['comprobante']}"
+        texto += f" â€” Comprobante: {t['comprobante']}"
     if t.get("cliente"):
-        texto += f" — Cliente: {t['cliente']}"
+        texto += f" â€” Cliente: {t['cliente']}"
     return texto
 
 
-def registrar_ticket(caja_id, items, pagos, cliente=None):
+def registrar_ticket(caja_id, items, pagos, cliente=None,
+                     modulo="MOSTRADOR", token_venta=None):
     """Registra una venta completa: uno o varios productos y una o varias
     formas de pago cuya suma da exactamente el total.
 
     items: [{"producto_id", "cantidad", "precio_unitario"}, ...]
     pagos: [{"medio", "importe", "comprobante"}, ...]
+    modulo: "MOSTRADOR" o "USUARIO" (origen de la venta)
+    token_venta: token Ãºnico para evitar doble clic
     Devuelve el ticket guardado (con id, total, items y pagos).
     """
     if not apertura_de(caja_id):
         raise ValueError(
-            "La caja todavía no fue abierta. "
-            "Presioná ABRIR CAJA antes de registrar ventas."
+            "La caja todavÃ­a no fue abierta. "
+            "PresionÃ¡ ABRIR CAJA antes de registrar ventas."
         )
     items_limpios = _normalizar_items(items)
     total = sum(i["subtotal"] for i in items_limpios)
@@ -1503,10 +1550,10 @@ def registrar_ticket(caja_id, items, pagos, cliente=None):
     with db() as con:
         cur = con.execute(
             "INSERT INTO ventas (caja_id, fecha_hora, cliente, total, "
-            "registrada_por) VALUES (?, ?, ?, ?, ?)",
+            "registrada_por, modulo, token_venta) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (caja_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
              (cliente or "").strip() or None, total,
-             u["id"] if u else None),
+             u["id"] if u else None, modulo, token_venta),
         )
         venta_id = cur.lastrowid
         con.executemany(
@@ -1567,14 +1614,14 @@ def eliminar_venta(venta_id):
 
 
 def eliminar_ventas(venta_ids):
-    """Elimina varias ventas (tickets) de una sola vez. Devuelve cuántas
-    borró. El registro de actividad se escribe con la transacción cerrada.
+    """Elimina varias ventas (tickets) de una sola vez. Devuelve cuÃ¡ntas
+    borrÃ³. El registro de actividad se escribe con la transacciÃ³n cerrada.
     """
     ids = [int(i) for i in venta_ids]
     if not ids:
         return 0
     comodines = ",".join("?" * len(ids))
-    # Falso positivo de bandit (B608): placeholders "?" + IDs por parámetro
+    # Falso positivo de bandit (B608): placeholders "?" + IDs por parÃ¡metro
     # (enteros, forzados con int() en el llamador).
     with db() as con:
         filas = con.execute(
@@ -1671,7 +1718,7 @@ def venta_por_id(venta_id):
 def resumen(caja_id, gastos=0.0):
     """
     Resumen completo de la caja:
-      - ventas por producto (cantidad y total) sumando los ítems
+      - ventas por producto (cantidad y total) sumando los Ã­tems
       - totales por medio de pago sumando los pagos de cada ticket
       - totales generales
     """
@@ -1688,7 +1735,7 @@ def resumen(caja_id, gastos=0.0):
     transferencias_lista = []
 
     for v in ventas:
-        # Unidades y dinero por producto: salen de los ítems del ticket
+        # Unidades y dinero por producto: salen de los Ã­tems del ticket
         for it in v["items"]:
             pid = it["producto_id"]
             if pid not in por_producto:
@@ -1724,8 +1771,8 @@ def resumen(caja_id, gastos=0.0):
     if ap and ap["monto_inicial"] is not None:
         fondo = float(ap["monto_inicial"])
     efectivo_base = medios["efectivo"] + fondo
-    # El efectivo esperado descuenta los gastos del día: el efectivo que
-    # se gastó durante el jornada ya no está en la caja al momento del cierre.
+    # El efectivo esperado descuenta los gastos del dÃ­a: el efectivo que
+    # se gastÃ³ durante el jornada ya no estÃ¡ en la caja al momento del cierre.
     efectivo_esperado = efectivo_base - float(gastos)
     total_general = sum(medios.values())
 
@@ -1751,7 +1798,7 @@ def resumen(caja_id, gastos=0.0):
 
 
 # ---------------------------------------------------------------------------
-# Estadísticas por rango de fechas
+# EstadÃ­sticas por rango de fechas
 # ---------------------------------------------------------------------------
 
 def ventas_rango(desde, hasta):
@@ -1793,8 +1840,8 @@ def cierres_rango(desde, hasta):
 
 def estadisticas(desde, hasta):
     """
-    Estadísticas consolidadas del rango [desde, hasta] (fechas ISO):
-      totales, por producto, por medio de pago, evolución diaria y cierres.
+    EstadÃ­sticas consolidadas del rango [desde, hasta] (fechas ISO):
+      totales, por producto, por medio de pago, evoluciÃ³n diaria y cierres.
     """
     ventas = ventas_rango(desde, hasta)
 
@@ -1885,7 +1932,7 @@ def calcular_arqueo(conteo):
 
 
 def clasificar_diferencia(diferencia):
-    """Devuelve (estado, etiqueta) según la diferencia contado - esperado."""
+    """Devuelve (estado, etiqueta) segÃºn la diferencia contado - esperado."""
     if diferencia > 0:
         return "Sobrante", "SOBRANTE"
     if diferencia < 0:
@@ -1909,7 +1956,7 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
     hora = datetime.now().strftime("%H:%M:%S")
     with db() as con:
         # Operaciones y comprobantes de la caja, para el registro del cierre.
-        # Una operación = un ticket (aunque tenga varios productos o varios
+        # Una operaciÃ³n = un ticket (aunque tenga varios productos o varios
         # medios de pago); los comprobantes salen de los pagos con
         # transferencia.
         filas = con.execute(
@@ -1924,10 +1971,10 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
             (caja_id,),
         ).fetchall()
         comprobantes = ", ".join(
-            (t["comprobante"] or "—") for t in trans
+            (t["comprobante"] or "â€”") for t in trans
         )
 
-        # Si había un cierre previo activo, se marca como reabierto/anulado
+        # Si habÃ­a un cierre previo activo, se marca como reabierto/anulado
         con.execute(
             "UPDATE cierres SET activo = 0 WHERE caja_id = ? AND activo = 1",
             (caja_id,),
@@ -1968,10 +2015,10 @@ def guardar_cierre(caja_id, *, total_garrafas, total_vendido, efectivo_esperado,
 
     log_actividad(
         "Cierre de caja",
-        f"Caja del {fecha_larga(caja['fecha'])} — total "
+        f"Caja del {fecha_larga(caja['fecha'])} â€” total "
         f"${total_general:,.0f}".replace(",", ".") +
-        f" — diferencia ${diferencia:,.0f}".replace(",", ".") +
-        f" — {estado} — {n_operaciones} operaciones",
+        f" â€” diferencia ${diferencia:,.0f}".replace(",", ".") +
+        f" â€” {estado} â€” {n_operaciones} operaciones",
         u,
     )
     return hora
@@ -2035,24 +2082,24 @@ def reabrir_caja(caja_id):
 
 
 def cierre_pendiente():
-    """True si existe alguna caja sin cerrar (de hoy u otro día)."""
+    """True si existe alguna caja sin cerrar (de hoy u otro dÃ­a)."""
     return len(cajas_abiertas()) > 0
 
 
 # ---------------------------------------------------------------------------
-# Rendiciones (planilla por buzón)
+# Rendiciones (planilla por buzÃ³n)
 # ---------------------------------------------------------------------------
 
 def guardar_rendicion(fecha, datos, *, loguear=True):
-    """Guarda (o actualiza) la rendición de un día.
+    """Guarda (o actualiza) la rendiciÃ³n de un dÃ­a.
 
-    `datos` es un dict con todo lo cargado en la pestaña CARGA / RENDICIÓN
+    `datos` es un dict con todo lo cargado en la pestaÃ±a CARGA / RENDICIÃ“N
     y el conteo de billetes de la calculadora: se serializa a JSON para que
     la tabla no tenga que migrar cada vez que aparece un campo nuevo.
-    Hay un único registro por fecha.
+    Hay un Ãºnico registro por fecha.
     """
     if not fecha:
-        raise ValueError("La rendición necesita una fecha.")
+        raise ValueError("La rendiciÃ³n necesita una fecha.")
     texto = json.dumps(datos if isinstance(datos, dict) else {},
                        ensure_ascii=False)
     marca = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2073,13 +2120,13 @@ def guardar_rendicion(fecha, datos, *, loguear=True):
                 (fecha, texto, marca),
             )
     if loguear:
-        log_actividad("Rendición",
-                      f"Rendición del {fecha_larga(fecha)} guardada")
+        log_actividad("RendiciÃ³n",
+                      f"RendiciÃ³n del {fecha_larga(fecha)} guardada")
     return rendicion_de(fecha)
 
 
 def rendicion_de(fecha):
-    """Rendición guardada de una fecha (dict vacío si todavía no hay)."""
+    """RendiciÃ³n guardada de una fecha (dict vacÃ­o si todavÃ­a no hay)."""
     if not fecha:
         return {}
     with db() as con:
@@ -2096,7 +2143,7 @@ def rendicion_de(fecha):
 
 
 def rendiciones():
-    """Todas las rendiciones guardadas, de la más nueva a la más vieja."""
+    """Todas las rendiciones guardadas, de la mÃ¡s nueva a la mÃ¡s vieja."""
     with db() as con:
         filas = con.execute(
             "SELECT fecha, datos, actualizada FROM rendiciones "
@@ -2115,6 +2162,31 @@ def rendiciones():
 
 
 def borrar_rendicion(fecha):
-    """Quita la rendición guardada de una fecha (para recargarla de cero)."""
+    """Quita la rendiciÃ³n guardada de una fecha (para recargarla de cero)."""
     with db() as con:
         con.execute("DELETE FROM rendiciones WHERE fecha = ?", (fecha,))
+
+# ---------------------------------------------------------------------------
+# Auditoría de solo inserción (módulo USUARIO)
+# ---------------------------------------------------------------------------
+
+def log_auditoria(accion, entidad="", valor_anterior="", valor_nuevo="",
+                  modulo="", resultado="OK", usuario=None):
+    """Registra un evento en la tabla de auditoría (solo inserción).
+
+    No permite UPDATE ni DELETE desde la aplicación: cada registro es
+    inmutable. Se usa para ventas, anulaciones, pagos rechazados y
+    cambios de precio del módulo USUARIO.
+    """
+    u = usuario_sesion() if usuario is None else usuario
+    with db() as con:
+        con.execute(
+            "INSERT INTO auditoria (fecha_hora, usuario_id, usuario, accion, "
+            "entidad, valor_anterior, valor_nuevo, modulo, resultado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             u["id"] if u else None,
+             (u["usuario"] if u else ""),
+             accion, entidad, valor_anterior, valor_nuevo, modulo, resultado),
+        )
+

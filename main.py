@@ -23,6 +23,7 @@ from version import VERSION
 from ui_login import pedir_login
 from ui_inicio import InicioPanel, _num_caja
 from ui_ventas import VentasPanel
+from ui_ventas_usuario import VentasUsuarioPanel
 from ui_estadisticas import EstadisticasPanel
 from ui_config import ConfigPanel
 from ui_historial import HistorialPanel
@@ -36,6 +37,7 @@ from widgets_figma import Tarjeta, ItemNav, Pildora
 NAV = [
     ("inicio", "Inicio", None, "home", "OPERACIÓN"),
     ("ventas", "Ventas", "ventas", "cart", "OPERACIÓN"),
+    ("ventas_usuario", "Ventas USUARIO", "ventas", "cart", "OPERACIÓN"),
     ("stats", "Estadísticas y reportes", "estadisticas", "chart", "OPERACIÓN"),
     ("historial", "Historial de cierres", "historial", "history", "OPERACIÓN"),
     ("rendicion", "Planilla de rendición", "rendicion", "clipboard", "OPERACIÓN"),
@@ -185,6 +187,7 @@ class App(tk.Tk):
         self.paneles = {
             "inicio": InicioPanel(self.contenedor, self),
             "ventas": VentasPanel(self.contenedor, self),
+            "ventas_usuario": VentasUsuarioPanel(self.contenedor, self),
             "stats": EstadisticasPanel(self.contenedor, self),
             "config": ConfigPanel(self.contenedor, self),
             "historial": HistorialPanel(self.contenedor, self),
@@ -404,10 +407,14 @@ class App(tk.Tk):
         """Muestra solo lo que el usuario puede ver, con sus secciones."""
         for w in self.nav_frame.winfo_children():
             w.pack_forget()
+        activa_u = db.get_config("MODULO_USUARIO_ACTIVO", "0") == "1"
         primera = True
         for nombre in SECCIONES:
             claves = [c for c, _t, p, _i, s in NAV
                       if s == nombre and (p is None or db.puede(p))]
+            # Ocultar módulo USUARIO si el interruptor está apagado
+            if "ventas_usuario" in claves and not activa_u:
+                claves.remove("ventas_usuario")
             if not claves:
                 continue
             self.secciones_lbl[nombre].pack(
@@ -422,6 +429,13 @@ class App(tk.Tk):
             messagebox.showwarning(
                 "Sin permisos",
                 "Tu usuario no tiene acceso a esta sección.", parent=self)
+            return
+        if clave == "ventas_usuario" and \
+                db.get_config("MODULO_USUARIO_ACTIVO", "0") != "1":
+            messagebox.showwarning(
+                "Módulo desactivado",
+                "El módulo USUARIO está desactivado por configuración.",
+                parent=self)
             return
         panel = self.paneles[clave]
         panel.lift()
