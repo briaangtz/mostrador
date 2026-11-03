@@ -15,9 +15,10 @@ Este documento explica cómo volver atrás el ajuste de "Ventas USUARIO"
 
 | Archivo | Qué cambió |
 |---|---|
-| `database.py` | Columnas `modulo` y `token_venta` en `ventas`; tabla `auditoria`; config `MODULO_USUARIO_ACTIVO`; función `log_auditoria`; `registrar_ticket` acepta `modulo` y `token_venta` |
+| `database.py` | Columnas `modulo` y `token_venta` en `ventas`; tablas `auditoria` y `precios_usuario`; config `MODULO_USUARIO_ACTIVO`; funciones `log_auditoria`, `get_precio_usuario`, `set_precio_usuario`, `get_precios_usuario`, `borrar_precio_usuario`; `registrar_ticket` acepta `modulo`/`token_venta` y valida contra la lista de precios USUARIO |
 | `main.py` | Import de `VentasUsuarioPanel`, entrada NAV, panel en `self.paneles`, `_actualizar_nav` y `mostrar` respetan interruptor |
-| `ui_ventas_usuario.py` | NUEVO: panel de ventas USUARIO (nombre/apellido, productos, pagos múltiples) |
+| `ui_ventas_usuario.py` | NUEVO: panel de ventas USUARIO (nombre/apellido, productos, pagos múltiples). El precio sale de la tabla `precios_usuario` y aparece BLOQUEADO (etiqueta solo lectura); si el producto no tiene precio en la lista, la venta se bloquea |
+| `ui_config.py` | Columna «Precio USUARIO» en la lista de productos, campo y botón «Guardar precio USUARIO» (solo DESARROLLADOR); si el campo se deja vacío, el producto se quita de la lista USUARIO (su venta queda bloqueada) |
 | `REVERTIR_ESTE_CAMBIO.md` | Este archivo |
 
 ## Cómo revertir completamente
@@ -56,4 +57,13 @@ copy "C:\Users\doble\Documents\Proyecto mostrador\BACKUPS\ajuste_ventas_usuario_
 
 - Las ventas registradas con `modulo='USUARIO'` quedan en la tabla `ventas` pero el panel ya no existirá. Se pueden consultar directamente desde SQL.
 - La tabla `auditoria` queda vacía de registros de este ajuste.
+- La tabla `precios_usuario` queda en la base pero sin efecto (nadie la consulta).
 - Las ventas de MOSTRADOR no se ven afectadas.
+
+## Sobre el precio bloqueado (agregado posterior)
+
+- El precio del módulo USUARIO se carga SOLO desde **Configuración → Productos y precios → «Guardar precio USUARIO»** (solo DESARROLLADOR), en la tabla `precios_usuario` (centavos, entero).
+- En la venta, el precio es una etiqueta de solo lectura: no hay campo editable que se pueda tipear.
+- Doble control: además de la UI bloqueada, `registrar_ticket` rechaza en el backend cualquier venta `USUARIO` cuyo precio no coincida exactamente con la lista (o si el producto no está en la lista).
+- Cada cambio de precio queda en `auditoria` (solo inserción).
+- Para desbloquear un producto hay que asignarle precio; para sacarlo de la lista USUARIO, dejar el campo vacío al guardar.

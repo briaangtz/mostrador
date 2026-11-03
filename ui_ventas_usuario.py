@@ -35,6 +35,7 @@ class VentasUsuarioPanel(tk.Frame):
         self._nombre = ""
         self._apellido = ""
         self._total = 0.0
+        self.precio_actual = None
         self._construir()
 
     # ------------------------------------------------------------------ UI
@@ -135,20 +136,24 @@ class VentasUsuarioPanel(tk.Frame):
         self.spin_cantidad.pack(fill="x", pady=(4, 0))
         self.var_cantidad.trace_add("write", self._linea_modificada)
 
-        c_precio = campo(2, "PRECIO UNITARIO (a mano)", 0)
-        self.var_precio = tk.StringVar(value="")
-        self.ent_precio = tk.Entry(c_precio, textvariable=self.var_precio,
-                                   font=(st.FUENTE, 11), relief="flat", bd=0,
-                                   bg="#FFFFFF", highlightthickness=1,
-                                   highlightbackground="#D9E0EC",
-                                   highlightcolor=st.ACENTO)
-        self.ent_precio.pack(fill="x", pady=(4, 0), ipady=6)
-        self.var_precio.trace_add("write", self._linea_modificada)
+        c_precio = campo(2, "PRECIO UNITARIO (lista USUARIO - solo lectura)", 0)
+        self.lbl_precio_unitario = tk.Label(c_precio, text="$0,00",
+                                            font=(st.FUENTE, 14, "bold"),
+                                            bg="#FFFFFF", fg=st.TEXTO,
+                                            relief="solid", bd=1,
+                                            anchor="e", width=16)
+        self.lbl_precio_unitario.pack(fill="x", pady=(4, 0), ipady=6)
+        self.var_precio_info = tk.StringVar(value="")
+        self.lbl_precio_info = tk.Label(c_precio, textvariable=self.var_precio_info,
+                                        bg=st.TARJETA, fg=MUTED,
+                                        font=(st.FUENTE, 9))
+        self.lbl_precio_info.pack(anchor="w", pady=(2, 0))
 
         c_agregar = campo(3, "AGREGAR", 0)
         btn_agregar = Btn(c_agregar, text="+ AGREGAR", command=self._agregar,
                           bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-                          padx=16, pady=6)
+                          padx=16, pady=6, state="disabled")
+        self.btn_agregar = btn_agregar
         btn_agregar.pack(fill="x", pady=(24, 0))
 
         self.lbl_precio_info = tk.Label(c2, text="", bg=st.TARJETA, fg=MUTED,
@@ -303,8 +308,10 @@ class VentasUsuarioPanel(tk.Frame):
         self._productos_map = {f"{p['id']} — {p['nombre']}": p
                                for p in productos}
         self.combo_producto.set("")
-        self.var_precio.set("")
-        self.lbl_precio_info.config(text="")
+        self.var_precio_info.set("")
+        self.lbl_precio_unitario.config(text="$0,00")
+        self.precio_actual = None
+        self.btn_agregar.config(state="disabled")
 
     def _producto_cambiado(self, _event):
         valor = self.combo_producto.get()
@@ -313,9 +320,22 @@ class VentasUsuarioPanel(tk.Frame):
         p = self._productos_map.get(valor)
         if not p:
             return
-        self.lbl_precio_info.config(
-            text=f"Producto: {p['nombre']} — precio a mano",
-            fg=st.TEXTO)
+        pid = p["id"]
+        precio_centavos = db.get_precio_usuario(pid)
+        if precio_centavos is None:
+            self.lbl_precio_unitario.config(text="Sin precio")
+            self.var_precio_info.set(
+                "Producto sin precio en lista USUARIO. Venta bloqueada.")
+            self.lbl_precio_info.config(fg="#9B1C1C")
+            self.precio_actual = None
+            self.btn_agregar.config(state="disabled")
+        else:
+            precio = precio_centavos / 100.0
+            self.lbl_precio_unitario.config(text=money(precio))
+            self.var_precio_info.set(f"Lista USUARIO: {money(precio)}")
+            self.lbl_precio_info.config(fg=st.TEXTO)
+            self.precio_actual = precio
+            self.btn_agregar.config(state="normal")
         self._linea_modificada()
 
     def _linea_modificada(self, *args):
@@ -327,20 +347,26 @@ class VentasUsuarioPanel(tk.Frame):
         except ValueError:
             cantidad = 1
             self.var_cantidad.set("1")
-        try:
-            precio = parse_numero(self.var_precio.get())
-            if precio is None:
-                precio = 0.0
-        except ValueError:
-            precio = 0.0
+        precio = self.precio_actual or 0.0
         subtotal = cantidad * precio
-        self.lbl_precio_info.config(
-            text=f"Subtotal: {money(subtotal)}")
+        if self.precio_actual is None:
+            self.lbl_precio_info.config(
+                text="Subtotal: bloqueado (sin precio)",
+                fg="#9B1C1C")
+        else:
+            self.lbl_precio_info.config(
+                text=f"Subtotal: {money(subtotal)}",
+                fg=st.TEXTO)
 
     def _agregar(self):
         if not self._nombre or not self._apellido:
             messagebox.showwarning("Cliente",
                                    "Completá nombre y apellido válidos.",
+                                   parent=self)
+            return
+        if self.precio_actual is None:
+            messagebox.showwarning("Bloqueado",
+                                   "Este producto no tiene precio en la lista USUARIO.",
                                    parent=self)
             return
         valor = self.combo_producto.get()
@@ -357,12 +383,11 @@ class VentasUsuarioPanel(tk.Frame):
         except ValueError:
             messagebox.showerror("Cantidad", "Cantidad inválida.", parent=self)
             return
-        precio = parse_numero(self.var_precio.get())
+        precio = self.precio_actual
         if precio is None or precio <= 0:
             messagebox.showerror("Precio", "Precio unitario inválido.",
                                  parent=self)
             return
-
         subtotal = cantidad * precio
         self._items.append({
             "producto_id": pid,
@@ -373,9 +398,11 @@ class VentasUsuarioPanel(tk.Frame):
         })
         self._actualizar_items()
         self.combo_producto.set("")
-        self.var_precio.set("")
         self.var_cantidad.set("1")
-        self.lbl_precio_info.config(text="")
+        self.var_precio_info.set("")
+        self.lbl_precio_unitario.config(text="$0,00")
+        self.precio_actual = None
+        self.btn_agregar.config(state="disabled")
 
     def _actualizar_items(self):
         for i in self.tree_items.get_children():
@@ -468,7 +495,9 @@ class VentasUsuarioPanel(tk.Frame):
         self.var_nombre.set("")
         self.var_apellido.set("")
         self.var_cantidad.set("1")
-        self.var_precio.set("")
+        self.var_precio_info.set("")
+        self.lbl_precio_unitario.config(text="$0,00")
+        self.precio_actual = None
         self.var_importe.set("")
         self.var_comprobante.set("")
         self._actualizar_items()
