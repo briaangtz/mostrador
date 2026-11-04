@@ -981,3 +981,186 @@ def exportar_rendicion(datos, destino):
 
     wb.save(destino)
     return ultima_fila
+
+
+# ---------------------------------------------------------------------------
+# Exportación de estadísticas por módulo (USUARIO / MOSTRADOR / COMERCIO /
+# general consolidado) a Excel
+# ---------------------------------------------------------------------------
+
+MODULOS_TITULO = {
+    "USUARIO": "Módulo USUARIO",
+    "MOSTRADOR": "Módulo MOSTRADOR",
+    "COMERCIO": "Módulo COMERCIO",
+    "general": "GENERAL (todos los módulos)",
+}
+
+MODULOS_ORDEN = ["USUARIO", "MOSTRADOR", "COMERCIO", "general"]
+
+
+def exportar_por_modulo(desde, hasta, destino):
+    """
+    Genera un .xlsx con las estadísticas individuales por módulo
+    (USUARIO, MOSTRADOR, COMERCIO) y una hoja GENERAL consolidada que
+    suma gastos, tarjetas, efectivo y transferencias de todos los módulos.
+
+    Devuelve (cantidad_de_ventas_total, monto_total_general).
+    """
+    stats = db.estadisticas(desde, hasta)
+    por_modulo = stats.get("por_modulo", {})
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Resumen por módulo"
+
+    lado = Side(style="thin", color="000000")
+    borde = Border(left=lado, right=lado, top=lado, bottom=lado)
+    relleno_titulo = PatternFill(patternType="solid", fgColor="1F3864")
+    relleno_enc = PatternFill(patternType="solid", fgColor="2E5E8C")
+    relleno_total = PatternFill(patternType="solid", fgColor="D9E2F3")
+    blanco = Font(bold=True, size=12, color="FFFFFF")
+    negro_negrita = Font(bold=True, size=11, color="000000")
+    texto = Font(size=11, color="000000")
+    centro = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    texto_der = Alignment(horizontal="right", vertical="center")
+    texto_izq = Alignment(horizontal="left", vertical="center")
+
+    fila = 1
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
+                   end_column=7)
+    c = ws.cell(row=fila, column=1,
+                value="ESTADÍSTICAS POR MÓDULO — VENTAS")
+    c.font = Font(bold=True, size=16, color="FFFFFF")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    for col in range(1, 8):
+        ws.cell(row=fila, column=col).fill = relleno_titulo
+    ws.row_dimensions[fila].height = 30
+    fila += 1
+
+    rng = (("Del " + fecha_corta(desde)) if desde else "") + \
+          ((" al " + fecha_corta(hasta)) if hasta else "")
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
+                   end_column=7)
+    c = ws.cell(row=fila, column=1, value=rng.strip())
+    c.font = Font(italic=True, size=11, color="000000")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    for col in range(1, 8):
+        ws.cell(row=fila, column=col).fill = relleno_total
+    ws.row_dimensions[fila].height = 18
+    fila += 2
+
+    # Encabezados de la tabla resumen
+    encabezados = ["Módulo", "Ventas", "Garrafas", "Total $",
+                   "Efectivo $", "Tarjetas $", "Transferencias $"]
+    for i, h in enumerate(encabezados, start=1):
+        c = ws.cell(row=fila, column=i, value=h)
+        c.font = blanco
+        c.alignment = centro
+        c.fill = relleno_enc
+        c.border = borde
+    ws.row_dimensions[fila].height = 24
+    fila += 1
+
+    cantidad_total = 0
+    monto_total = 0.0
+
+    for m in MODULOS_ORDEN:
+        d = por_modulo.get(m, {})
+        tarjetas = float(d.get("debito", 0)) + float(d.get("credito", 0))
+        cantidad_total += int(d.get("cantidad_ventas", 0))
+        monto_total += float(d.get("total_vendido", 0))
+
+        valores = [
+            MODULOS_TITULO[m],
+            int(d.get("cantidad_ventas", 0)),
+            int(d.get("total_garrafas", 0)),
+            round(float(d.get("total_vendido", 0)), 2),
+            round(float(d.get("efectivo", 0)), 2),
+            round(tarjetas, 2),
+            round(float(d.get("transferencias", 0)), 2),
+        ]
+        es_general = (m == "general")
+        for i, v in enumerate(valores, start=1):
+            c = ws.cell(row=fila, column=i, value=v)
+            c.font = negro_negrita if es_general else texto
+            if i in (4, 5, 6, 7):
+                c.number_format = FORMATO_MONEDA
+                c.alignment = texto_der
+            elif i in (2, 3):
+                c.number_format = FORMATO_ENTERO
+                c.alignment = centro
+            else:
+                c.alignment = texto_izq
+            c.border = borde
+            if es_general:
+                c.fill = relleno_total
+        ws.row_dimensions[fila].height = 20
+        fila += 1
+
+    fila += 1
+
+    # Detalle de transferencias por módulo (si las hay)
+    transferencias = stats.get("transferencias_lista", [])
+    if transferencias:
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila,
+                       end_column=7)
+        c = ws.cell(row=fila, column=1, value="DETALLE DE TRANSFERENCIAS")
+        c.font = blanco
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        for col in range(1, 8):
+            ws.cell(row=fila, column=col).fill = relleno_titulo
+        ws.row_dimensions[fila].height = 24
+        fila += 1
+
+        enc2 = ["Ticket", "Fecha", "Módulo", "Comprobante",
+                "Producto", "Cantidad", "Importe $"]
+        for i, h in enumerate(enc2, start=1):
+            c = ws.cell(row=fila, column=i, value=h)
+            c.font = blanco
+            c.alignment = centro
+            c.fill = relleno_enc
+            c.border = borde
+        ws.row_dimensions[fila].height = 20
+        fila += 1
+
+        for t in transferencias:
+            valores2 = [
+                f"#{t['id']}",
+                fecha_corta(t.get("fecha") or ""),
+                t.get("modulo", "—"),
+                t.get("comprobante") or "—",
+                t.get("producto") or "—",
+                int(t.get("cantidad", 0)),
+                round(float(t.get("total", 0)), 2),
+            ]
+            for i, v in enumerate(valores2, start=1):
+                c = ws.cell(row=fila, column=i, value=v)
+                c.font = texto
+                if i == 7:
+                    c.number_format = FORMATO_MONEDA
+                    c.alignment = texto_der
+                elif i == 6:
+                    c.number_format = FORMATO_ENTERO
+                    c.alignment = centro
+                else:
+                    c.alignment = centro if i in (2, 3) else texto_izq
+                c.border = borde
+            ws.row_dimensions[fila].height = 18
+            fila += 1
+
+    # Anchos de columna
+    for i, ancho in enumerate([26, 12, 12, 16, 16, 14, 18], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = ancho
+
+    # Impresión: A4 horizontal, ajustado al ancho
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.5, bottom=0.5,
+                                  header=0.2, footer=0.2)
+    ws.print_options.horizontalCentered = True
+
+    wb.save(destino)
+    return cantidad_total, monto_total

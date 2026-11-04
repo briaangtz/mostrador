@@ -53,6 +53,10 @@ class EstadisticasPanel(tk.Frame):
         Btn(encabezado, text="EXPORTAR A EXCEL", command=self._exportar_excel,
             bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
             padx=16, pady=7).pack(side="right")
+        Btn(encabezado, text="EXPORTAR POR MÓDULO A EXCEL",
+            command=self._exportar_por_modulo,
+            bg="#7C3AED", fg="#ffffff", font=(st.FUENTE, 10, "bold"),
+            padx=16, pady=7).pack(side="right", padx=(0, 8))
         fila_f = tk.Frame(filtros, bg=st.TARJETA)
         fila_f.pack(fill="x")
 
@@ -132,6 +136,54 @@ class EstadisticasPanel(tk.Frame):
             self.cards_detalle[clave] = det
             col += span
         self.cards["recaudado"].config(fg=st.VERDE_OSCURO)
+
+        # ---------------- Estadísticas por módulo ----------------
+        t_mod, mod_frame, _h = uc.tarjeta(cont, "Estadísticas por módulo",
+                                          "shop")
+        t_mod.pack(fill="x", padx=PX, pady=(14, 0))
+        marco_mod = tk.Frame(mod_frame, bg=st.TARJETA)
+        marco_mod.pack(fill="x", padx=14, pady=(8, 14))
+        for c in range(4):
+            marco_mod.columnconfigure(c, weight=1, uniform="modulo")
+
+        MODULOS_TITULO = {
+            "USUARIO": "USUARIO",
+            "MOSTRADOR": "MOSTRADOR",
+            "COMERCIO": "COMERCIO",
+            "general": "GENERAL",
+        }
+        MODULOS_COLOR = {
+            "USUARIO": uc.AZUL_I,
+            "MOSTRADOR": uc.VERDE_I if hasattr(uc, "VERDE_I") else uc.AZUL_I,
+            "COMERCIO": "#7C3AED",
+            "general": st.TEXTO,
+        }
+        self.cards_modulo = {}
+        for i, m in enumerate(("USUARIO", "MOSTRADOR", "COMERCIO", "general")):
+            t = Tarjeta(marco_mod, radio=12, padx=14, pady=12,
+                        borde="#C3D6F8")
+            t.grid(row=0, column=i, sticky="nsew", padx=5, pady=5)
+            tk.Label(t.cuerpo, text=MODULOS_TITULO[m], bg=st.TARJETA,
+                     fg=MODULOS_COLOR.get(m, st.TEXTO),
+                     font=(st.FUENTE, 11, "bold")).pack(anchor="w", pady=(6, 2))
+            lbl_ventas = tk.Label(t.cuerpo, text="0", bg=st.TARJETA,
+                                  fg=st.TEXTO, font=(st.FUENTE, 18, "bold"))
+            lbl_ventas.pack(anchor="w")
+            tk.Label(t.cuerpo, text="ventas", bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 8)).pack(anchor="w", pady=(0, 2))
+            lbl_total = tk.Label(t.cuerpo, text="$0", bg=st.TARJETA,
+                                 fg=st.VERDE_OSCURO, font=(st.FUENTE, 14, "bold"))
+            lbl_total.pack(anchor="w", pady=(2, 0))
+            tk.Label(t.cuerpo, text="total", bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 8)).pack(anchor="w", pady=(0, 4))
+            det = tk.Label(t.cuerpo, text="—", bg=st.TARJETA, fg=MUTED,
+                           font=(st.FUENTE, 8), anchor="w", justify="left")
+            det.pack(anchor="w")
+            self.cards_modulo[m] = {
+                "ventas": lbl_ventas,
+                "total": lbl_total,
+                "detalle": det,
+            }
 
         # ---------------- Producto + evolución ----------------
         medio = tk.Frame(cont, bg=st.FONDO)
@@ -293,6 +345,55 @@ class EstadisticasPanel(tk.Frame):
             parent=self,
         )
 
+    def _exportar_por_modulo(self):
+        """Exporta las estadísticas por módulo (USUARIO / MOSTRADOR /
+        COMERCIO + GENERAL) a Excel."""
+        if not db.puede("exportar_excel"):
+            messagebox.showerror("Sin permisos",
+                                 "Tu usuario no tiene permiso para exportar a "
+                                 "Excel.", parent=self)
+            return
+        desde, hasta = self._rango_actual()
+        if not desde or not hasta:
+            self._fechas_invalidas()
+            return
+
+        destino = filedialog.asksaveasfilename(
+            parent=self,
+            title="Exportar estadísticas por módulo a Excel",
+            defaultextension=".xlsx",
+            initialfile=f"estadisticas_modulo_{fecha_corta(desde).replace('/', '-')}_{fecha_corta(hasta).replace('/', '-')}.xlsx",
+            filetypes=[("Archivo de Excel", "*.xlsx")],
+        )
+        if not destino:
+            return
+        try:
+            cantidad, monto = excel.exportar_por_modulo(desde, hasta, destino)
+        except Exception as exc:
+            errores.mostrar(
+                "Error al exportar", exc, parent=self,
+                contexto="exportar estadísticas por módulo a Excel",
+                mensaje="No se pudo generar el archivo de Excel.\n"
+                        "Cerrá la planilla si está abierta y probá de "
+                        "nuevo.")
+            return
+        db.log_actividad(
+            "Exportación a Excel (por módulo)",
+            f"Estadísticas por módulo del {fecha_corta(desde)} al "
+            f"{fecha_corta(hasta)} — {cantidad} ventas — {money(monto)}",
+        )
+        messagebox.showinfo(
+            "Exportación finalizada",
+            f"Archivo generado:\n{destino}\n\n"
+            f"Ventas incluidas: {cantidad}\n"
+            f"Total general: {money(monto)}\n\n"
+            f"Período: del {fecha_corta(desde)} al {fecha_corta(hasta)}\n\n"
+            "Incluye una hoja con el resumen por módulo (USUARIO, "
+            "MOSTRADOR, COMERCIO y GENERAL) y, si las hay, el detalle "
+            "de transferencias por módulo.",
+            parent=self,
+        )
+
     # ------------------------------------------------------------- refresco
     def refresh(self):
         hoy = date.today()
@@ -332,6 +433,23 @@ class EstadisticasPanel(tk.Frame):
         self.cards["dias"].config(text=str(s["dias_con_ventas"]))
         self.cards["cierres"].config(text=str(len(s["cierres"])))
         self.cards["max"].config(text=money(maximo))
+
+        # Estadísticas por módulo
+        por_modulo = self._stats.get("por_modulo", {})
+        for m in ("USUARIO", "MOSTRADOR", "COMERCIO", "general"):
+            d = por_modulo.get(m, {})
+            tarjetas = float(d.get("debito", 0)) + float(d.get("credito", 0))
+            detalle = (
+                f"Efectivo {money(d.get('efectivo', 0))}  •  "
+                f"Tarjetas {money(tarjetas)}  •  "
+                f"Transferencias {money(d.get('transferencias', 0))}  •  "
+                f"Garrafas {int(d.get('total_garrafas', 0))}"
+            )
+            self.cards_modulo[m]["ventas"].config(
+                text=str(d.get("cantidad_ventas", 0)))
+            self.cards_modulo[m]["total"].config(
+                text=money(d.get("total_vendido", 0)))
+            self.cards_modulo[m]["detalle"].config(text=detalle)
 
         # Ventas por producto
         self.tree_productos.delete(*self.tree_productos.get_children())

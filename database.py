@@ -1895,7 +1895,30 @@ def estadisticas(desde, hasta):
     total_vendido = 0.0
     total_garrafas = 0
 
+    # Desglose por módulo: USUARIO, MOSTRADOR, COMERCIO y general
+    modulos = ("USUARIO", "MOSTRADOR", "COMERCIO")
+    por_modulo = {
+        m: {
+            "cantidad_ventas": 0,
+            "total_garrafas": 0,
+            "total_vendido": 0.0,
+            "efectivo": 0.0,
+            "debito": 0.0,
+            "credito": 0.0,
+            "transferencias": 0.0,
+            "n_transferencias": 0,
+        }
+        for m in modulos
+    }
+    por_modulo["general"] = dict(por_modulo[modulos[0]])
+
     for v in ventas:
+        modulo = (v.get("modulo") or "MOSTRADOR").upper()
+        if modulo not in por_modulo:
+            modulo = "MOSTRADOR"
+        vm = por_modulo[modulo]
+        vg = por_modulo["general"]
+
         for it in v["items"]:
             pid = it["producto_id"]
             if pid not in por_producto:
@@ -1916,8 +1939,12 @@ def estadisticas(desde, hasta):
         for pg in v["pagos"]:
             clave = CLAVE_MEDIO.get(pg["medio"], "efectivo")
             medios[clave] += float(pg["importe"])
+            vm[clave] += float(pg["importe"])
+            vg[clave] += float(pg["importe"])
             if pg["medio"] == "Transferencia":
                 n_transferencias += 1
+                vm["n_transferencias"] += 1
+                vg["n_transferencias"] += 1
                 transferencias.append({
                     "id": v["id"],
                     "fecha": v.get("fecha"),
@@ -1927,8 +1954,15 @@ def estadisticas(desde, hasta):
                     "cantidad": v["cantidad"],
                     "total": float(pg["importe"]),
                     "medio": pg["medio"],
+                    "modulo": modulo,
                 })
 
+        vm["cantidad_ventas"] += 1
+        vg["cantidad_ventas"] += 1
+        vm["total_garrafas"] += int(v["cantidad"])
+        vg["total_garrafas"] += int(v["cantidad"])
+        vm["total_vendido"] += float(v["total"])
+        vg["total_vendido"] += float(v["total"])
         total_vendido += float(v["total"])
         total_garrafas += int(v["cantidad"])
 
@@ -1943,6 +1977,7 @@ def estadisticas(desde, hasta):
         "total_garrafas": total_garrafas,
         "total_vendido": total_vendido,
         "por_producto": por_producto,
+        "por_modulo": por_modulo,
         "efectivo": medios["efectivo"],
         "transferencias": medios["transferencias"],
         "debito": medios["debito"],
