@@ -1099,6 +1099,14 @@ def _migrar_modulo_usuario(con):
         )
     """)
 
+    # Tabla de precios del módulo COMERCIO (bloqueados, no editables a mano en venta)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS precios_comercio (
+            producto_id INTEGER PRIMARY KEY,
+            precio_centavos INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
     # Interruptor de configuración del módulo USUARIO
     con.execute(
         "INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)",
@@ -1552,22 +1560,27 @@ def registrar_ticket(caja_id, items, pagos, cliente=None,
         )
     items_limpios = _normalizar_items(items)
 
-    # Si es venta de módulo USUARIO, validar que el precio coincida con
-    # la tabla de precios bloqueada (no editable a mano en la venta).
-    if modulo == "USUARIO":
+    # Si es venta de módulo USUARIO o COMERCIO, validar que el precio
+    # coincida con la tabla de precios bloqueada (no editable a mano en venta).
+    if modulo in ("USUARIO", "COMERCIO"):
         for it in items_limpios:
-            precio_esperado = get_precio_usuario(it["producto_id"])
+            if modulo == "USUARIO":
+                precio_esperado = get_precio_usuario(it["producto_id"])
+                lista = "USUARIO"
+            else:
+                precio_esperado = get_precio_comercio(it["producto_id"])
+                lista = "COMERCIO"
             if precio_esperado is None:
                 raise ValueError(
                     f"El producto '{it['producto']}' no tiene precio "
-                    f"asignado en la lista USUARIO. "
+                    f"asignado en la lista {lista}. "
                     f"Venta bloqueada."
                 )
             precio_recibido = int(round(it["precio_unitario"] * 100))
             if precio_recibido != precio_esperado:
                 raise ValueError(
                     f"El precio de '{it['producto']}' no coincide con la "
-                    f"lista USUARIO (esperado {_money(precio_esperado / 100)}, "
+                    f"lista {lista} (esperado {_money(precio_esperado / 100)}, "
                     f"recibido {_money(it['precio_unitario'])}). "
                     f"Venta bloqueada."
                 )
@@ -2285,4 +2298,71 @@ def borrar_precio_usuario(producto_id):
     log_auditoria("Precio USUARIO quitado",
                   f"Producto {producto_id}: {anterior} centavos -> sin precio",
                   modulo="USUARIO", resultado="OK")
+
+
+# ---------------------------------------------------------------------------
+# Precios del módulo COMERCIO (bloqueados, no editables a mano en la venta)
+# ---------------------------------------------------------------------------
+
+def get_precio_comercio(producto_id):
+    """Devuelve el precio en centavos de un producto para el módulo COMERCIO,
+    o None si no tiene precio asignado (venta bloqueada)."""
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+    return fila["precio_centavos"] if fila else None
+
+
+def set_precio_comercio(producto_id, precio_centavos, usuario=None):
+    """Establece (o crea) el precio de un producto en la lista COMERCIO."""
+    precio_centavos = int(precio_centavos)
+    if precio_centavos < 0:
+        raise ValueError("El precio no puede ser negativo.")
+    u = usuario_sesion() if usuario is None else usuario
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        anterior = fila["precio_centavos"] if fila else None
+        con.execute(
+            "INSERT INTO precios_comercio (producto_id, precio_centavos) "
+            "VALUES (?, ?) "
+            "ON CONFLICT(producto_id) DO UPDATE SET "
+            "precio_centavos = excluded.precio_centavos",
+            (producto_id, precio_centavos),
+        )
+    log_auditoria("Precio COMERCIO modificado",
+                  f"Producto {producto_id}: "
+                  f"{anterior} -> {precio_centavos} centavos",
+                  modulo="COMERCIO", resultado="OK")
+
+
+def get_precios_comercio():
+    """Devuelve {producto_id: precio_centavos} para el módulo COMERCIO."""
+    with db() as con:
+        filas = con.execute(
+            "SELECT producto_id, precio_centavos FROM precios_comercio"
+        ).fetchall()
+    return {f["producto_id"]: f["precio_centavos"] for f in filas}
+
+
+def borrar_precio_comercio(producto_id):
+    """Quita un producto de la lista de precios COMERCIO.
+
+    El producto sigue existiendo; sólo deja de poder venderse en el módulo
+    COMERCIO hasta que se le asigne un precio de nuevo.
+    """
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        if not fila:
+            return
+        anterior = fila["precio_centavos"]
+        con.execute(
+            "DELETE FROM precios_comercio WHERE producto_id = ?", (producto_id,))
+    log_auditoria("Precio COMERCIO quitado",
+                  f"Producto {producto_id}: {anterior} centavos -> sin precio",
+                  modulo="COMERCIO", resultado="OK")
 

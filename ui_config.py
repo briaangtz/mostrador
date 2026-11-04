@@ -64,15 +64,17 @@ class ConfigPanel(tk.Frame):
         scroll_prod = ttk.Scrollbar(marco_lista, orient="vertical")
         scroll_prod.pack(side="right", fill="y")
         self.tree = ttk.Treeview(marco_lista,
-                                 columns=("producto", "precio", "usuario"),
+                                 columns=("producto", "precio", "usuario", "comercio"),
                                  show="headings", height=6, selectmode="browse",
                                  yscrollcommand=scroll_prod.set)
         self.tree.heading("producto", text="Producto")
         self.tree.heading("precio", text="Precio mostrador")
         self.tree.heading("usuario", text="Precio USUARIO")
-        self.tree.column("producto", width=300, anchor="w")
-        self.tree.column("precio", width=150, anchor="e")
-        self.tree.column("usuario", width=150, anchor="e")
+        self.tree.heading("comercio", text="Precio COMERCIO")
+        self.tree.column("producto", width=260, anchor="w")
+        self.tree.column("precio", width=130, anchor="e")
+        self.tree.column("usuario", width=130, anchor="e")
+        self.tree.column("comercio", width=130, anchor="e")
         self.tree.pack(side="left", fill="both", expand=True)
         scroll_prod.config(command=self.tree.yview)
         self.tree.bind("<<TreeviewSelect>>", self._seleccionar)
@@ -102,6 +104,13 @@ class ConfigPanel(tk.Frame):
         entrada(c3, self.var_precio_usuario, 13).pack(
             anchor="w", pady=(3, 0), ipady=5)
 
+        c4 = tk.Frame(fila_campos, bg=st.TARJETA)
+        c4.pack(side="left", padx=(16, 0))
+        etiqueta(c4, "PRECIO COMERCIO ($) — se usa bloqueado en la venta")
+        self.var_precio_comercio = tk.StringVar()
+        entrada(c4, self.var_precio_comercio, 13).pack(
+            anchor="w", pady=(3, 0), ipady=5)
+
         botones = tk.Frame(form, bg=st.TARJETA)
         botones.pack(fill="x", pady=(10, 0))
         self._boton(botones, "Guardar cambios", st.ACENTO,
@@ -110,6 +119,8 @@ class ConfigPanel(tk.Frame):
                     self._nuevo_producto).pack(side="left", padx=(0, 6))
         self._boton(botones, "Guardar precio USUARIO", "#7C3AED",
                     self._guardar_precio_usuario).pack(side="left", padx=(0, 6))
+        self._boton(botones, "Guardar precio COMERCIO", "#6D28D9",
+                    self._guardar_precio_comercio).pack(side="left", padx=(0, 6))
         self._boton(botones, "Eliminar", st.ROJO,
                     self._eliminar_producto).pack(side="left")
 
@@ -121,6 +132,15 @@ class ConfigPanel(tk.Frame):
             bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9), wraplength=760,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
+
+        tk.Label(
+            cuerpo_prod,
+            text="El precio COMERCIO se carga acá y en la pantalla de ventas "
+                 "aparece bloqueado igual: no se puede escribir ni modificar a mano. "
+                 "Si un producto no tiene precio COMERCIO, su venta en COMERCIO se bloquea.",
+            bg=st.TARJETA, fg=MUTED, font=(st.FUENTE, 9), wraplength=760,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 14))
 
         # ---------------- Fondo inicial ----------------
         marco_fondo, cuerpo_fondo, _h = uc.tarjeta(cuerpo, "Caja", "banknote")
@@ -366,6 +386,10 @@ class ConfigPanel(tk.Frame):
             self.var_precio_usuario.set(
                 "" if centavos is None
                 else money(centavos / 100).replace("$", ""))
+            centavos = db.get_precio_comercio(producto["id"])
+            self.var_precio_comercio.set(
+                "" if centavos is None
+                else money(centavos / 100).replace("$", ""))
 
     def _guardar_precio_usuario(self):
         """Carga (o quita) el precio bloqueado del módulo USUARIO."""
@@ -408,6 +432,51 @@ class ConfigPanel(tk.Frame):
         messagebox.showinfo(
             "Precios USUARIO",
             f"Precio USUARIO de «{producto['nombre']}» guardado: "
+            f"{money(precio)}.\n\nEn la venta aparecerá bloqueado.",
+            parent=self)
+        self.app.refrescar_todo()
+
+    def _guardar_precio_comercio(self):
+        """Carga (o quita) el precio bloqueado del módulo COMERCIO."""
+        if not db.puede("configuracion"):
+            messagebox.showerror(
+                "Sin permisos",
+                "Solo un DESARROLLADOR modifica los precios COMERCIO.",
+                parent=self)
+            return
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Precios COMERCIO",
+                                   "Seleccioná un producto de la lista.",
+                                   parent=self)
+            return
+        producto = db.producto_por_id(int(sel[0]))
+        texto = self.var_precio_comercio.get().strip()
+        if not texto:
+            if not messagebox.askyesno(
+                    "Precios COMERCIO",
+                    f"¿Quitar «{producto['nombre']}» de la lista de precios "
+                    "COMERCIO?\n\nNo se borra el producto: sólo deja de poder "
+                    "venderse en el módulo COMERCIO.",
+                    parent=self):
+                return
+            db.borrar_precio_comercio(producto["id"])
+            messagebox.showinfo(
+                "Precios COMERCIO",
+                "Producto quitado de la lista COMERCIO.\n"
+                "Su venta queda bloqueada hasta asignarle un precio.",
+                parent=self)
+            self.app.refrescar_todo()
+            return
+        precio = parse_numero(texto)
+        if precio is None or precio <= 0:
+            messagebox.showwarning("Precios COMERCIO",
+                                   "Ingresá un precio mayor a cero.", parent=self)
+            return
+        db.set_precio_comercio(producto["id"], int(round(precio * 100)))
+        messagebox.showinfo(
+            "Precios COMERCIO",
+            f"Precio COMERCIO de «{producto['nombre']}» guardado: "
             f"{money(precio)}.\n\nEn la venta aparecerá bloqueado.",
             parent=self)
         self.app.refrescar_todo()
@@ -459,6 +528,7 @@ class ConfigPanel(tk.Frame):
         self.var_nombre.set("")
         self.var_precio.set("")
         self.var_precio_usuario.set("")
+        self.var_precio_comercio.set("")
         messagebox.showinfo("Productos", "Producto creado correctamente.",
                             parent=self)
         self.app.refrescar_todo()
@@ -549,7 +619,10 @@ class ConfigPanel(tk.Frame):
             centavos = db.get_precio_usuario(p["id"])
             precio_usuario = ("— sin precio —" if centavos is None
                               else money(centavos / 100))
+            centavos = db.get_precio_comercio(p["id"])
+            precio_comercio = ("— sin precio —" if centavos is None
+                               else money(centavos / 100))
             self.tree.insert("", "end", iid=str(p["id"]),
                              values=(p["nombre"], money(p["precio"]),
-                                     precio_usuario))
+                                     precio_usuario, precio_comercio))
         self.var_fondo.set(money(db.get_fondo_inicial()).replace("$", ""))
