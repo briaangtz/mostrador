@@ -47,16 +47,19 @@ class EstadisticasPanel(tk.Frame):
                                             "calendar")
         t.pack(fill="x", padx=PX, pady=(14, 0))
 
-        # El EXPORTAR vive en el encabezado: en la fila de filtros, con la
-        # ventana angosta, los botones de período lo empujaban al derecho y
-        # Tk lo aplastaba hasta hacerlo invisible.
+        # Selector de qué exportar: VENTAS (todo), USUARIO o COMERCIO
+        exp_frame = tk.Frame(encabezado, bg=st.FONDO)
+        exp_frame.pack(side="right", padx=(10, 0))
+        tk.Label(exp_frame, text="Exportar:", bg=st.FONDO, fg=MUTED,
+                 font=(st.FUENTE, 9, "bold")).pack(side="left", padx=(0, 4))
+        self.var_exportar = ttk.Combobox(
+            exp_frame, values=["VENTAS", "USUARIO", "COMERCIO"],
+            state="readonly", width=10, font=(st.FUENTE, 9))
+        self.var_exportar.set("VENTAS")
+        self.var_exportar.pack(side="left")
         Btn(encabezado, text="EXPORTAR A EXCEL", command=self._exportar_excel,
             bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-            padx=16, pady=7).pack(side="right")
-        Btn(encabezado, text="EXPORTAR POR MÓDULO A EXCEL",
-            command=self._exportar_por_modulo,
-            bg="#7C3AED", fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-            padx=16, pady=7).pack(side="right", padx=(0, 8))
+            padx=16, pady=7).pack(side="right", padx=(8, 0))
         fila_f = tk.Frame(filtros, bg=st.TARJETA)
         fila_f.pack(fill="x")
 
@@ -320,7 +323,11 @@ class EstadisticasPanel(tk.Frame):
         if not destino:
             return
         try:
-            cantidad, monto = excel.exportar_movimientos(desde, hasta, destino)
+            modulo = self.var_exportar.get() if hasattr(self, "var_exportar") else None
+            if modulo == "VENTAS":
+                modulo = None
+            cantidad, monto = excel.exportar_movimientos(
+                desde, hasta, destino, modulo=modulo)
         except Exception as exc:
             errores.mostrar(
                 "Error al exportar", exc, parent=self,
@@ -345,54 +352,6 @@ class EstadisticasPanel(tk.Frame):
             parent=self,
         )
 
-    def _exportar_por_modulo(self):
-        """Exporta las estadísticas por módulo (USUARIO / MOSTRADOR /
-        COMERCIO + GENERAL) a Excel."""
-        if not db.puede("exportar_excel"):
-            messagebox.showerror("Sin permisos",
-                                 "Tu usuario no tiene permiso para exportar a "
-                                 "Excel.", parent=self)
-            return
-        desde, hasta = self._rango_actual()
-        if not desde or not hasta:
-            self._fechas_invalidas()
-            return
-
-        destino = filedialog.asksaveasfilename(
-            parent=self,
-            title="Exportar estadísticas por módulo a Excel",
-            defaultextension=".xlsx",
-            initialfile=f"estadisticas_modulo_{fecha_corta(desde).replace('/', '-')}_{fecha_corta(hasta).replace('/', '-')}.xlsx",
-            filetypes=[("Archivo de Excel", "*.xlsx")],
-        )
-        if not destino:
-            return
-        try:
-            cantidad, monto = excel.exportar_por_modulo(desde, hasta, destino)
-        except Exception as exc:
-            errores.mostrar(
-                "Error al exportar", exc, parent=self,
-                contexto="exportar estadísticas por módulo a Excel",
-                mensaje="No se pudo generar el archivo de Excel.\n"
-                        "Cerrá la planilla si está abierta y probá de "
-                        "nuevo.")
-            return
-        db.log_actividad(
-            "Exportación a Excel (por módulo)",
-            f"Estadísticas por módulo del {fecha_corta(desde)} al "
-            f"{fecha_corta(hasta)} — {cantidad} ventas — {money(monto)}",
-        )
-        messagebox.showinfo(
-            "Exportación finalizada",
-            f"Archivo generado:\n{destino}\n\n"
-            f"Ventas incluidas: {cantidad}\n"
-            f"Total general: {money(monto)}\n\n"
-            f"Período: del {fecha_corta(desde)} al {fecha_corta(hasta)}\n\n"
-            "Incluye una hoja con el resumen por módulo (USUARIO, "
-            "MOSTRADOR, COMERCIO y GENERAL) y, si las hay, el detalle "
-            "de transferencias por módulo.",
-            parent=self,
-        )
 
     # ------------------------------------------------------------- refresco
     def refresh(self):
