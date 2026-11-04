@@ -9,16 +9,18 @@ Este documento explica cómo volver atrás el ajuste de "Ventas USUARIO"
 | Tag / Commit | Qué representa |
 |---|---|
 | `v0-original-antes-de-modulos` | Sistema original v1.3.6 sin cambios |
-| `HEAD` de `ajuste/ventas-usuario-sin-clientes` | Con el ajuste aplicado |
+| `HEAD` de `ajuste/ventas-usuario-sin-clientes` | Con el ajuste aplicado (Ventas U.C: USUARIO + COMERCIO, precios bloqueados desde Configuración) |
+| `etapa-4-precios-modulo-usuario-comercio-ok` | Precios por módulo (USUARIO y COMERCIO) bloqueados desde Configuración; validación en registrar_ticket |
 
 ## Archivos modificados
 
 | Archivo | Qué cambió |
 |---|---|
-| `database.py` | Columnas `modulo` y `token_venta` en `ventas`; tablas `auditoria` y `precios_usuario`; config `MODULO_USUARIO_ACTIVO`; funciones `log_auditoria`, `get_precio_usuario`, `set_precio_usuario`, `get_precios_usuario`, `borrar_precio_usuario`; `registrar_ticket` acepta `modulo`/`token_venta` y valida contra la lista de precios USUARIO |
-| `main.py` | Import de `VentasUsuarioPanel`, entrada NAV, panel en `self.paneles`, `_actualizar_nav` y `mostrar` respetan interruptor |
-| `ui_ventas_usuario.py` | NUEVO: panel de ventas USUARIO (nombre/apellido, productos, pagos múltiples). El precio sale de la tabla `precios_usuario` y aparece BLOQUEADO (etiqueta solo lectura); si el producto no tiene precio en la lista, la venta se bloquea |
-| `ui_config.py` | Columna «Precio USUARIO» en la lista de productos, campo y botón «Guardar precio USUARIO» (solo DESARROLLADOR); si el campo se deja vacío, el producto se quita de la lista USUARIO (su venta queda bloqueada) |
+| `database.py` | Columnas `modulo` y `token_venta` en `ventas`; tablas `auditoria`, `precios_usuario` y `precios_comercio`; config `MODULO_USUARIO_ACTIVO`; funciones `log_auditoria`, `get_precio_usuario`, `set_precio_usuario`, `get_precios_usuario`, `borrar_precio_usuario`, `get_precio_comercio`, `set_precio_comercio`, `get_precios_comercio`, `borrar_precio_comercio`; `registrar_ticket` acepta `modulo`/`token_venta` y valida contra la lista de precios USUARIO y COMERCIO |
+| `main.py` | Import de `VentasUCFrame`, entrada NAV «Ventas U.C» (cubre USUARIO y COMERCIO), panel en `self.paneles`, `guardar_venta_uc` con `modulo` y `token_venta` |
+| `ventas_uc.py` | NUEVO: panel combinado Ventas U.C (toggle USUARIO/COMERCIO), productos y precios leídos de DB según el módulo, filas bloqueadas si no hay precio, pagos múltiples con total/pagado/saldo, comprobante obligatorio en transferencia |
+| `ui_ventas_usuario.py` | NUEVO (etapa previa): panel de ventas USUARIO (nombre/apellido, productos, pagos múltiples). El precio sale de la tabla `precios_usuario` y aparece BLOQUEADO (etiqueta solo lectura); si el producto no tiene precio en la lista, la venta se bloquea |
+| `ui_config.py` | Columna «Precio USUARIO» y «Precio COMERCIO» en la lista de productos, campos y botones «Guardar precio USUARIO» / «Guardar precio COMERCIO» (solo DESARROLLADOR); si el campo se deja vacío, el producto se quita de la lista correspondiente (su venta queda bloqueada) |
 | `REVERTIR_ESTE_CAMBIO.md` | Este archivo |
 
 ## Cómo revertir completamente
@@ -29,12 +31,12 @@ Desde la carpeta del proyecto, en la rama `ajuste/ventas-usuario-sin-clientes`:
 # 1. Volver al commit original (deshace todos los cambios de código)
 git checkout v0-original-antes-de-modulos -- .
 
-# 2. Eliminar el archivo nuevo
-rm ui_ventas_usuario.py
+# 2. Eliminar los archivos nuevos
+rm ui_ventas_usuario.py ventas_uc.py
 
 # 3. Confirmar el reverso
 git add -A
-git commit -m "Revertir ajuste Ventas USUARIO (vuelve a v1.3.6 original)"
+git commit -m "Revertir ajuste Ventas U.C (vuelve a v1.3.6 original)"
 ```
 
 ## Cómo revertir solo la base de datos
@@ -55,9 +57,9 @@ copy "C:\Users\doble\Documents\Proyecto mostrador\BACKUPS\ajuste_ventas_usuario_
 
 ## Qué sucede con los datos si se revierte
 
-- Las ventas registradas con `modulo='USUARIO'` quedan en la tabla `ventas` pero el panel ya no existirá. Se pueden consultar directamente desde SQL.
+- Las ventas registradas con `modulo='USUARIO'` o `modulo='COMERCIO'` quedan en la tabla `ventas` pero el panel ya no existirá. Se pueden consultar directamente desde SQL.
 - La tabla `auditoria` queda vacía de registros de este ajuste.
-- La tabla `precios_usuario` queda en la base pero sin efecto (nadie la consulta).
+- Las tablas `precios_usuario` y `precios_comercio` quedan en la base pero sin efecto (nadie las consulta).
 - Las ventas de MOSTRADOR no se ven afectadas.
 
 ## Sobre el precio bloqueado (agregado posterior)
@@ -67,3 +69,11 @@ copy "C:\Users\doble\Documents\Proyecto mostrador\BACKUPS\ajuste_ventas_usuario_
 - Doble control: además de la UI bloqueada, `registrar_ticket` rechaza en el backend cualquier venta `USUARIO` cuyo precio no coincida exactamente con la lista (o si el producto no está en la lista).
 - Cada cambio de precio queda en `auditoria` (solo inserción).
 - Para desbloquear un producto hay que asignarle precio; para sacarlo de la lista USUARIO, dejar el campo vacío al guardar.
+
+## Sobre el precio bloqueado del módulo COMERCIO
+
+- El precio del módulo COMERCIO se carga SOLO desde **Configuración → Productos y precios → «Guardar precio COMERCIO»** (solo DESARROLLADOR), en la tabla `precios_comercio` (centavos, entero).
+- En la venta U.C con módulo COMERCIO, el precio es una etiqueta de solo lectura: no hay campo editable que se pueda tipear.
+- Doble control: además de la UI bloqueada, `registrar_ticket` rechaza en el backend cualquier venta `COMERCIO` cuyo precio no coincida exactamente con la lista (o si el producto no está en la lista).
+- Cada cambio de precio queda en `auditoria` (solo inserción), con `modulo='COMERCIO'`.
+- Para desbloquear un producto hay que asignarle precio; para sacarlo de la lista COMERCIO, dejar el campo vacío al guardar.
