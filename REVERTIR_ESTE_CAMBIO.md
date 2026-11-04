@@ -12,6 +12,7 @@ Este documento explica cómo volver atrás el ajuste de "Ventas USUARIO"
 | `HEAD` de `ajuste/ventas-usuario-sin-clientes` | Con el ajuste aplicado (Ventas U.C: USUARIO + COMERCIO, precios bloqueados desde Configuración, estadísticas por módulo) |
 | `etapa-4-precios-modulo-usuario-comercio-ok` | Precios por módulo (USUARIO y COMERCIO) bloqueados desde Configuración; validación en registrar_ticket |
 | `etapa-5-estadisticas-por-modulo-ok` | Estadísticas individuales por módulo (USUARIO, MOSTRADOR, COMERCIO) + GENERAL consolidada con exportación Excel |
+| `etapa-6-exportar-excel-selector-modulo-ok` | Exportar a Excel con selector VENTAS / USUARIO / COMERCIO; filtro por módulo en exportar_movimientos |
 
 ## Archivos modificados
 
@@ -22,8 +23,8 @@ Este documento explica cómo volver atrás el ajuste de "Ventas USUARIO"
 | `ventas_uc.py` | NUEVO: panel combinado Ventas U.C (toggle USUARIO/COMERCIO), productos y precios leídos de DB según el módulo, filas bloqueadas si no hay precio, pagos múltiples con total/pagado/saldo, comprobante obligatorio en transferencia |
 | `ui_ventas_usuario.py` | NUEVO (etapa previa): panel de ventas USUARIO (nombre/apellido, productos, pagos múltiples). El precio sale de la tabla `precios_usuario` y aparece BLOQUEADO (etiqueta solo lectura); si el producto no tiene precio en la lista, la venta se bloquea |
 | `ui_config.py` | Columna «Precio USUARIO» y «Precio COMERCIO» en la lista de productos, campos y botones «Guardar precio USUARIO» / «Guardar precio COMERCIO» (solo DESARROLLADOR); si el campo se deja vacío, el producto se quita de la lista correspondiente (su venta queda bloqueada) |
-| `ui_estadisticas.py` | Sección de estadísticas por módulo (4 tarjetas: USUARIO, MOSTRADOR, COMERCIO, GENERAL) y botón «EXPORTAR POR MÓDULO A EXCEL» |
-| `excel.py` | Nueva función `exportar_por_modulo()` que genera un .xlsx con resumen por módulo y detalle de transferencias por módulo |
+| `ui_estadisticas.py` | Sección de estadísticas por módulo (4 tarjetas: USUARIO, MOSTRADOR, COMERCIO, GENERAL) y selector Combobox (VENTAS / USUARIO / COMERCIO) junto al botón «EXPORTAR A EXCEL» |
+| `excel.py` | `exportar_movimientos(desde, hasta, destino, modulo=None)` acepta filtro opcional por módulo; se elimina `exportar_por_modulo()` |
 | `REVERTIR_ESTE_CAMBIO.md` | Este archivo |
 
 ## Cómo revertir completamente
@@ -81,8 +82,8 @@ copy "C:\Users\doble\Documents\Proyecto mostrador\BACKUPS\ajuste_ventas_usuario_
 - Cada cambio de precio queda en `auditoria` (solo inserción), con `modulo='COMERCIO'`.
 - Para desbloquear un producto hay que asignarle precio; para sacarlo de la lista COMERCIO, dejar el campo vacío al guardar.
 
-## Sobre las estadísticas por módulo
+## Sobre las estadísticas por módulo y exportación a Excel
 
 - `estadisticas()` devuelve una clave `por_modulo` con desglose individual para USUARIO, MOSTRADOR y COMERCIO, más una clave `general` que consolida todos los módulos (efectivo, tarjetas, transferencias, garrafas, total vendido, cantidad de ventas).
 - Cada módulo muestra: cantidad de ventas, garrafas, total vendido, efectivo, tarjetas (débito + crédito) y transferencias.
-- Desde la pestaña Estadísticas se puede exportar a Excel con el botón «EXPORTAR POR MÓDULO A EXCEL», que genera un resumen por módulo y, si las hay, el detalle de transferencias con su módulo de origen.
+- Desde la pestaña Estadísticas se puede exportar a Excel con el botón «EXPORTAR A EXCEL» y un selector Combobox con tres opciones: VENTAS (todo), USUARIO o COMERCIO. Se exporta solo lo seleccionado del período cargado.
