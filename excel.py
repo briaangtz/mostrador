@@ -224,15 +224,24 @@ def _vendidos(producto_id, datos_medio):
                for mapa in datos_medio.values())
 
 
-def exportar_movimientos(desde, hasta, destino):
+def exportar_movimientos(desde, hasta, destino, modulo=None):
     """
     Genera un .xlsx con TODOS los movimientos del rango [desde, hasta]
     (fechas ISO), separados por medio de pago, listo para imprimir en
     A4 horizontal.
 
+    Si se pasa `modulo` ("USUARIO", "MOSTRADOR" o "COMERCIO"), se
+    filtran solo las ventas de ese módulo.
+
     Devuelve (cantidad_de_movimientos, monto_total).
     """
     movimientos = db.ventas_rango(desde, hasta)
+    if modulo:
+        modulo = modulo.upper()
+        movimientos = [
+            m for m in movimientos
+            if (m.get("modulo") or "MOSTRADOR").upper() == modulo
+        ]
 
     wb = Workbook()
     ws = wb.active

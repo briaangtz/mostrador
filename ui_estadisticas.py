@@ -47,12 +47,19 @@ class EstadisticasPanel(tk.Frame):
                                             "calendar")
         t.pack(fill="x", padx=PX, pady=(14, 0))
 
-        # El EXPORTAR vive en el encabezado: en la fila de filtros, con la
-        # ventana angosta, los botones de período lo empujaban al derecho y
-        # Tk lo aplastaba hasta hacerlo invisible.
+        # Selector de qué exportar: VENTAS (todo), USUARIO o COMERCIO
+        exp_frame = tk.Frame(encabezado, bg=st.FONDO)
+        exp_frame.pack(side="right", padx=(10, 0))
+        tk.Label(exp_frame, text="Exportar:", bg=st.FONDO, fg=MUTED,
+                 font=(st.FUENTE, 9, "bold")).pack(side="left", padx=(0, 4))
+        self.var_exportar = ttk.Combobox(
+            exp_frame, values=["VENTAS", "USUARIO", "COMERCIO"],
+            state="readonly", width=10, font=(st.FUENTE, 9))
+        self.var_exportar.set("VENTAS")
+        self.var_exportar.pack(side="left")
         Btn(encabezado, text="EXPORTAR A EXCEL", command=self._exportar_excel,
             bg=st.VERDE, fg="#ffffff", font=(st.FUENTE, 10, "bold"),
-            padx=16, pady=7).pack(side="right")
+            padx=16, pady=7).pack(side="right", padx=(8, 0))
         fila_f = tk.Frame(filtros, bg=st.TARJETA)
         fila_f.pack(fill="x")
 
@@ -132,6 +139,54 @@ class EstadisticasPanel(tk.Frame):
             self.cards_detalle[clave] = det
             col += span
         self.cards["recaudado"].config(fg=st.VERDE_OSCURO)
+
+        # ---------------- Estadísticas por módulo ----------------
+        t_mod, mod_frame, _h = uc.tarjeta(cont, "Estadísticas por módulo",
+                                          "shop")
+        t_mod.pack(fill="x", padx=PX, pady=(14, 0))
+        marco_mod = tk.Frame(mod_frame, bg=st.TARJETA)
+        marco_mod.pack(fill="x", padx=14, pady=(8, 14))
+        for c in range(4):
+            marco_mod.columnconfigure(c, weight=1, uniform="modulo")
+
+        MODULOS_TITULO = {
+            "USUARIO": "USUARIO",
+            "MOSTRADOR": "MOSTRADOR",
+            "COMERCIO": "COMERCIO",
+            "general": "GENERAL",
+        }
+        MODULOS_COLOR = {
+            "USUARIO": uc.AZUL_I,
+            "MOSTRADOR": uc.VERDE_I if hasattr(uc, "VERDE_I") else uc.AZUL_I,
+            "COMERCIO": "#7C3AED",
+            "general": st.TEXTO,
+        }
+        self.cards_modulo = {}
+        for i, m in enumerate(("USUARIO", "MOSTRADOR", "COMERCIO", "general")):
+            t = Tarjeta(marco_mod, radio=12, padx=14, pady=12,
+                        borde="#C3D6F8")
+            t.grid(row=0, column=i, sticky="nsew", padx=5, pady=5)
+            tk.Label(t.cuerpo, text=MODULOS_TITULO[m], bg=st.TARJETA,
+                     fg=MODULOS_COLOR.get(m, st.TEXTO),
+                     font=(st.FUENTE, 11, "bold")).pack(anchor="w", pady=(6, 2))
+            lbl_ventas = tk.Label(t.cuerpo, text="0", bg=st.TARJETA,
+                                  fg=st.TEXTO, font=(st.FUENTE, 18, "bold"))
+            lbl_ventas.pack(anchor="w")
+            tk.Label(t.cuerpo, text="ventas", bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 8)).pack(anchor="w", pady=(0, 2))
+            lbl_total = tk.Label(t.cuerpo, text="$0", bg=st.TARJETA,
+                                 fg=st.VERDE_OSCURO, font=(st.FUENTE, 14, "bold"))
+            lbl_total.pack(anchor="w", pady=(2, 0))
+            tk.Label(t.cuerpo, text="total", bg=st.TARJETA, fg=MUTED,
+                     font=(st.FUENTE, 8)).pack(anchor="w", pady=(0, 4))
+            det = tk.Label(t.cuerpo, text="—", bg=st.TARJETA, fg=MUTED,
+                           font=(st.FUENTE, 8), anchor="w", justify="left")
+            det.pack(anchor="w")
+            self.cards_modulo[m] = {
+                "ventas": lbl_ventas,
+                "total": lbl_total,
+                "detalle": det,
+            }
 
         # ---------------- Producto + evolución ----------------
         medio = tk.Frame(cont, bg=st.FONDO)
@@ -268,7 +323,11 @@ class EstadisticasPanel(tk.Frame):
         if not destino:
             return
         try:
-            cantidad, monto = excel.exportar_movimientos(desde, hasta, destino)
+            modulo = self.var_exportar.get() if hasattr(self, "var_exportar") else None
+            if modulo == "VENTAS":
+                modulo = None
+            cantidad, monto = excel.exportar_movimientos(
+                desde, hasta, destino, modulo=modulo)
         except Exception as exc:
             errores.mostrar(
                 "Error al exportar", exc, parent=self,
@@ -292,6 +351,7 @@ class EstadisticasPanel(tk.Frame):
             "A4 horizontal: abrilo y presioná Imprimir.",
             parent=self,
         )
+
 
     # ------------------------------------------------------------- refresco
     def refresh(self):
@@ -332,6 +392,23 @@ class EstadisticasPanel(tk.Frame):
         self.cards["dias"].config(text=str(s["dias_con_ventas"]))
         self.cards["cierres"].config(text=str(len(s["cierres"])))
         self.cards["max"].config(text=money(maximo))
+
+        # Estadísticas por módulo
+        por_modulo = self._stats.get("por_modulo", {})
+        for m in ("USUARIO", "MOSTRADOR", "COMERCIO", "general"):
+            d = por_modulo.get(m, {})
+            tarjetas = float(d.get("debito", 0)) + float(d.get("credito", 0))
+            detalle = (
+                f"Efectivo {money(d.get('efectivo', 0))}  •  "
+                f"Tarjetas {money(tarjetas)}  •  "
+                f"Transferencias {money(d.get('transferencias', 0))}  •  "
+                f"Garrafas {int(d.get('total_garrafas', 0))}"
+            )
+            self.cards_modulo[m]["ventas"].config(
+                text=str(d.get("cantidad_ventas", 0)))
+            self.cards_modulo[m]["total"].config(
+                text=money(d.get("total_vendido", 0)))
+            self.cards_modulo[m]["detalle"].config(text=detalle)
 
         # Ventas por producto
         self.tree_productos.delete(*self.tree_productos.get_children())

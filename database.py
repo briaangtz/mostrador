@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Capa de datos del sistema de control de caja de garrafas.
 Usa SQLite (incluido en Python) y guarda todo en el archivo garrafas.db,
@@ -22,7 +22,7 @@ from permisos import (puede as _puede_permiso, RANGOS,
                       PERMISOS as PERMISOS_BASE,
                       permisos_de as _permisos_de_rango,
                       PERMISOS_VERSION, pendientes as _pendientes)
-from util import carpeta_datos
+from util import carpeta_datos, money as _money
 
 # Carpeta del PROGRAMA (la de la instalación / del .exe). Ahí NO se
 # guardan datos: solo se usa para encontrar una base VIEJA que quedó en
@@ -184,7 +184,7 @@ def _nuevo_hash(texto, iteraciones=KDF_ITERACIONES):
 
 
 def _es_legacy(guardado):
-    """¿Está en el formato viejo (sha256 de una sola ronda)?"""
+    """Â¿Está en el formato viejo (sha256 de una sola ronda)?"""
     return bool(guardado) and not str(guardado).startswith(HASH_PREFIJO + "$")
 
 
@@ -205,7 +205,7 @@ def _password_ok(guardado, intento):
 
 
 def es_password_inicial(guardado):
-    """¿La contraseña guardada sigue siendo la de fábrica ('admin')?
+    """Â¿La contraseña guardada sigue siendo la de fábrica ('admin')?
 
     Se usa para forzar el cambio en el primer inicio de sesión (no
     dejar credenciales por defecto instaladas)."""
@@ -362,7 +362,7 @@ def eliminar_usuario(uid):
 # Freno de intentos de login (hallazgo AppSec #11)
 #
 # Cada intento fallido consecutivo del MISMO usuario suma una pausa
-# progresiva (0,5 s · n, tope 3 s) antes de revalidar. Un login correcto
+# progresiva (0,5 s Â· n, tope 3 s) antes de revalidar. Un login correcto
 # pone el contador en cero. Es solo memoria de proceso: al reiniciar el
 # programa vuelve a arrancar, pero alcanza para frenar fuerza bruta
 # guiada mientras la sesión de la ventana está abierta.
@@ -1028,6 +1028,10 @@ def init():
                 "INSERT INTO productos (nombre, precio) VALUES (?, ?)", faltantes
             )
 
+        # ---------------- Migración: módulo USUARIO ----------------
+        # Solo se AGREGAN columnas y tablas; nada existente se toca.
+        _migrar_modulo_usuario(con)
+
     # Semilla de configuración
     if get_config("fondo_inicial") is None:
         set_config("fondo_inicial", "0")
@@ -1052,6 +1056,62 @@ def init():
 
     # La foto única de versiones anteriores queda asignada al primer usuario
     migrar_foto_legada()
+
+
+# ---------------------------------------------------------------------------
+# Migración: módulo USUARIO (solo AGREGAR)
+# ---------------------------------------------------------------------------
+
+def _migrar_modulo_usuario(con):
+    """Agrega columnas y tablas para el módulo USUARIO sin tocar lo
+    existente. Ventas de MOSTRADOR quedan con modulo='MOSTRADOR'."""
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Columna modulo en ventas (MOSTRADOR por defecto para histórico)
+    columnas_ventas = {r["name"] for r in con.execute("PRAGMA table_info(ventas)")}
+    if "modulo" not in columnas_ventas:
+        con.execute("ALTER TABLE ventas ADD COLUMN modulo TEXT "
+                    "DEFAULT 'MOSTRADOR'")
+    if "token_venta" not in columnas_ventas:
+        con.execute("ALTER TABLE ventas ADD COLUMN token_venta TEXT")
+
+    # Tabla de auditoría de solo inserción
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS auditoria (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora  TEXT    NOT NULL,
+            usuario_id  INTEGER,
+            usuario     TEXT,
+            accion      TEXT    NOT NULL,
+            entidad     TEXT,
+            valor_anterior TEXT,
+            valor_nuevo   TEXT,
+            modulo      TEXT,
+            resultado   TEXT    NOT NULL DEFAULT 'OK'
+        )
+    """)
+
+    # Tabla de precios del módulo USUARIO (bloqueados, no editables a mano en venta)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS precios_usuario (
+            producto_id INTEGER PRIMARY KEY,
+            precio_centavos INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    # Tabla de precios del módulo COMERCIO (bloqueados, no editables a mano en venta)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS precios_comercio (
+            producto_id INTEGER PRIMARY KEY,
+            precio_centavos INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    # Interruptor de configuración del módulo USUARIO
+    con.execute(
+        "INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)",
+        ("MODULO_USUARIO_ACTIVO", "0"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1306,7 +1366,7 @@ def _items_de(con, venta_ids):
         return {}
     comodines = ",".join("?" * len(ids))
     # Falso positivo de bandit (B608): 'comodines' es solo "?" repetidos y
-    # los IDs van como parámetros (2.º argumento de execute), nunca como
+    # los IDs van como parámetros (2.Âº argumento de execute), nunca como
     # texto dentro de la consulta. Por eso la línea lleva "# nosec B608".
     consulta = (f"SELECT i.*, p.nombre AS producto FROM venta_items i "
                 f"LEFT JOIN productos p ON p.id = i.producto_id "
@@ -1342,7 +1402,7 @@ def texto_items(items):
 
 
 def texto_pagos(pagos):
-    """'Efectivo'  ·  'Efectivo + Tarjeta de débito'."""
+    """'Efectivo'  Â·  'Efectivo + Tarjeta de débito'."""
     nombres = []
     for p in pagos:
         if p["medio"] not in nombres:
@@ -1366,7 +1426,7 @@ def medio_principal(pagos):
 
 
 def comprobante_de(pagos, medio=None):
-    """N° de comprobante de un pago (si hay medio, el de ese medio)."""
+    """NÂ° de comprobante de un pago (si hay medio, el de ese medio)."""
     for p in pagos:
         if medio and p["medio"] != medio:
             continue
@@ -1447,7 +1507,7 @@ def _normalizar_pagos(pagos, total):
             raise ValueError(f"Medio de pago no válido: {medio or '—'}.")
         if importe <= 0:
             raise ValueError(f"El importe en {medio} tiene que ser mayor a cero.")
-        # El N° de comprobante de la transferencia es obligatorio y se pide
+        # El NÂ° de comprobante de la transferencia es obligatorio y se pide
         # en la pantalla de ventas (ui_ventas); acá solo se guarda.
         salida.append({"medio": medio, "importe": importe,
                        "comprobante": comprobante})
@@ -1482,12 +1542,15 @@ def _descripcion_ticket(t):
     return texto
 
 
-def registrar_ticket(caja_id, items, pagos, cliente=None):
+def registrar_ticket(caja_id, items, pagos, cliente=None,
+                     modulo="MOSTRADOR", token_venta=None):
     """Registra una venta completa: uno o varios productos y una o varias
     formas de pago cuya suma da exactamente el total.
 
     items: [{"producto_id", "cantidad", "precio_unitario"}, ...]
     pagos: [{"medio", "importe", "comprobante"}, ...]
+    modulo: "MOSTRADOR" o "USUARIO" (origen de la venta)
+    token_venta: token único para evitar doble clic
     Devuelve el ticket guardado (con id, total, items y pagos).
     """
     if not apertura_de(caja_id):
@@ -1496,6 +1559,32 @@ def registrar_ticket(caja_id, items, pagos, cliente=None):
             "Presioná ABRIR CAJA antes de registrar ventas."
         )
     items_limpios = _normalizar_items(items)
+
+    # Si es venta de módulo USUARIO o COMERCIO, validar que el precio
+    # coincida con la tabla de precios bloqueada (no editable a mano en venta).
+    if modulo in ("USUARIO", "COMERCIO"):
+        for it in items_limpios:
+            if modulo == "USUARIO":
+                precio_esperado = get_precio_usuario(it["producto_id"])
+                lista = "USUARIO"
+            else:
+                precio_esperado = get_precio_comercio(it["producto_id"])
+                lista = "COMERCIO"
+            if precio_esperado is None:
+                raise ValueError(
+                    f"El producto '{it['producto']}' no tiene precio "
+                    f"asignado en la lista {lista}. "
+                    f"Venta bloqueada."
+                )
+            precio_recibido = int(round(it["precio_unitario"] * 100))
+            if precio_recibido != precio_esperado:
+                raise ValueError(
+                    f"El precio de '{it['producto']}' no coincide con la "
+                    f"lista {lista} (esperado {_money(precio_esperado / 100)}, "
+                    f"recibido {_money(it['precio_unitario'])}). "
+                    f"Venta bloqueada."
+                )
+
     total = sum(i["subtotal"] for i in items_limpios)
     pagos_limpios = _normalizar_pagos(pagos, total)
     u = usuario_sesion()
@@ -1503,10 +1592,10 @@ def registrar_ticket(caja_id, items, pagos, cliente=None):
     with db() as con:
         cur = con.execute(
             "INSERT INTO ventas (caja_id, fecha_hora, cliente, total, "
-            "registrada_por) VALUES (?, ?, ?, ?, ?)",
+            "registrada_por, modulo, token_venta) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (caja_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
              (cliente or "").strip() or None, total,
-             u["id"] if u else None),
+             u["id"] if u else None, modulo, token_venta),
         )
         venta_id = cur.lastrowid
         con.executemany(
@@ -1806,7 +1895,30 @@ def estadisticas(desde, hasta):
     total_vendido = 0.0
     total_garrafas = 0
 
+    # Desglose por módulo: USUARIO, MOSTRADOR, COMERCIO y general
+    modulos = ("USUARIO", "MOSTRADOR", "COMERCIO")
+    por_modulo = {
+        m: {
+            "cantidad_ventas": 0,
+            "total_garrafas": 0,
+            "total_vendido": 0.0,
+            "efectivo": 0.0,
+            "debito": 0.0,
+            "credito": 0.0,
+            "transferencias": 0.0,
+            "n_transferencias": 0,
+        }
+        for m in modulos
+    }
+    por_modulo["general"] = dict(por_modulo[modulos[0]])
+
     for v in ventas:
+        modulo = (v.get("modulo") or "MOSTRADOR").upper()
+        if modulo not in por_modulo:
+            modulo = "MOSTRADOR"
+        vm = por_modulo[modulo]
+        vg = por_modulo["general"]
+
         for it in v["items"]:
             pid = it["producto_id"]
             if pid not in por_producto:
@@ -1827,8 +1939,12 @@ def estadisticas(desde, hasta):
         for pg in v["pagos"]:
             clave = CLAVE_MEDIO.get(pg["medio"], "efectivo")
             medios[clave] += float(pg["importe"])
+            vm[clave] += float(pg["importe"])
+            vg[clave] += float(pg["importe"])
             if pg["medio"] == "Transferencia":
                 n_transferencias += 1
+                vm["n_transferencias"] += 1
+                vg["n_transferencias"] += 1
                 transferencias.append({
                     "id": v["id"],
                     "fecha": v.get("fecha"),
@@ -1838,8 +1954,15 @@ def estadisticas(desde, hasta):
                     "cantidad": v["cantidad"],
                     "total": float(pg["importe"]),
                     "medio": pg["medio"],
+                    "modulo": modulo,
                 })
 
+        vm["cantidad_ventas"] += 1
+        vg["cantidad_ventas"] += 1
+        vm["total_garrafas"] += int(v["cantidad"])
+        vg["total_garrafas"] += int(v["cantidad"])
+        vm["total_vendido"] += float(v["total"])
+        vg["total_vendido"] += float(v["total"])
         total_vendido += float(v["total"])
         total_garrafas += int(v["cantidad"])
 
@@ -1854,6 +1977,7 @@ def estadisticas(desde, hasta):
         "total_garrafas": total_garrafas,
         "total_vendido": total_vendido,
         "por_producto": por_producto,
+        "por_modulo": por_modulo,
         "efectivo": medios["efectivo"],
         "transferencias": medios["transferencias"],
         "debito": medios["debito"],
@@ -2118,3 +2242,162 @@ def borrar_rendicion(fecha):
     """Quita la rendición guardada de una fecha (para recargarla de cero)."""
     with db() as con:
         con.execute("DELETE FROM rendiciones WHERE fecha = ?", (fecha,))
+
+# ---------------------------------------------------------------------------
+# Auditoría de solo inserción (módulo USUARIO)
+# ---------------------------------------------------------------------------
+
+def log_auditoria(accion, entidad="", valor_anterior="", valor_nuevo="",
+                  modulo="", resultado="OK", usuario=None):
+    """Registra un evento en la tabla de auditoría (solo inserción).
+
+    No permite UPDATE ni DELETE desde la aplicación: cada registro es
+    inmutable. Se usa para ventas, anulaciones, pagos rechazados y
+    cambios de precio del módulo USUARIO.
+    """
+    u = usuario_sesion() if usuario is None else usuario
+    with db() as con:
+        con.execute(
+            "INSERT INTO auditoria (fecha_hora, usuario_id, usuario, accion, "
+            "entidad, valor_anterior, valor_nuevo, modulo, resultado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             u["id"] if u else None,
+             (u["usuario"] if u else ""),
+             accion, entidad, valor_anterior, valor_nuevo, modulo, resultado),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Precios del módulo USUARIO (bloqueados, no editables a mano en la venta)
+# ---------------------------------------------------------------------------
+
+def get_precio_usuario(producto_id):
+    """Devuelve el precio en centavos de un producto para el módulo USUARIO,
+    o None si no tiene precio asignado (venta bloqueada)."""
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_usuario "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+    return fila["precio_centavos"] if fila else None
+
+
+def set_precio_usuario(producto_id, precio_centavos, usuario=None):
+    """Establece (o crea) el precio de un producto en la lista USUARIO."""
+    precio_centavos = int(precio_centavos)
+    if precio_centavos < 0:
+        raise ValueError("El precio no puede ser negativo.")
+    u = usuario_sesion() if usuario is None else usuario
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_usuario "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        anterior = fila["precio_centavos"] if fila else None
+        con.execute(
+            "INSERT INTO precios_usuario (producto_id, precio_centavos) "
+            "VALUES (?, ?) "
+            "ON CONFLICT(producto_id) DO UPDATE SET "
+            "precio_centavos = excluded.precio_centavos",
+            (producto_id, precio_centavos),
+        )
+    log_auditoria("Precio USUARIO modificado",
+                  f"Producto {producto_id}: "
+                  f"{anterior} -> {precio_centavos} centavos",
+                  modulo="USUARIO", resultado="OK")
+
+
+def get_precios_usuario():
+    """Devuelve {producto_id: precio_centavos} para el módulo USUARIO."""
+    with db() as con:
+        filas = con.execute(
+            "SELECT producto_id, precio_centavos FROM precios_usuario"
+        ).fetchall()
+    return {f["producto_id"]: f["precio_centavos"] for f in filas}
+
+
+def borrar_precio_usuario(producto_id):
+    """Quita un producto de la lista de precios USUARIO.
+
+    El producto sigue existiendo; sólo deja de poder venderse en el módulo
+    USUARIO hasta que se le asigne un precio de nuevo.
+    """
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_usuario "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        if not fila:
+            return
+        anterior = fila["precio_centavos"]
+        con.execute(
+            "DELETE FROM precios_usuario WHERE producto_id = ?", (producto_id,))
+    log_auditoria("Precio USUARIO quitado",
+                  f"Producto {producto_id}: {anterior} centavos -> sin precio",
+                  modulo="USUARIO", resultado="OK")
+
+
+# ---------------------------------------------------------------------------
+# Precios del módulo COMERCIO (bloqueados, no editables a mano en la venta)
+# ---------------------------------------------------------------------------
+
+def get_precio_comercio(producto_id):
+    """Devuelve el precio en centavos de un producto para el módulo COMERCIO,
+    o None si no tiene precio asignado (venta bloqueada)."""
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+    return fila["precio_centavos"] if fila else None
+
+
+def set_precio_comercio(producto_id, precio_centavos, usuario=None):
+    """Establece (o crea) el precio de un producto en la lista COMERCIO."""
+    precio_centavos = int(precio_centavos)
+    if precio_centavos < 0:
+        raise ValueError("El precio no puede ser negativo.")
+    u = usuario_sesion() if usuario is None else usuario
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        anterior = fila["precio_centavos"] if fila else None
+        con.execute(
+            "INSERT INTO precios_comercio (producto_id, precio_centavos) "
+            "VALUES (?, ?) "
+            "ON CONFLICT(producto_id) DO UPDATE SET "
+            "precio_centavos = excluded.precio_centavos",
+            (producto_id, precio_centavos),
+        )
+    log_auditoria("Precio COMERCIO modificado",
+                  f"Producto {producto_id}: "
+                  f"{anterior} -> {precio_centavos} centavos",
+                  modulo="COMERCIO", resultado="OK")
+
+
+def get_precios_comercio():
+    """Devuelve {producto_id: precio_centavos} para el módulo COMERCIO."""
+    with db() as con:
+        filas = con.execute(
+            "SELECT producto_id, precio_centavos FROM precios_comercio"
+        ).fetchall()
+    return {f["producto_id"]: f["precio_centavos"] for f in filas}
+
+
+def borrar_precio_comercio(producto_id):
+    """Quita un producto de la lista de precios COMERCIO.
+
+    El producto sigue existiendo; sólo deja de poder venderse en el módulo
+    COMERCIO hasta que se le asigne un precio de nuevo.
+    """
+    with db() as con:
+        fila = con.execute(
+            "SELECT precio_centavos FROM precios_comercio "
+            "WHERE producto_id = ?", (producto_id,)).fetchone()
+        if not fila:
+            return
+        anterior = fila["precio_centavos"]
+        con.execute(
+            "DELETE FROM precios_comercio WHERE producto_id = ?", (producto_id,))
+    log_auditoria("Precio COMERCIO quitado",
+                  f"Producto {producto_id}: {anterior} centavos -> sin precio",
+                  modulo="COMERCIO", resultado="OK")
+

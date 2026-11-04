@@ -11,6 +11,7 @@ Ejecutar con:  python main.py
 
 import datetime
 import os
+import uuid
 import tkinter as tk
 from tkinter import messagebox
 
@@ -23,6 +24,8 @@ from version import VERSION
 from ui_login import pedir_login
 from ui_inicio import InicioPanel, _num_caja
 from ui_ventas import VentasPanel
+from ui_ventas_usuario import VentasUsuarioPanel
+from ventas_uc import VentasUCFrame
 from ui_estadisticas import EstadisticasPanel
 from ui_config import ConfigPanel
 from ui_historial import HistorialPanel
@@ -36,6 +39,7 @@ from widgets_figma import Tarjeta, ItemNav, Pildora
 NAV = [
     ("inicio", "Inicio", None, "home", "OPERACIÓN"),
     ("ventas", "Ventas", "ventas", "cart", "OPERACIÓN"),
+    ("ventas_uc", "Ventas U.C", "ventas", "cart", "OPERACIÓN"),
     ("stats", "Estadísticas y reportes", "estadisticas", "chart", "OPERACIÓN"),
     ("historial", "Historial de cierres", "historial", "history", "OPERACIÓN"),
     ("rendicion", "Planilla de rendición", "rendicion", "clipboard", "OPERACIÓN"),
@@ -185,6 +189,7 @@ class App(tk.Tk):
         self.paneles = {
             "inicio": InicioPanel(self.contenedor, self),
             "ventas": VentasPanel(self.contenedor, self),
+            "ventas_uc": VentasUCFrame(self.contenedor, self),
             "stats": EstadisticasPanel(self.contenedor, self),
             "config": ConfigPanel(self.contenedor, self),
             "historial": HistorialPanel(self.contenedor, self),
@@ -194,6 +199,12 @@ class App(tk.Tk):
         }
         for panel in self.paneles.values():
             panel.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        # Conectar callback de Ventas U.C
+        self.paneles["ventas_uc"].on_confirmar = self.guardar_venta_uc
+        # Estado inicial de caja en el badge
+        caja = self.caja_actual()
+        self.paneles["ventas_uc"].set_estado_caja(caja["estado"] == "abierta" if caja else False)
 
     # ---------------------------------------------------------- barra lateral
     def _construir_sidebar(self, parent):
@@ -404,10 +415,14 @@ class App(tk.Tk):
         """Muestra solo lo que el usuario puede ver, con sus secciones."""
         for w in self.nav_frame.winfo_children():
             w.pack_forget()
+        activa_u = db.get_config("MODULO_USUARIO_ACTIVO", "0") == "1"
         primera = True
         for nombre in SECCIONES:
             claves = [c for c, _t, p, _i, s in NAV
                       if s == nombre and (p is None or db.puede(p))]
+            # Ocultar módulo USUARIO si el interruptor está apagado
+            if "ventas_usuario" in claves and not activa_u:
+                claves.remove("ventas_usuario")
             if not claves:
                 continue
             self.secciones_lbl[nombre].pack(
@@ -423,13 +438,28 @@ class App(tk.Tk):
                 "Sin permisos",
                 "Tu usuario no tiene acceso a esta sección.", parent=self)
             return
+        if clave == "ventas_usuario" and \
+                db.get_config("MODULO_USUARIO_ACTIVO", "0") != "1":
+            messagebox.showwarning(
+                "Módulo desactivado",
+                "El módulo USUARIO está desactivado por configuración.",
+                parent=self)
+            return
         panel = self.paneles[clave]
         panel.lift()
         self.panel_actual = clave
         for k, b in self.botones_nav.items():
             b.set_activo(k == clave)
         self._actualizar_barra()
-        panel.refresh()
+        try:
+            panel.refresh()
+        except AttributeError:
+            pass
+        if clave == "ventas_uc":
+            caja = self.caja_actual()
+            self.paneles["ventas_uc"].set_estado_caja(
+                caja["estado"] == "abierta" if caja else False
+            )
         self._actualizar_pie()
 
     # ---------------------------------------------------------- sesión
@@ -475,6 +505,85 @@ class App(tk.Tk):
         db.asegurar_caja(fecha)
         self._actualizar_selector_caja(fecha)
         self.refrescar_todo()
+        if "ventas_uc" in self.paneles:
+            caja = self.caja_actual()
+            self.paneles["ventas_uc"].set_estado_caja(
+                caja["estado"] == "abierta" if caja else False
+            )
+
+    def guardar_venta_uc(self, venta: dict):
+        """Guarda una venta desde Ventas U.C en la base de datos."""
+        caja = self.caja_actual()
+        if not caja or caja["estado"] != "abierta":
+            messagebox.showerror(
+                "Venta",
+                "La caja está cerrada. No se pueden registrar ventas.",
+                parent=self,
+            )
+            return
+
+        caja_id = caja["id"]
+        u = db.usuario_sesion()
+        if not u:
+            messagebox.showerror(
+                "Venta",
+                "No hay usuario en sesión.",
+                parent=self,
+            )
+            return
+
+        items = []
+        for it in venta["items"]:
+            prod = db.producto_por_nombre(it["producto"])
+            if not prod:
+                messagebox.showerror(
+                    "Venta",
+                    f"No se encontró el producto '{it['producto']}'.",
+                    parent=self,
+                )
+                return
+            items.append({
+                "producto_id": prod["id"],
+                "cantidad": it["cantidad"],
+                "precio_unitario": it["precio"],
+            })
+
+        pagos = [
+            {
+                "medio": p["medio"],
+                "importe": p["importe"],
+                "comprobante": p.get("comprobante"),
+            }
+            for p in venta["pagos"]
+        ]
+
+        cliente = ""
+        if venta["tipo"] == "usuario":
+            c = venta["comprador"]
+            cliente = f"{c.get('nombre', '')} {c.get('apellido', '')}".strip()
+        else:
+            c = venta["comprador"]
+            cliente = c.get("comercio", "")
+
+        try:
+            ticket = db.registrar_ticket(
+                caja_id,
+                items,
+                pagos,
+                cliente=cliente,
+                modulo=venta["tipo"].upper(),
+                token_venta=str(uuid.uuid4()),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Venta", str(exc), parent=self)
+            return
+
+        self.refrescar_todo()
+        messagebox.showinfo(
+            "Venta registrada",
+            f"Ticket #{ticket['id']} guardado correctamente.\nTotal: {money(ticket['total'])}",
+            parent=self,
+        )
 
     def _actualizar_selector_caja(self, fecha):
         """Actualiza el selector de fecha del panel Inicio y la barra superior."""
