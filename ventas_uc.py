@@ -102,10 +102,11 @@ def _config_cols(frame):
 # FILA DE PRODUCTO
 # ----------------------------------------------------------------------
 class _FilaProducto:
-    def __init__(self, parent, nombre, precio, on_change):
+    def __init__(self, parent, nombre, precio, on_change, editable_precio=False):
         self.nombre = nombre.replace("\n", " ")
         self.precio = precio
         self.on_change = on_change
+        self.editable_precio = editable_precio
 
         self.frame = tk.Frame(parent, bg="white")
         _config_cols(self.frame)
@@ -115,42 +116,87 @@ class _FilaProducto:
 
         self.lbl_nombre = tk.Label(self.frame, text=nombre, anchor="w", justify="left",
                                    bg="white", font=(FONT, 11, "bold"))
-        self.lbl_precio = tk.Label(self.frame, anchor="e", bg="white", font=(FONT, 10),
-                                   text=fmt(precio) if precio is not None else "[precio]")
+
+        if editable_precio:
+            # Comercio: precio se escribe a mano (varía por categoría de comercio)
+            self.var_precio = tk.StringVar(
+                value=f"{precio:.2f}" if precio is not None else "")
+            self.ent_precio = tk.Entry(self.frame, textvariable=self.var_precio,
+                                       anchor="e", bg="white", fg=TXT,
+                                       font=(FONT, 10), width=10,
+                                       relief="flat", bd=0, highlightthickness=1,
+                                       highlightbackground=INPUT_BORDER,
+                                       highlightcolor=BLUE)
+            self.ent_precio.grid(row=0, column=1, sticky="e", padx=(0, 6))
+            self.var_precio.trace_add("write", self._on_precio_cambiado)
+        else:
+            self.lbl_precio = tk.Label(self.frame, anchor="e", bg="white",
+                                       font=(FONT, 10),
+                                       text=fmt(precio) if precio is not None else "[precio]")
+            self.lbl_precio.grid(row=0, column=1, sticky="e", padx=(0, 6))
+
         self.cant = tk.Frame(self.frame, bg="white")
         self.lbl_sub = tk.Label(self.frame, text="$0", anchor="e", bg="white",
                                 font=(FONT, 11, "bold"))
 
         self.lbl_nombre.grid(row=0, column=0, sticky="w", padx=(12, 0), pady=8)
-        self.lbl_precio.grid(row=0, column=1, sticky="e", padx=(0, 6))
         self.cant.grid(row=0, column=2)
         self.lbl_sub.grid(row=0, column=3, sticky="e", padx=(0, 12))
 
-        self.btn_minus = tk.Button(self.cant, text="−", width=2, command=lambda: self._sumar(-1),
-                                   bg="white", fg="#0284c7", activebackground="#f1f5f9",
-                                   relief="flat", bd=0, font=(FONT, 13, "bold"), cursor="hand2",
-                                   highlightthickness=1, highlightbackground=INPUT_BORDER)
+        self.btn_minus = tk.Button(self.cant, text="−", width=2,
+                                   command=lambda: self._sumar(-1),
+                                   bg="white", fg="#0284c7",
+                                   activebackground="#f1f5f9",
+                                   relief="flat", bd=0,
+                                   font=(FONT, 13, "bold"), cursor="hand2",
+                                   highlightthickness=1,
+                                       highlightbackground=INPUT_BORDER)
         vcmd = (self.frame.register(lambda P: P == "" or (P.isdigit() and len(P) <= 4)), "%P")
-        self.entry = tk.Entry(self.cant, textvariable=self.var, width=4, justify="center",
-                              font=(FONT, 13, "bold"), relief="flat", bd=0, bg="white", fg=TXT,
-                              highlightthickness=1, highlightbackground=INPUT_BORDER,
-                              highlightcolor=BLUE, validate="key", validatecommand=vcmd,
-                              disabledbackground=DISABLED_BG, disabledforeground=TXT_DIM)
-        self.btn_plus = tk.Button(self.cant, text="+", width=2, command=lambda: self._sumar(1),
-                                  bg=BLUE, fg="white", activebackground=BLUE_HOVER,
-                                  activeforeground="white", relief="flat", bd=0,
-                                  font=(FONT, 13, "bold"), cursor="hand2", highlightthickness=0)
+        self.entry = tk.Entry(self.cant, textvariable=self.var, width=4,
+                              justify="center",
+                              font=(FONT, 13, "bold"), relief="flat", bd=0,
+                              bg="white", fg=TXT,
+                              highlightthickness=1,
+                              highlightbackground=INPUT_BORDER,
+                              highlightcolor=BLUE, validate="key",
+                              validatecommand=vcmd,
+                              disabledbackground=DISABLED_BG,
+                              disabledforeground=TXT_DIM)
+        self.btn_plus = tk.Button(self.cant, text="+", width=2,
+                                  command=lambda: self._sumar(1),
+                                  bg=BLUE, fg="white",
+                                  activebackground=BLUE_HOVER,
+                                  activeforeground="white",
+                                  relief="flat", bd=0,
+                                  font=(FONT, 13, "bold"), cursor="hand2",
+                                  highlightthickness=0)
         _hover(self.btn_plus, BLUE, BLUE_HOVER)
 
         self.btn_minus.pack(side="left", ipady=3)
         self.entry.pack(side="left", padx=8, ipady=6)
         self.btn_plus.pack(side="left", ipady=3)
 
-        if precio is None:                     # sin precio -> bloqueado
+        if precio is None and not editable_precio:
+            # sin precio y no editable -> bloqueado
             for w in (self.btn_minus, self.btn_plus):
                 w.config(state="disabled", bg=DISABLED_BG, cursor="arrow")
             self.entry.config(state="disabled")
         self._refrescar()
+
+    def _on_precio_cambiado(self, *args):
+        """Actualiza self.precio desde el entry de precio (comercio)."""
+        if not self.editable_precio:
+            return
+        texto = self.var_precio.get().strip()
+        if not texto:
+            self.precio = None
+        else:
+            try:
+                self.precio = float(texto.replace(".", "").replace(",", "."))
+            except ValueError:
+                self.precio = None
+        self._refrescar()
+        self.on_change()
 
     @property
     def cantidad(self):
@@ -168,6 +214,8 @@ class _FilaProducto:
 
     def reset(self):
         self.var.set("0")
+        if self.editable_precio:
+            self.var_precio.set("")
 
     def _cambio(self):
         self._refrescar()
@@ -177,10 +225,14 @@ class _FilaProducto:
         activo = self.cantidad > 0
         bg = ROW_ACTIVE if activo else "white"
         fg = TXT if activo else TXT_DIM
-        for w in (self.frame, self.cant, self.lbl_nombre, self.lbl_precio, self.lbl_sub):
+        widgets = (self.frame, self.cant, self.lbl_nombre, self.lbl_sub)
+        if not self.editable_precio:
+            widgets = widgets + (self.lbl_precio,)
+        for w in widgets:
             w.config(bg=bg)
         self.lbl_nombre.config(fg=fg, font=(FONT, 11, "bold"))
-        self.lbl_precio.config(fg=fg)
+        if not self.editable_precio:
+            self.lbl_precio.config(fg=fg)
         self.lbl_sub.config(fg=fg, text=fmt(self.subtotal))
 
 
@@ -335,7 +387,8 @@ class VentasUCFrame(tk.Frame):
             nombre = p["nombre"]
             precio_centavos = precios.get(pid)
             precio = precio_centavos / 100.0 if precio_centavos is not None else None
-            f = _FilaProducto(self.filas_container, nombre, precio, self._recalcular)
+            f = _FilaProducto(self.filas_container, nombre, precio, self._recalcular,
+                              editable_precio=(self.tipo == "comercio"))
             f.frame.pack(fill="x")
             tk.Frame(self.filas_container, bg=CARD_BORDER, height=1).pack(fill="x")
             self.filas.append(f)

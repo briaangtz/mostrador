@@ -1560,27 +1560,24 @@ def registrar_ticket(caja_id, items, pagos, cliente=None,
         )
     items_limpios = _normalizar_items(items)
 
-    # Si es venta de módulo USUARIO o COMERCIO, validar que el precio
+    # Si es venta de módulo USUARIO, validar que el precio
     # coincida con la tabla de precios bloqueada (no editable a mano en venta).
-    if modulo in ("USUARIO", "COMERCIO"):
+    # COMERCIO permite precio a mano (varía por categoría de comercio), por eso
+    # no se valida contra la lista de precios.
+    if modulo == "USUARIO":
         for it in items_limpios:
-            if modulo == "USUARIO":
-                precio_esperado = get_precio_usuario(it["producto_id"])
-                lista = "USUARIO"
-            else:
-                precio_esperado = get_precio_comercio(it["producto_id"])
-                lista = "COMERCIO"
+            precio_esperado = get_precio_usuario(it["producto_id"])
             if precio_esperado is None:
                 raise ValueError(
                     f"El producto '{it['producto']}' no tiene precio "
-                    f"asignado en la lista {lista}. "
+                    f"asignado en la lista USUARIO. "
                     f"Venta bloqueada."
                 )
             precio_recibido = int(round(it["precio_unitario"] * 100))
             if precio_recibido != precio_esperado:
                 raise ValueError(
                     f"El precio de '{it['producto']}' no coincide con la "
-                    f"lista {lista} (esperado {_money(precio_esperado / 100)}, "
+                    f"lista USUARIO (esperado {_money(precio_esperado / 100)}, "
                     f"recibido {_money(it['precio_unitario'])}). "
                     f"Venta bloqueada."
                 )
