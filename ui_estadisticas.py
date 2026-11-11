@@ -477,7 +477,7 @@ class EstadisticasPanel(tk.Frame):
             nota = (f"Mostrando los últimos {MAX_DIAS_GRAFICO} días con ventas "
                     f"(de {len(evolucion)} en el período).")
 
-        izq, der, arriba, abajo = 54, 12, 18, 28
+        izq, der, arriba, abajo = 54, 12, 18, 40
         base = alto - abajo
         area = base - arriba
         maximo = max(d["total"] for d in datos) or 1
