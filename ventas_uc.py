@@ -123,7 +123,7 @@ class _FilaProducto:
             self.var_precio = tk.StringVar(
                 value=f"{precio:.2f}" if precio is not None else "")
             self.ent_precio = tk.Entry(self.frame, textvariable=self.var_precio,
-                                       anchor="e", bg="white", fg=TXT,
+                                       justify="right", bg="white", fg=TXT,
                                        font=(FONT, 10), width=10,
                                        relief="flat", bd=0, highlightthickness=1,
                                        highlightbackground=INPUT_BORDER,
