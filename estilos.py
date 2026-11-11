@@ -11,17 +11,59 @@ Diseño fiel a la especificación "Caja del Día":
 import tkinter as tk
 from tkinter import ttk
 
+
 # ---------------------------------------------------------------------------
-# Paleta de colores (especificación exacta)
+# TEMA: cambiá esta línea para cambiar todo el aspecto del programa.
+#   "verde" -> diseño nuevo (marco verde, panel blanco, botón verde azulado)
+#   "azul"  -> el azul marino de siempre, con el mismo diseño de paneles
+# ---------------------------------------------------------------------------
+TEMA = "azul"
+
+_PALETAS = {
+    "verde": {
+        "FONDO": "#F3F5F9", "BORDE": "#E7ECF2",
+        "ACENTO": "#2F6F7E", "ACENTO_OSCURO": "#255A67",
+        "SIDEBAR": "#43A257", "SIDEBAR_ACTIVO": "#FFFFFF",
+        "SIDEBAR_HOVER": "#56B068", "SIDEBAR_TARJETA": "#3A9450",
+        "NAV_TEXTO": "#F1FAF2", "NAV_ICONO": "#E3F4E6",
+        "NAV_HOVER_FG": "#FFFFFF", "NAV_ACTIVO_FG": "#1D5A34",
+        "NAV_ACTIVO_ICONO": "#2F9E4F", "NAV_BARRA": None,
+        "SB_SUB": "#DDF3E1", "SB_SECCION": "#D4EFD9", "SB_TEXTO": "#F1FAF2",
+        "SB_OK": "#FFFFFF", "SB_ERR": "#FFE0E0", "SB_SALIR": "#EAF7EC",
+        "LOGO_FONDO": "#FFFFFF", "LOGO_ICONO": "#2F9E4F",
+        "AVATAR_FONDO": "#FFFFFF", "AVATAR_TEXTO": "#2F9E4F",
+        "PASTEL": "#FDEBD6", "SELECCION": "#DDF3E1", "COLOR_BARRA": "#5BB56B",
+        "DONA": ("#5BB56B", "#2F6F7E", "#F5A94A", "#9B87D9"),
+    },
+    "azul": {
+        "FONDO": "#F3F6FB", "BORDE": "#E2E8F0",
+        "ACENTO": "#2563EB", "ACENTO_OSCURO": "#1D4ED8",
+        "SIDEBAR": "#101E35", "SIDEBAR_ACTIVO": "#213D66",
+        "SIDEBAR_HOVER": "#182B4A", "SIDEBAR_TARJETA": "#0C1729",
+        "NAV_TEXTO": "#C7D2E4", "NAV_ICONO": "#A9B7CE",
+        "NAV_HOVER_FG": "#E5ECF8", "NAV_ACTIVO_FG": "#FFFFFF",
+        "NAV_ACTIVO_ICONO": "#FFFFFF", "NAV_BARRA": "#2563EB",
+        "SB_SUB": "#9FB0CC", "SB_SECCION": "#A2B0C4", "SB_TEXTO": "#C7D2E4",
+        "SB_OK": "#6EE7B7", "SB_ERR": "#FCA5A5", "SB_SALIR": "#B6C3DA",
+        "LOGO_FONDO": "#2563EB", "LOGO_ICONO": "#FFFFFF",
+        "AVATAR_FONDO": "#2B4A7A", "AVATAR_TEXTO": "#FFFFFF",
+        "PASTEL": "#E8F0FE", "SELECCION": "#DBEAFE", "COLOR_BARRA": "#2563EB",
+        "DONA": ("#0E9A55", "#2563EB", "#F59E0B", "#7C3AED"),
+    },
+}
+_P = _PALETAS.get(TEMA, _PALETAS["verde"])
+
+# ---------------------------------------------------------------------------
+# Paleta de colores (los que cambian según el tema salen de _P)
 # ---------------------------------------------------------------------------
 BARRA = "#0B1E45"           # Azul marino sidebar
 BARRA_SUPERIOR = "#0A1A3A"  # Azul marino muy oscuro barra superior
-FONDO = "#F3F6FB"           # Fondo del contenido
+FONDO = _P["FONDO"]         # Fondo del contenido
 TARJETA = "#FFFFFF"         # Tarjetas blancas
-BORDE = "#E2E8F0"           # Borde sutil
+BORDE = _P["BORDE"]         # Borde sutil
 
-ACENTO = "#2563EB"          # Azul activo / botón principal
-ACENTO_OSCURO = "#1D4ED8"   # Azul más oscuro (hover / activo)
+ACENTO = _P["ACENTO"]        # Color activo / botón principal
+ACENTO_OSCURO = _P["ACENTO_OSCURO"]   # Más oscuro (hover / activo)
 VERDE = "#0E9A55"           # Verde (abierta, éxito)
 VERDE_OSCURO = "#0B7A45"
 ROJO = "#DC2626"
@@ -34,11 +76,33 @@ ROJO_CLARO = "#FEE2E2"
 VERDE_CLARO = "#DCFCE7"
 
 # Colores del diseño Figma (barra lateral y barra superior)
-SIDEBAR = "#101E35"          # Fondo de la barra lateral
-SIDEBAR_ACTIVO = "#213D66"   # Ítem activo del menú
-SIDEBAR_HOVER = "#182B4A"    # Ítem con el mouse encima
-SIDEBAR_TARJETA = "#0C1729"  # Tarjeta de datos de caja (abajo)
-BARRA_BORDE = "#E2E7EF"      # Línea bajo la barra superior blanca
+SIDEBAR = _P["SIDEBAR"]                  # Fondo de la barra lateral y del marco
+SIDEBAR_ACTIVO = _P["SIDEBAR_ACTIVO"]    # Ítem activo del menú
+SIDEBAR_HOVER = _P["SIDEBAR_HOVER"]      # Ítem con el mouse encima
+SIDEBAR_TARJETA = _P["SIDEBAR_TARJETA"]  # Tarjeta de datos de caja (abajo)
+BARRA_BORDE = "#E2E7EF"      # (ya no se usa: la barra superior no lleva línea)
+
+# Colores del menú lateral y de la marca, según el tema
+NAV_TEXTO = _P["NAV_TEXTO"]
+NAV_ICONO = _P["NAV_ICONO"]
+NAV_HOVER_FG = _P["NAV_HOVER_FG"]
+NAV_ACTIVO_FG = _P["NAV_ACTIVO_FG"]
+NAV_ACTIVO_ICONO = _P["NAV_ACTIVO_ICONO"]
+NAV_BARRA = _P["NAV_BARRA"]            # barrita del ítem activo (None = sin barra)
+SB_SUB = _P["SB_SUB"]
+SB_SECCION = _P["SB_SECCION"]
+SB_TEXTO = _P["SB_TEXTO"]
+SB_OK = _P["SB_OK"]
+SB_ERR = _P["SB_ERR"]
+SB_SALIR = _P["SB_SALIR"]
+LOGO_FONDO = _P["LOGO_FONDO"]
+LOGO_ICONO = _P["LOGO_ICONO"]
+AVATAR_FONDO = _P["AVATAR_FONDO"]
+AVATAR_TEXTO = _P["AVATAR_TEXTO"]
+PASTEL = _P["PASTEL"]                  # tarjeta destacada (tono pastel)
+SELECCION = _P["SELECCION"]            # fila seleccionada en tablas y listas
+COLOR_BARRA = _P["COLOR_BARRA"]        # barritas de progreso
+COLORES_DONA = _P["DONA"]              # efectivo, transferencias, tarjetas, bono
 
 TEXTO = "#0F1F3D"           # Texto principal oscuro
 TEXTO_SUAVE = "#64748B"     # Texto secundario gris azulado
@@ -333,7 +397,7 @@ def aplicar_estilo(root):
               selectbackground=[("readonly", "#FFFFFF")],
               selectforeground=[("readonly", TEXTO)])
     root.option_add("*TCombobox*Listbox.font", (FUENTE, 10))
-    root.option_add("*TCombobox*Listbox.selectBackground", "#DBEAFE")
+    root.option_add("*TCombobox*Listbox.selectBackground", SELECCION)
     root.option_add("*TCombobox*Listbox.selectForeground", TEXTO)
     root.option_add("*TCombobox*Listbox.background", "#FFFFFF")
 
@@ -359,7 +423,7 @@ def aplicar_estilo(root):
     style.configure("Treeview", background="#FFFFFF", fieldbackground="#FFFFFF",
                     foreground=TEXTO, rowheight=30, borderwidth=0,
                     font=(FUENTE, 10))
-    style.map("Treeview", background=[("selected", "#DBEAFE")],
+    style.map("Treeview", background=[("selected", SELECCION)],
               foreground=[("selected", TEXTO)])
     style.configure("Treeview.Heading", background="#F1F5F9",
                     foreground=TEXTO_SUAVE, relief="flat", borderwidth=0,
