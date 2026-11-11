@@ -31,6 +31,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 import database as db
+import estilos as st
 
 # ----------------------------------------------------------------------
 # CONFIGURACIÓN (precios leídos de la tabla de precios por módulo en Configuración)
@@ -320,7 +321,7 @@ class VentasUCFrame(tk.Frame):
         self.lbl_comprador.pack(fill="x", pady=(0, 8))
 
         # Aviso de modo (precios bloqueados / editables)
-        self.lbl_modo_aviso = tk.Label(inner, text="", bg="white", fg=VIOLETA,
+        self.lbl_modo_aviso = tk.Label(inner, text="", bg="white", fg=st.VIOLETA,
                                        font=(FONT, 9, "bold"), anchor="w")
         self.lbl_modo_aviso.pack(fill="x", pady=(0, 6))
 
@@ -512,14 +513,14 @@ class VentasUCFrame(tk.Frame):
             self.lbl_f2.config(text="APELLIDO")
             self.lbl_modo_aviso.config(
                 text="Precios bloqueados desde Configuración (lista USUARIO)",
-                fg=VIOLETA)
+                fg=st.VIOLETA)
         else:
             self.lbl_comprador.config(text="Comprador (Comercio)")
             self.lbl_f1.config(text="NOMBRE DEL COMERCIO")
             self.lbl_f2.config(text="TITULAR / RESPONSABLE")
             self.lbl_modo_aviso.config(
                 text="Precios editables a mano (varían por categoría de comercio)",
-                fg=VERDE)
+                fg=st.VERDE)
 
         # Recargar productos y precios desde DB según el módulo
         self._cargar_productos_del_tipo()
