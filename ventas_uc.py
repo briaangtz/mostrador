@@ -319,6 +319,11 @@ class VentasUCFrame(tk.Frame):
                                       font=(FONT, 15, "bold"), anchor="w")
         self.lbl_comprador.pack(fill="x", pady=(0, 8))
 
+        # Aviso de modo (precios bloqueados / editables)
+        self.lbl_modo_aviso = tk.Label(inner, text="", bg="white", fg=VIOLETA,
+                                       font=(FONT, 9, "bold"), anchor="w")
+        self.lbl_modo_aviso.pack(fill="x", pady=(0, 6))
+
         fila = tk.Frame(inner, bg="white")
         fila.pack(fill="x")
         fila.grid_columnconfigure(0, weight=1, uniform="f")
@@ -345,11 +350,33 @@ class VentasUCFrame(tk.Frame):
         tk.Label(inner, text="Productos", bg="white", fg=TXT, font=(FONT, 15, "bold"),
                  anchor="w").pack(fill="x", pady=(0, 8))
 
-        # contenedor de filas (se reconstruye al cambiar de tipo)
+        # contenedor de filas con scroll (altura limitada para que el total siempre quede visible)
         self.filas_container = tk.Frame(inner, bg="white")
         self.filas_container.pack(fill="both", expand=True)
 
-        # total
+        # Canvas para scroll de filas
+        self.canvas_filas = tk.Canvas(self.filas_container, bg="white", highlightthickness=0)
+        scroll_filas = ttk.Scrollbar(self.filas_container, orient="vertical",
+                                     command=self.canvas_filas.yview,
+                                     style="Fino.Vertical.TScrollbar")
+        self.frame_filas = tk.Frame(self.canvas_filas, bg="white")
+
+        self.frame_filas.bind(
+            "<Configure>",
+            lambda e: self.canvas_filas.configure(scrollregion=self.canvas_filas.bbox("all"))
+        )
+        self.canvas_filas.create_window((0, 0), window=self.frame_filas, anchor="nw")
+        self.canvas_filas.configure(yscrollcommand=scroll_filas.set)
+
+        self.canvas_filas.pack(side="left", fill="both", expand=True)
+        scroll_filas.pack(side="right", fill="y")
+
+        # Rueda del mouse para scroll
+        self.canvas_filas.bind_all("<MouseWheel>",
+                                   lambda e: self.canvas_filas.yview_scroll(
+                                       int(-e.delta / 120), "units"))
+
+        # total (siempre visible abajo, fuera del scroll)
         tot = tk.Frame(inner, bg="white")
         tot.pack(fill="x", pady=(10, 0))
         self.lbl_total_prod = tk.Label(tot, text="$0", bg="white", fg=TXT,
@@ -363,11 +390,11 @@ class VentasUCFrame(tk.Frame):
 
     def _reconstruir_filas_productos(self):
         """Crea las filas de producto desde DB según el tipo actual (usuario/comercio)."""
-        for w in self.filas_container.winfo_children():
+        for w in self.frame_filas.winfo_children():
             w.destroy()
 
         # encabezado (mismas columnas que las filas)
-        th = tk.Frame(self.filas_container, bg=THEAD_BG)
+        th = tk.Frame(self.frame_filas, bg=THEAD_BG)
         th.pack(fill="x")
         _config_cols(th)
         for col, (txt, anchor, padx) in enumerate([("PRODUCTO", "w", (12, 0)),
@@ -387,10 +414,10 @@ class VentasUCFrame(tk.Frame):
             nombre = p["nombre"]
             precio_centavos = precios.get(pid)
             precio = precio_centavos / 100.0 if precio_centavos is not None else None
-            f = _FilaProducto(self.filas_container, nombre, precio, self._recalcular,
+            f = _FilaProducto(self.frame_filas, nombre, precio, self._recalcular,
                               editable_precio=(self.tipo == "comercio"))
             f.frame.pack(fill="x")
-            tk.Frame(self.filas_container, bg=CARD_BORDER, height=1).pack(fill="x")
+            tk.Frame(self.frame_filas, bg=CARD_BORDER, height=1).pack(fill="x")
             self.filas.append(f)
 
     # ---------------- medios de pago ----------------
@@ -483,10 +510,16 @@ class VentasUCFrame(tk.Frame):
             self.lbl_comprador.config(text="Comprador (Usuario)")
             self.lbl_f1.config(text="NOMBRE")
             self.lbl_f2.config(text="APELLIDO")
+            self.lbl_modo_aviso.config(
+                text="Precios bloqueados desde Configuración (lista USUARIO)",
+                fg=VIOLETA)
         else:
             self.lbl_comprador.config(text="Comprador (Comercio)")
             self.lbl_f1.config(text="NOMBRE DEL COMERCIO")
             self.lbl_f2.config(text="TITULAR / RESPONSABLE")
+            self.lbl_modo_aviso.config(
+                text="Precios editables a mano (varían por categoría de comercio)",
+                fg=VERDE)
 
         # Recargar productos y precios desde DB según el módulo
         self._cargar_productos_del_tipo()
